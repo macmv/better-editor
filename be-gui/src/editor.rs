@@ -1,6 +1,6 @@
 use be_editor::EditorState;
-use be_input::{Action, Key};
-use kurbo::{Point, Rect};
+use be_input::{Action, Key, Mode};
+use kurbo::{Point, Rect, Vec2};
 
 use crate::{Render, oklch};
 
@@ -46,15 +46,16 @@ impl Editor {
       if self.editor.cursor().line == i + min_line {
         const CHAR_WIDTH: f64 = 8.0;
 
-        render.fill(
-          &Rect::new(
-            20.0 + (self.editor.cursor().column.as_usize() as f64) * CHAR_WIDTH,
-            y,
-            20.0 + (self.editor.cursor().column.as_usize() as f64 + 1.0) * CHAR_WIDTH,
-            y + self.line_height,
-          ),
-          oklch(1.0, 0.0, 0.0),
-        );
+        let mut cursor = match self.editor.mode() {
+          Mode::Normal | Mode::Visual => Rect::new(0.0, 0.0, CHAR_WIDTH, self.line_height),
+          Mode::Insert | Mode::Command => Rect::new(0.0, 0.0, 1.0, self.line_height),
+          Mode::Replace => Rect::new(0.0, self.line_height - 1.0, CHAR_WIDTH, self.line_height),
+        };
+
+        cursor = cursor
+          + Vec2::new(20.0 + (self.editor.cursor().column.as_usize() as f64) * CHAR_WIDTH, y);
+
+        render.fill(&cursor, oklch(1.0, 0.0, 0.0));
       }
 
       y += self.line_height;

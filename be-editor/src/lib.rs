@@ -52,8 +52,7 @@ impl EditorState {
 
   pub fn set_mode(&mut self, m: Mode) {
     self.mode = m;
-    self.cursor.column = self.max_column();
-    self.cursor.target_column = self.cursor.column;
+    self.move_to_col(self.cursor.column.clamp(self.max_column()));
   }
 
   pub fn perform_action(&mut self, action: Action) {
