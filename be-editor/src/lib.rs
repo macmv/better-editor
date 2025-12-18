@@ -22,16 +22,13 @@ impl EditorState {
   pub fn cursor(&self) -> &Cursor { &self.cursor }
   pub fn mode(&self) -> Mode { self.mode }
 
-  pub fn move_row_rel(&mut self, dist: i32) {
-    let line = self.cursor.line + dist;
-    self.cursor.line = line.clamp(self.max_line());
-
-    let max_col = self.max_column();
-    self.cursor.column = self.cursor.target_column.clamp(max_col);
-  }
-
+  pub fn move_line_rel(&mut self, dist: i32) { self.move_to_line(self.cursor.line + dist); }
   pub fn move_col_rel(&mut self, dist: i32) { self.move_to_col(self.cursor.column + dist as i32); }
 
+  fn move_to_line(&mut self, line: Line) {
+    self.cursor.line = line.clamp(self.max_line());
+    self.cursor.column = self.cursor.target_column.clamp(self.max_column());
+  }
   fn move_to_col(&mut self, col: Column) {
     self.cursor.column = col.clamp(self.max_column());
     self.cursor.target_column = self.cursor.column;
@@ -67,11 +64,14 @@ impl EditorState {
     match m {
       Move::Left => self.move_col_rel(-1),
       Move::Right => self.move_col_rel(1),
-      Move::Up => self.move_row_rel(-1),
-      Move::Down => self.move_row_rel(1),
+      Move::Up => self.move_line_rel(-1),
+      Move::Down => self.move_line_rel(1),
 
       Move::LineEnd => self.move_to_col(self.max_column()),
       Move::LineStart => self.move_to_col(Column(0)),
+
+      Move::FileStart => self.move_to_line(Line(0)),
+      Move::FileEnd => self.move_to_line(self.max_line()),
 
       _ => {}
     }
