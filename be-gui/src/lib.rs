@@ -13,7 +13,9 @@ struct Tab {
 }
 
 impl State {
-  fn draw(&self, render: &mut Render) {
+  fn draw(&self, render: &mut Render) { self.draw_tabs(render); }
+
+  fn draw_tabs(&self, render: &mut Render) {
     render.fill(
       &Rect::new(0.0, render.size().height - 20.0, render.size().width, render.size().height),
       oklch(0.3, 0.0, 0.0),
