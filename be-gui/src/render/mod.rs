@@ -118,7 +118,6 @@ impl App {
       &surface.texture.create_view(&wgpu::TextureViewDescriptor::default()),
     );
 
-    // submit will accept anything that implements IntoIter
     queue.submit(std::iter::once(encoder.finish()));
   }
 }
