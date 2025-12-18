@@ -16,7 +16,7 @@ impl State {
   fn draw(&self, render: &mut Render) {
     render.fill(
       &Rect::new(0.0, render.size().height - 20.0, render.size().width, render.size().height),
-      Color::BLACK,
+      oklch(0.3, 0.0, 0.0),
     );
   }
 }

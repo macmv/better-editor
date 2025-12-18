@@ -1,5 +1,5 @@
 use kurbo::{Affine, Shape, Size};
-use peniko::color::{AlphaColor, Oklab, Srgb};
+use peniko::color::{AlphaColor, Oklab, Oklch, Srgb};
 
 struct RenderStore {
   font:   parley::FontContext,
@@ -30,6 +30,8 @@ struct App {
 }
 
 pub type Color = AlphaColor<Oklab>;
+
+pub fn oklch(l: f32, c: f32, h: f32) -> Color { AlphaColor::<Oklch>::new([l, c, h, 1.0]).convert() }
 
 /// Converts things to sRGB, so that vello uses OkLAB for everything, and then
 /// we undo this conversion in the blitter.
