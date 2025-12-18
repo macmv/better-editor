@@ -4,7 +4,7 @@ use winit::{
   keyboard::Key,
 };
 
-type AppBuilder = fn(&wgpu::Device, wgpu::SurfaceConfiguration) -> super::App;
+type AppBuilder = fn(&wgpu::Device, &wgpu::SurfaceConfiguration) -> super::App;
 
 struct App {
   builder: AppBuilder,
@@ -17,6 +17,8 @@ struct Init {
   surface: wgpu::Surface<'static>,
   device:  wgpu::Device,
   queue:   wgpu::Queue,
+  config:  wgpu::SurfaceConfiguration,
+  scale:   f64,
 
   // SAFETY: Keep this field last so we don't segfault on exit.
   _window: winit::window::Window,
@@ -40,7 +42,7 @@ impl winit::application::ApplicationHandler for App {
     let (device, queue) =
       pollster::block_on(adapter.unwrap().request_device(&Default::default())).unwrap();
 
-    let surface_desc = wgpu::SurfaceConfiguration {
+    let config = wgpu::SurfaceConfiguration {
       usage:                         wgpu::TextureUsages::RENDER_ATTACHMENT,
       format:                        wgpu::TextureFormat::Bgra8UnormSrgb,
       width:                         800,
@@ -51,13 +53,15 @@ impl winit::application::ApplicationHandler for App {
       desired_maximum_frame_latency: 2,
     };
 
-    surface.configure(&device, &surface_desc);
+    surface.configure(&device, &config);
 
     self.init = Some(Init {
-      app: (self.builder)(&device, surface_desc),
+      app: (self.builder)(&device, &config),
       surface,
       device,
       queue,
+      config,
+      scale: window.scale_factor(),
       _window: window,
     });
   }
@@ -79,11 +83,27 @@ impl winit::application::ApplicationHandler for App {
         event_loop.exit();
       }
 
+      WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+        if let Some(init) = &mut self.init {
+          init.scale = scale_factor;
+        }
+      }
+
+      WindowEvent::Resized(size) => {
+        if let Some(init) = &mut self.init {
+          init.config.width = size.width;
+          init.config.height = size.height;
+
+          init.surface.configure(&init.device, &init.config);
+          init.app.resize(&init.device, &init.config);
+        }
+      }
+
       WindowEvent::RedrawRequested => {
         if let Some(init) = &mut self.init {
           let texture = init.surface.get_current_texture().unwrap();
 
-          init.app.render(&texture, &init.device, &init.queue, 1.0);
+          init.app.render(&texture, &init.device, &init.queue, init.scale);
 
           texture.present();
         }

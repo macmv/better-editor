@@ -75,6 +75,24 @@ pub fn run() {
 }
 
 impl App {
+  fn resize(&mut self, device: &wgpu::Device, surface: &wgpu::SurfaceConfiguration) {
+    self.texture = device.create_texture(&wgpu::TextureDescriptor {
+      label:           None,
+      size:            wgpu::Extent3d {
+        width:                 surface.width,
+        height:                surface.height,
+        depth_or_array_layers: 1,
+      },
+      mip_level_count: 1,
+      sample_count:    1,
+      dimension:       wgpu::TextureDimension::D2,
+      format:          FORMAT,
+      usage:           wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+      view_formats:    &[],
+    });
+    self.texture_view = self.texture.create_view(&wgpu::TextureViewDescriptor::default());
+  }
+
   fn render(
     &mut self,
     surface: &wgpu::SurfaceTexture,
@@ -85,10 +103,7 @@ impl App {
     let mut render = Render {
       store: &self.store,
       scene: vello::Scene::new(),
-      size:  Size::new(
-        surface.texture.width() as f64 / scale,
-        surface.texture.height() as f64 / scale,
-      ),
+      size:  Size::new(surface.texture.width() as f64, surface.texture.height() as f64),
     };
 
     self.state.draw(&mut render);
