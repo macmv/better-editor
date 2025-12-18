@@ -42,7 +42,7 @@ impl Document {
     let max_line = self.rope.line_len() as i32;
 
     let line = cursor.line.0 as i32 + dist as i32;
-    cursor.line = Line(line.clamp(0, max_line) as usize);
+    cursor.line = Line(line.clamp(0, max_line.saturating_sub(1)) as usize);
 
     let line = self.rope.line(cursor.line.0);
     let max_col = line.graphemes().count();

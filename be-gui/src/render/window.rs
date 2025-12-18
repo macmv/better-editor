@@ -1,7 +1,7 @@
+use be_input::Key;
 use winit::{
   event::WindowEvent,
   event_loop::{self, ActiveEventLoop},
-  keyboard::Key,
 };
 
 type AppBuilder = fn(&wgpu::Device, &wgpu::SurfaceConfiguration) -> super::App;
@@ -82,13 +82,28 @@ impl winit::application::ApplicationHandler for App {
   ) {
     match event {
       WindowEvent::KeyboardInput {
-        event: winit::event::KeyEvent { logical_key: Key::Character(c), .. },
+        event:
+          winit::event::KeyEvent {
+            logical_key: winit::keyboard::Key::Character(c),
+            state: winit::event::ElementState::Pressed,
+            ..
+          },
         ..
       } if c == "q" => {
         event_loop.exit();
       }
       WindowEvent::CloseRequested => {
         event_loop.exit();
+      }
+
+      WindowEvent::KeyboardInput {
+        event: winit::event::KeyEvent { logical_key: key, .. }, ..
+      } => {
+        if let Some(init) = &mut self.init
+          && let Some(key) = parse_key(key)
+        {
+          init.app.state.on_key(key);
+        }
       }
 
       WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
@@ -128,4 +143,15 @@ pub fn run(builder: AppBuilder) {
 
   let mut app = App { builder, init: None };
   event_loop.run_app(&mut app).unwrap();
+}
+
+fn parse_key(key: winit::keyboard::Key) -> Option<Key> {
+  use winit::keyboard::{Key as WKey, NamedKey::*};
+
+  match key {
+    WKey::Character(s) if s.len() == 1 => Some(Key::Char(s.chars().next()?)),
+    WKey::Named(Escape) => Some(Key::Escape),
+
+    _ => None,
+  }
 }
