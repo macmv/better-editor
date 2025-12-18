@@ -1,6 +1,6 @@
 mod render;
 
-use kurbo::Rect;
+use kurbo::{Line, Rect};
 pub use render::*;
 
 struct State {
@@ -18,6 +18,13 @@ impl State {
       &Rect::new(0.0, render.size().height - 20.0, render.size().width, render.size().height),
       oklch(0.3, 0.0, 0.0),
     );
+
+    let mut x = 0.0;
+    for tab in &self.tabs {
+      let rect =
+        render.draw_text(&tab.title, (x, render.size().height - 20.0), oklch(1.0, 0.0, 0.0));
+      x += rect.width();
+    }
   }
 }
 
