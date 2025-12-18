@@ -203,13 +203,13 @@ mod tests {
     let first = store.insert(ChunkId::ROOT, "hello");
     let second = store.insert(first, " world");
 
-    assert_eq!(store.state.materialize().to_string(), "hello world");
+    assert_eq!(store.state.materialize(), "hello world");
 
     store.delete(first);
-    assert_eq!(store.state.materialize().to_string(), " world");
+    assert_eq!(store.state.materialize(), " world");
 
     store.delete(second);
-    assert_eq!(store.state.materialize().to_string(), "");
+    assert_eq!(store.state.materialize(), "");
   }
 
   #[test]
@@ -220,7 +220,7 @@ mod tests {
     let (l, _) = store.split(first, 2);
     store.insert(l, " ");
 
-    assert_eq!(store.state.materialize().to_string(), "he llo");
+    assert_eq!(store.state.materialize(), "he llo");
   }
 
   #[test]
@@ -232,6 +232,6 @@ mod tests {
     let (l, _) = store.split(first, 2);
     store.insert(l, " ");
 
-    assert_eq!(store.state.materialize().to_string(), "he llo world");
+    assert_eq!(store.state.materialize(), "he llo world");
   }
 }
