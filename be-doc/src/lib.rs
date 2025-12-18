@@ -29,7 +29,7 @@ impl From<&str> for Document {
 }
 
 impl Cursor {
-  const START: Cursor =
+  pub const START: Cursor =
     Cursor { line: Line(0), column: Column(0), target_column: Column(0) };
 }
 
