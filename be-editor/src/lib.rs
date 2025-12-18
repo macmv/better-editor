@@ -1,5 +1,5 @@
 use be_doc::{Column, Cursor, Document, Line};
-use be_input::Mode;
+use be_input::{Action, Mode, Move};
 
 pub struct EditorState {
   doc:    Document,
@@ -56,6 +56,26 @@ impl EditorState {
     self.cursor.column = self.max_column();
     self.cursor.target_column = self.cursor.column;
   }
+
+  pub fn perform_action(&mut self, action: Action) {
+    match action {
+      Action::SetMode(m) => self.set_mode(m),
+      Action::Move { count: _, m } => self.perform_move(m),
+      Action::Edit { count: _, e } => self.perform_edit(e),
+    }
+  }
+
+  fn perform_move(&mut self, m: be_input::Move) {
+    match m {
+      Move::Left => self.move_col(-1),
+      Move::Right => self.move_col(1),
+      Move::Up => self.move_row(-1),
+      Move::Down => self.move_row(1),
+
+      _ => {}
+    }
+  }
+  fn perform_edit(&mut self, _: be_input::Edit) {}
 }
 
 #[cfg(test)]

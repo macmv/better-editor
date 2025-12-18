@@ -22,30 +22,10 @@ impl Editor {
 
   pub fn on_key(&mut self, keys: &[Key]) -> Result<(), be_input::ActionError> {
     let action = Action::from_input(self.editor.mode(), keys)?;
-    self.perform_action(action);
+    self.editor.perform_action(action);
 
     Ok(())
   }
-
-  fn perform_action(&mut self, action: Action) {
-    match action {
-      Action::SetMode(m) => self.editor.set_mode(m),
-      Action::Move { count: _, m } => self.perform_move(m),
-      Action::Edit { count: _, e } => self.perform_edit(e),
-    }
-  }
-
-  fn perform_move(&mut self, m: be_input::Move) {
-    match m {
-      be_input::Move::Left => self.editor.move_col(-1),
-      be_input::Move::Right => self.editor.move_col(1),
-      be_input::Move::Up => self.editor.move_row(-1),
-      be_input::Move::Down => self.editor.move_row(1),
-
-      _ => {}
-    }
-  }
-  fn perform_edit(&mut self, _: be_input::Edit) {}
 
   pub fn draw(&self, render: &mut Render) {
     render
