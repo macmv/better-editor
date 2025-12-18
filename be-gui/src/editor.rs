@@ -1,5 +1,5 @@
 use be_doc::{Cursor, Document};
-use be_input::Mode;
+use be_input::{Action, Key, Mode};
 use kurbo::{Point, Rect};
 
 use crate::{Render, oklch};
@@ -23,6 +23,33 @@ impl Editor {
       scroll:      Point::ZERO,
     }
   }
+
+  pub fn on_key(&mut self, keys: &[Key]) -> Result<(), be_input::ActionError> {
+    let action = Action::from_input(self.mode, keys)?;
+    self.perform_action(action);
+
+    Ok(())
+  }
+
+  fn perform_action(&mut self, action: Action) {
+    match action {
+      Action::SetMode(m) => self.mode = m,
+      Action::Move { count: _, m } => self.perform_move(m),
+      Action::Edit { count: _, e } => self.perform_edit(e),
+    }
+  }
+
+  fn perform_move(&mut self, m: be_input::Move) {
+    match m {
+      be_input::Move::Left => self.cursor = self.doc.move_col(self.cursor, -1),
+      be_input::Move::Right => self.cursor = self.doc.move_col(self.cursor, 1),
+      be_input::Move::Up => self.cursor = self.doc.move_row(self.cursor, -1),
+      be_input::Move::Down => self.cursor = self.doc.move_row(self.cursor, 1),
+
+      _ => {}
+    }
+  }
+  fn perform_edit(&mut self, e: be_input::Edit) {}
 
   pub fn draw(&self, render: &mut Render) {
     render

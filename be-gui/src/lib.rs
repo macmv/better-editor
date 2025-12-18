@@ -1,5 +1,6 @@
 mod render;
 
+use be_input::Key;
 use kurbo::{Cap, Line, Rect, Stroke};
 pub use render::*;
 
@@ -9,6 +10,7 @@ mod editor;
 mod shell;
 
 struct State {
+  keys:   Vec<Key>,
   active: usize,
   tabs:   Vec<Tab>,
 }
@@ -30,6 +32,18 @@ impl State {
       TabContent::Editor(editor) => editor.draw(render),
     }
     self.draw_tabs(render);
+  }
+
+  fn on_key(&mut self, key: Key) {
+    self.keys.push(key);
+
+    match &mut self.tabs[self.active].content {
+      TabContent::Shell(_) => {}
+      TabContent::Editor(editor) => match editor.on_key(&self.keys) {
+        Ok(()) | Err(be_input::ActionError::Unrecognized) => self.keys.clear(),
+        Err(be_input::ActionError::Incomplete) => {}
+      },
+    }
   }
 
   fn draw_tabs(&self, render: &mut Render) {
@@ -72,6 +86,7 @@ impl State {
 impl Default for State {
   fn default() -> Self {
     Self {
+      keys:   vec![],
       active: 1,
       tabs:   vec![
         Tab { title: "zsh".into(), content: TabContent::Shell(Shell::new()) },

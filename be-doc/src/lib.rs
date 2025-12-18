@@ -38,6 +38,19 @@ impl PartialEq<usize> for Column {
 impl Document {
   pub fn new() -> Document { Document { rope: Rope::new() } }
 
+  pub fn move_row(&self, mut cursor: Cursor, dist: i32) -> Cursor {
+    let max_line = self.rope.line_len() as i32;
+
+    let line = cursor.line.0 as i32 + dist as i32;
+    cursor.line = Line(line.clamp(0, max_line) as usize);
+
+    let line = self.rope.line(cursor.line.0);
+    let max_col = line.graphemes().count();
+    cursor.column = Column(cursor.target_column.0.clamp(0, max_col));
+
+    cursor
+  }
+
   pub fn move_col(&self, mut cursor: Cursor, dist: i32) -> Cursor {
     let line = self.rope.line(cursor.line.0);
 
