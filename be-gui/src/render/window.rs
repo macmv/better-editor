@@ -38,13 +38,21 @@ impl winit::application::ApplicationHandler for App {
       unsafe { std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(surface) };
 
     let adapter =
-      pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()));
-    let (device, queue) =
-      pollster::block_on(adapter.unwrap().request_device(&Default::default())).unwrap();
+      pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
+        .unwrap();
+    let (device, queue) = pollster::block_on(adapter.request_device(&Default::default())).unwrap();
+
+    let surface_caps = surface.get_capabilities(&adapter);
+    let surface_format = surface_caps
+      .formats
+      .iter()
+      .find(|f| f.is_srgb())
+      .copied()
+      .expect("could not find sRGB surface");
 
     let config = wgpu::SurfaceConfiguration {
       usage:                         wgpu::TextureUsages::RENDER_ATTACHMENT,
-      format:                        wgpu::TextureFormat::Bgra8UnormSrgb,
+      format:                        surface_format,
       width:                         800,
       height:                        600,
       alpha_mode:                    wgpu::CompositeAlphaMode::Auto,
