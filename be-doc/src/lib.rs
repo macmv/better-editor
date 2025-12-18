@@ -1,4 +1,6 @@
-use crop::Rope;
+use std::ops::Add;
+
+use crop::{Rope, RopeSlice};
 
 pub struct Document {
   pub rope: Rope,
@@ -38,54 +40,28 @@ impl PartialEq<usize> for Column {
 impl Document {
   pub fn new() -> Document { Document { rope: Rope::new() } }
 
-  pub fn move_row(&self, mut cursor: Cursor, dist: i32) -> Cursor {
-    let max_line = self.rope.line_len() as i32;
-
-    let line = cursor.line.0 as i32 + dist as i32;
-    cursor.line = Line(line.clamp(0, max_line.saturating_sub(1)) as usize);
-
-    let line = self.rope.line(cursor.line.0);
-    let max_col = line.graphemes().count();
-    cursor.column = Column(cursor.target_column.0.clamp(0, max_col));
-
-    cursor
-  }
-
-  pub fn move_col(&self, mut cursor: Cursor, dist: i32) -> Cursor {
-    let line = self.rope.line(cursor.line.0);
-
-    let max_col = line.graphemes().count() as i32;
-
-    let col = cursor.column.0 as i32 + dist as i32;
-    cursor.column = Column(col.clamp(0, max_col) as usize);
-    cursor.target_column = cursor.column;
-
-    cursor
-  }
+  pub fn line(&self, line: Line) -> RopeSlice<'_> { self.rope.line(line.0) }
+  pub fn len_lines(&self) -> usize { self.rope.line_len() }
 }
 
 impl Column {
   pub fn as_usize(&self) -> usize { self.0 }
+  pub fn clamp(self, max: usize) -> Column { Column(self.0.clamp(0, max)) }
 }
 
-#[cfg(test)]
-mod tests {
-  use super::*;
+impl Line {
+  pub fn as_usize(&self) -> usize { self.0 }
+  pub fn clamp(self, max: usize) -> Line { Line(self.0.clamp(0, max)) }
+}
 
-  #[test]
-  fn visual_pos_works() {
-    let doc = Document::from("❄");
+impl Add<i32> for Column {
+  type Output = Column;
 
-    let mut cursor = Cursor::START;
-    assert_eq!(cursor.line, 0);
-    assert_eq!(cursor.column, 0);
+  fn add(self, rhs: i32) -> Column { Column((self.0 as isize + rhs as isize).max(0) as usize) }
+}
 
-    cursor = doc.move_col(cursor, 1);
-    assert_eq!(cursor.line, 0);
-    assert_eq!(cursor.column, 1);
+impl Add<i32> for Line {
+  type Output = Line;
 
-    cursor = doc.move_col(cursor, 1);
-    assert_eq!(cursor.line, 0);
-    assert_eq!(cursor.column, 1);
-  }
+  fn add(self, rhs: i32) -> Line { Line((self.0 as isize + rhs as isize).max(0) as usize) }
 }

@@ -4,5 +4,6 @@ members = [
   "be-crdt",
   "be-input",
   "be-doc",
+  "be-editor",
   "be-gui",
 ]

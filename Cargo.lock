@@ -133,6 +133,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "be-editor"
+version = "0.1.0"
+dependencies = [
+ "be-doc",
+ "be-input",
+]
+
+[[package]]
 name = "be-gui"
 version = "0.1.0"
 dependencies = [
