@@ -5,38 +5,75 @@ pub struct Document {
 }
 
 pub struct Cursor {
-  fixed_col: Column,
-  index:     usize,
+  line:          Line,
+  column:        Column,
+  target_column: Column,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Pos {
   pub line: usize,
   pub col:  Column,
 }
 
+/// A visual line, ie, lines from the start of the file.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Line(usize);
+
 /// A visual column, ie, graphemes from the start of the line.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Column(usize);
 
 impl From<&str> for Document {
   fn from(s: &str) -> Document { Document { rope: Rope::from(s) } }
 }
 
+impl Cursor {
+  const START: Cursor =
+    Cursor { line: Line(0), column: Column(0), target_column: Column(0) };
+}
+
+impl PartialEq<usize> for Line {
+  fn eq(&self, other: &usize) -> bool { self.0 == *other }
+}
+impl PartialEq<usize> for Column {
+  fn eq(&self, other: &usize) -> bool { self.0 == *other }
+}
+
 impl Document {
   pub fn new() -> Document { Document { rope: Rope::new() } }
 
-  pub fn cursor_pos(&self, cursor: Cursor) -> Pos {
-    let line = self.rope.line_of_byte(cursor.index);
-    let mut col = Column(0);
-    let mut index = cursor.index - self.rope.byte_of_line(line);
-    for g in self.rope.line(line).graphemes() {
-      if index >= cursor.index {
-        break;
-      }
+  pub fn move_col(&self, mut cursor: Cursor, dist: i32) -> Cursor {
+    let line = self.rope.line(cursor.line.0);
 
-      index += g.len();
-      col.0 += 1;
-    }
+    let max_col = line.graphemes().count() as i32;
 
-    Pos { line, col }
+    let col = cursor.column.0 as i32 + dist as i32;
+    cursor.column = Column(col.clamp(0, max_col) as usize);
+    cursor.target_column = cursor.column;
+
+    cursor
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn visual_pos_works() {
+    let doc = Document::from("❄");
+
+    let mut cursor = Cursor::START;
+    assert_eq!(cursor.line, 0);
+    assert_eq!(cursor.column, 0);
+
+    cursor = doc.move_col(cursor, 1);
+    assert_eq!(cursor.line, 0);
+    assert_eq!(cursor.column, 1);
+
+    cursor = doc.move_col(cursor, 1);
+    assert_eq!(cursor.line, 0);
+    assert_eq!(cursor.column, 1);
   }
 }
