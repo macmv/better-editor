@@ -1,7 +1,7 @@
 use crop::Rope;
 
 pub struct Document {
-  rope: Rope,
+  pub rope: Rope,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]

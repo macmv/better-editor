@@ -11,3 +11,6 @@ pollster = "0.4.0"
 vello = "0.6.0"
 wgpu = "26.0.1"
 winit = "0.30.12"
+
+be-doc = { path = "../be-doc" }
+be-input = { path = "../be-input" }
