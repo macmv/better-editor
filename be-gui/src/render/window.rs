@@ -1,6 +1,6 @@
 use be_input::Key;
 use winit::{
-  event::{self, WindowEvent},
+  event::WindowEvent,
   event_loop::{self, ActiveEventLoop},
 };
 
