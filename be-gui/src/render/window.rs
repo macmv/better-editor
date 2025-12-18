@@ -97,7 +97,11 @@ impl winit::application::ApplicationHandler for App {
       }
 
       WindowEvent::KeyboardInput {
-        event: winit::event::KeyEvent { logical_key: key, .. }, ..
+        event:
+          winit::event::KeyEvent {
+            logical_key: key, state: winit::event::ElementState::Pressed, ..
+          },
+        ..
       } => {
         if let Some(init) = &mut self.init
           && let Some(key) = parse_key(key)
