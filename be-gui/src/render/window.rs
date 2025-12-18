@@ -14,13 +14,12 @@ struct App {
 struct Init {
   app: super::App,
 
-  instance: wgpu::Instance,
-  surface:  wgpu::Surface<'static>,
-  device:   wgpu::Device,
-  queue:    wgpu::Queue,
+  surface: wgpu::Surface<'static>,
+  device:  wgpu::Device,
+  queue:   wgpu::Queue,
 
   // SAFETY: Keep this field last so we don't segfault on exit.
-  window: winit::window::Window,
+  _window: winit::window::Window,
 }
 
 impl winit::application::ApplicationHandler for App {
@@ -56,11 +55,10 @@ impl winit::application::ApplicationHandler for App {
 
     self.init = Some(Init {
       app: (self.builder)(&device, surface_desc),
-      instance,
       surface,
       device,
       queue,
-      window,
+      _window: window,
     });
   }
 
