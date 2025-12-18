@@ -3,17 +3,34 @@ mod render;
 use kurbo::{Cap, Line, Rect, Stroke};
 pub use render::*;
 
+use crate::{editor::Editor, shell::Shell};
+
+mod editor;
+mod shell;
+
 struct State {
   active: usize,
   tabs:   Vec<Tab>,
 }
 
 struct Tab {
-  title: String,
+  title:   String,
+  content: TabContent,
+}
+
+enum TabContent {
+  Shell(Shell),
+  Editor(Editor),
 }
 
 impl State {
-  fn draw(&self, render: &mut Render) { self.draw_tabs(render); }
+  fn draw(&self, render: &mut Render) {
+    match &self.tabs[self.active].content {
+      TabContent::Shell(shell) => shell.draw(render),
+      TabContent::Editor(editor) => editor.draw(render),
+    }
+    self.draw_tabs(render);
+  }
 
   fn draw_tabs(&self, render: &mut Render) {
     render.fill(
@@ -57,9 +74,9 @@ impl Default for State {
     Self {
       active: 1,
       tabs:   vec![
-        Tab { title: "zsh".into() },
-        Tab { title: "editor".into() },
-        Tab { title: "editor".into() },
+        Tab { title: "zsh".into(), content: TabContent::Shell(Shell::new()) },
+        Tab { title: "editor".into(), content: TabContent::Editor(Editor::new()) },
+        Tab { title: "zsh".into(), content: TabContent::Shell(Shell::new()) },
       ],
     }
   }
