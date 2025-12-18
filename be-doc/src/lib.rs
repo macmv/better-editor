@@ -10,12 +10,6 @@ pub struct Cursor {
   target_column: Column,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Pos {
-  pub line: usize,
-  pub col:  Column,
-}
-
 /// A visual line, ie, lines from the start of the file.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Line(usize);
