@@ -1,3 +1,5 @@
+#![allow(dead_code)] // TODO
+
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crop::Rope;
