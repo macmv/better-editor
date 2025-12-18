@@ -4,10 +4,11 @@ pub struct Document {
   rope: Rope,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Cursor {
-  line:          Line,
-  column:        Column,
-  target_column: Column,
+  pub line:          Line,
+  pub column:        Column,
+  pub target_column: Column,
 }
 
 /// A visual line, ie, lines from the start of the file.
