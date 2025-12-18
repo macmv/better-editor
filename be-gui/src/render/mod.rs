@@ -1,4 +1,5 @@
-use vello::peniko::color::{AlphaColor, Oklab, Oklch, Srgb};
+use kurbo::{Affine, Shape, Size};
+use peniko::color::{AlphaColor, Oklab, Srgb};
 
 struct RenderStore {
   font:   parley::FontContext,
@@ -10,6 +11,8 @@ struct RenderStore {
 pub struct Render<'a> {
   store: &'a RenderStore,
   scene: vello::Scene,
+
+  size: Size,
 }
 
 mod blitter;
@@ -17,6 +20,7 @@ mod window;
 
 struct App {
   store: RenderStore,
+  state: super::State,
 
   texture:      wgpu::Texture,
   texture_view: wgpu::TextureView,
@@ -55,6 +59,8 @@ pub fn run() {
     let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
     App {
+      state: super::State::default(),
+
       store: RenderStore {
         font:   parley::FontContext::new(),
         layout: parley::LayoutContext::new(),
@@ -69,8 +75,23 @@ pub fn run() {
 }
 
 impl App {
-  fn render(&mut self, surface: &wgpu::SurfaceTexture, device: &wgpu::Device, queue: &wgpu::Queue) {
-    let scene = vello::Scene::new();
+  fn render(
+    &mut self,
+    surface: &wgpu::SurfaceTexture,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    scale: f64,
+  ) {
+    let mut render = Render {
+      store: &self.store,
+      scene: vello::Scene::new(),
+      size:  Size::new(
+        surface.texture.width() as f64 / scale,
+        surface.texture.height() as f64 / scale,
+      ),
+    };
+
+    self.state.draw(&mut render);
 
     self
       .store
@@ -78,7 +99,7 @@ impl App {
       .render_to_texture(
         &device,
         &queue,
-        &scene,
+        &render.scene,
         &self.texture_view,
         &vello::RenderParams {
           base_color:          encode_color(Color::WHITE),
@@ -99,5 +120,19 @@ impl App {
 
     // submit will accept anything that implements IntoIter
     queue.submit(std::iter::once(encoder.finish()));
+  }
+}
+
+impl Render<'_> {
+  pub fn size(&self) -> Size { self.size }
+
+  pub fn fill(&mut self, shape: &impl Shape, color: Color) {
+    self.scene.fill(
+      peniko::Fill::NonZero,
+      Affine::IDENTITY,
+      peniko::Brush::Solid(encode_color(color)),
+      None,
+      shape,
+    );
   }
 }

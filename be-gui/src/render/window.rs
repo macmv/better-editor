@@ -83,7 +83,7 @@ impl winit::application::ApplicationHandler for App {
         if let Some(init) = &mut self.init {
           let texture = init.surface.get_current_texture().unwrap();
 
-          init.app.render(&texture, &init.device, &init.queue);
+          init.app.render(&texture, &init.device, &init.queue, 1.0);
 
           texture.present();
         }

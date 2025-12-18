@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+kurbo = "0.12"
 parley = "0.7.0"
+peniko = "0.5"
 pollster = "0.4.0"
 vello = "0.6.0"
 wgpu = "26.0.1"

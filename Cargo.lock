@@ -136,7 +136,9 @@ dependencies = [
 name = "be-gui"
 version = "0.1.0"
 dependencies = [
+ "kurbo",
  "parley",
+ "peniko",
  "pollster",
  "vello",
  "wgpu",
