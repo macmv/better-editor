@@ -32,12 +32,7 @@ fn fs_main(vs: VertexOutput) -> @location(0) vec4<f32> {
     color.g - 0.5,
     color.b - 0.5,
   ));
-  let srgb = vec3<f32>(
-    linear_to_srgb(rgb.r),
-    linear_to_srgb(rgb.g),
-    linear_to_srgb(rgb.b),
-  );
-  return vec4<f32>(srgb, color.a);
+  return vec4<f32>(rgb, color.a);
 }
 
 fn oklab_to_linear_rgb(c: vec3<f32>) -> vec3<f32> {
@@ -54,12 +49,4 @@ fn oklab_to_linear_rgb(c: vec3<f32>) -> vec3<f32> {
     -1.2684380046f * l + 2.6097574011f * m - 0.3413193965f * s,
     -0.0041960863f * l - 0.7034186147f * m + 1.7076147010f * s,
   );
-}
-
-fn linear_to_srgb(x: f32) -> f32 {
-  if x >= 0.0031308 {
-    return 1.055 * pow(x, 1.0 / 2.4) - 0.055;
-  } else {
-    return 12.92 * x;
-  }
 }
