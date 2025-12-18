@@ -183,7 +183,10 @@ impl Render<'_> {
   pub fn layout_text(&mut self, text: &str, pos: impl Into<Point>, color: Color) -> TextLayout {
     let mut builder = self.store.layout.ranged_builder(&mut self.store.font, &text, 1.0, false);
     builder.push_default(parley::StyleProperty::Brush(encode_color(color).into()));
-    builder.push_default(parley::StyleProperty::FontSize(12.0 * self.scale as f32));
+    builder.push_default(parley::StyleProperty::FontSize(16.0 * self.scale as f32));
+    builder.push_default(parley::StyleProperty::FontStack(parley::FontStack::Source(
+      "monospace".into(),
+    )));
     let mut layout = builder.build(&text);
 
     layout.break_all_lines(None);
