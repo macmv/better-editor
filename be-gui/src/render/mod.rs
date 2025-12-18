@@ -81,9 +81,7 @@ impl App {
         &scene,
         &self.texture_view,
         &vello::RenderParams {
-          base_color:          encode_color(
-            AlphaColor::<Oklch>::new([0.6, 0.18, 140.0, 1.0]).convert(),
-          ),
+          base_color:          encode_color(Color::WHITE),
           width:               surface.texture.width(),
           height:              surface.texture.height(),
           antialiasing_method: vello::AaConfig::Msaa16,
