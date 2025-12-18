@@ -32,6 +32,12 @@ struct App {
   blitter: blitter::TextureBlitterConvert,
 }
 
+pub struct TextLayout {
+  origin: Point,
+  layout: parley::Layout<peniko::Brush>,
+  scale:  f64,
+}
+
 pub type Color = AlphaColor<Oklab>;
 
 pub fn oklch(l: f32, c: f32, h: f32) -> Color { AlphaColor::<Oklch>::new([l, c, h, 1.0]).convert() }
@@ -174,7 +180,7 @@ impl Render<'_> {
     );
   }
 
-  pub fn draw_text(&mut self, text: &str, pos: impl Into<Point>, color: Color) -> Rect {
+  pub fn layout_text(&mut self, text: &str, pos: impl Into<Point>, color: Color) -> TextLayout {
     let mut builder = self.store.layout.ranged_builder(&mut self.store.font, &text, 1.0, false);
     builder.push_default(parley::StyleProperty::Brush(encode_color(color).into()));
     builder.push_default(parley::StyleProperty::FontSize(12.0 * self.scale as f32));
@@ -183,11 +189,14 @@ impl Render<'_> {
     layout.break_all_lines(None);
     layout.align(None, parley::Alignment::Start, parley::AlignmentOptions::default());
 
-    let mut rect = Rect::new(0.0, 0.0, f64::from(layout.width()), f64::from(layout.height()));
+    TextLayout { origin: pos.into(), layout, scale: self.scale }
+  }
 
-    let origin = pos.into();
+  pub fn draw_text(&mut self, text: TextLayout) {
+    let mut rect =
+      Rect::new(0.0, 0.0, f64::from(text.layout.full_width()), f64::from(text.layout.height()));
 
-    for line in layout.lines() {
+    for line in text.layout.lines() {
       for item in line.items() {
         let parley::PositionedLayoutItem::GlyphRun(glyph_run) = item else { continue };
 
@@ -201,7 +210,7 @@ impl Render<'_> {
           .draw_glyphs(run.font())
           .brush(&glyph_run.style().brush)
           .hint(true)
-          .transform(Affine::translate(origin.to_vec2() * self.scale))
+          .transform(Affine::translate(text.origin.to_vec2() * self.scale))
           .glyph_transform(
             run.synthesis().skew().map(|angle| Affine::skew(angle.to_radians().tan() as f64, 0.0)),
           )
@@ -218,7 +227,13 @@ impl Render<'_> {
           );
       }
     }
+  }
+}
 
-    rect.scale_from_origin(1.0 / self.scale) + origin.to_vec2()
+impl TextLayout {
+  pub fn bounds(&self) -> Rect {
+    let rect =
+      Rect::new(0.0, 0.0, f64::from(self.layout.full_width()), f64::from(self.layout.height()));
+    rect.scale_from_origin(1.0 / self.scale) + self.origin.to_vec2()
   }
 }

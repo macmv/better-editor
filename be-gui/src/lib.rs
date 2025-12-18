@@ -19,11 +19,25 @@ impl State {
       oklch(0.3, 0.0, 0.0),
     );
 
-    let mut x = 0.0;
-    for tab in &self.tabs {
-      let rect =
-        render.draw_text(&tab.title, (x, render.size().height - 20.0), oklch(1.0, 0.0, 0.0));
-      x += rect.width();
+    let mut x = 10.0;
+    for (i, tab) in self.tabs.iter().enumerate() {
+      let layout =
+        render.layout_text(&tab.title, (x, render.size().height - 20.0), oklch(1.0, 0.0, 0.0));
+
+      if i == self.active {
+        render.fill(
+          &Rect::new(
+            layout.bounds().x0 - 5.0,
+            render.size().height - 20.0,
+            layout.bounds().x1 + 5.0,
+            render.size().height,
+          ),
+          oklch(0.5, 0.0, 0.0),
+        );
+      }
+
+      x += layout.bounds().width();
+      render.draw_text(layout);
 
       x += 5.0;
       render.stroke(
