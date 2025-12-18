@@ -1,6 +1,9 @@
 use kurbo::{Affine, Shape, Size};
 use peniko::color::{AlphaColor, Oklab, Oklch, Srgb};
 
+mod blitter;
+mod window;
+
 struct RenderStore {
   font:   parley::FontContext,
   layout: parley::LayoutContext,
@@ -15,9 +18,6 @@ pub struct Render<'a> {
   scale: f64,
   size:  Size,
 }
-
-mod blitter;
-mod window;
 
 struct App {
   store: RenderStore,
