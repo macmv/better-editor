@@ -61,9 +61,26 @@ impl Editor {
       .clamp(0, self.doc.rope.lines().len());
 
     let mut y = 0.0;
-    for line in self.doc.rope.line_slice(min_line as usize..max_line as usize).lines() {
+    for (i, line) in
+      self.doc.rope.line_slice(min_line as usize..max_line as usize).lines().enumerate()
+    {
       let layout = render.layout_text(&line.to_string(), (20.0, y), oklch(1.0, 0.0, 0.0));
       render.draw_text(layout);
+
+      if self.cursor.line == i + min_line {
+        const CHAR_WIDTH: f64 = 8.0;
+
+        render.fill(
+          &Rect::new(
+            20.0 + (self.cursor.column.as_usize() as f64) * CHAR_WIDTH,
+            y,
+            20.0 + (self.cursor.column.as_usize() as f64 + 1.0) * CHAR_WIDTH,
+            y + self.line_height,
+          ),
+          oklch(1.0, 0.0, 0.0),
+        );
+      }
+
       y += self.line_height;
     }
   }

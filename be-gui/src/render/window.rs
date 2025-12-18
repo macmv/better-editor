@@ -1,6 +1,6 @@
 use be_input::Key;
 use winit::{
-  event::WindowEvent,
+  event::{self, WindowEvent},
   event_loop::{self, ActiveEventLoop},
 };
 
@@ -21,7 +21,7 @@ struct Init {
   scale:   f64,
 
   // SAFETY: Keep this field last so we don't segfault on exit.
-  _window: winit::window::Window,
+  window: winit::window::Window,
 }
 
 impl winit::application::ApplicationHandler for App {
@@ -70,7 +70,7 @@ impl winit::application::ApplicationHandler for App {
       queue,
       config,
       scale: window.scale_factor(),
-      _window: window,
+      window,
     });
   }
 
@@ -103,6 +103,7 @@ impl winit::application::ApplicationHandler for App {
           && let Some(key) = parse_key(key)
         {
           init.app.state.on_key(key);
+          init.window.request_redraw();
         }
       }
 

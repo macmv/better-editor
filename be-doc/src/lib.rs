@@ -64,6 +64,10 @@ impl Document {
   }
 }
 
+impl Column {
+  pub fn as_usize(&self) -> usize { self.0 }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
