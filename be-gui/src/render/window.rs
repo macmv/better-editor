@@ -53,8 +53,8 @@ impl winit::application::ApplicationHandler for App {
     let config = wgpu::SurfaceConfiguration {
       usage:                         wgpu::TextureUsages::RENDER_ATTACHMENT,
       format:                        surface_format,
-      width:                         800,
-      height:                        600,
+      width:                         window.inner_size().width,
+      height:                        window.inner_size().height,
       alpha_mode:                    wgpu::CompositeAlphaMode::Auto,
       view_formats:                  vec![],
       present_mode:                  wgpu::PresentMode::AutoVsync,
