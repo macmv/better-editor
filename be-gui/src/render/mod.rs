@@ -1,4 +1,4 @@
-use kurbo::{Affine, Point, Rect, Shape, Size};
+use kurbo::{Affine, Point, Rect, Shape, Size, Stroke};
 use peniko::{
   Fill,
   color::{AlphaColor, Oklab, Oklch, Srgb},
@@ -151,6 +151,18 @@ impl App {
 
 impl Render<'_> {
   pub fn size(&self) -> Size { self.size }
+
+  pub fn stroke(&mut self, shape: &impl Shape, color: Color, mut stroke: Stroke) {
+    stroke.width *= self.scale;
+
+    self.scene.stroke(
+      &stroke,
+      Affine::scale(self.scale),
+      peniko::Brush::Solid(encode_color(color)),
+      None,
+      shape,
+    );
+  }
 
   pub fn fill(&mut self, shape: &impl Shape, color: Color) {
     self.scene.fill(
