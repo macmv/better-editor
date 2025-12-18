@@ -4,11 +4,16 @@ use winit::{
   keyboard::Key,
 };
 
+type AppBuilder = fn(&wgpu::Device, wgpu::SurfaceConfiguration) -> super::App;
+
 struct App {
-  init: Option<Init>,
+  builder: AppBuilder,
+  init:    Option<Init>,
 }
 
 struct Init {
+  app: super::App,
+
   instance: wgpu::Instance,
   surface:  wgpu::Surface<'static>,
   device:   wgpu::Device,
@@ -49,7 +54,14 @@ impl winit::application::ApplicationHandler for App {
 
     surface.configure(&device, &surface_desc);
 
-    self.init = Some(Init { instance, surface, device, queue, window });
+    self.init = Some(Init {
+      app: (self.builder)(&device, surface_desc),
+      instance,
+      surface,
+      device,
+      queue,
+      window,
+    });
   }
 
   fn window_event(
@@ -73,6 +85,8 @@ impl winit::application::ApplicationHandler for App {
         if let Some(init) = &mut self.init {
           let texture = init.surface.get_current_texture().unwrap();
 
+          init.app.render(&texture, &init.device, &init.queue);
+
           texture.present();
         }
       }
@@ -82,10 +96,10 @@ impl winit::application::ApplicationHandler for App {
   }
 }
 
-pub fn run() {
+pub fn run(builder: AppBuilder) {
   let event_loop = winit::event_loop::EventLoop::new().unwrap();
   event_loop.set_control_flow(event_loop::ControlFlow::Wait);
 
-  let mut app = App { init: None };
+  let mut app = App { builder, init: None };
   event_loop.run_app(&mut app).unwrap();
 }
