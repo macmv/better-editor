@@ -22,7 +22,7 @@ impl EditorState {
   pub fn cursor(&self) -> &Cursor { &self.cursor }
   pub fn mode(&self) -> Mode { self.mode }
 
-  pub fn move_row(&mut self, dist: i32) {
+  pub fn move_row_rel(&mut self, dist: i32) {
     let line = self.cursor.line + dist;
     self.cursor.line = line.clamp(self.max_line());
 
@@ -30,11 +30,10 @@ impl EditorState {
     self.cursor.column = self.cursor.target_column.clamp(max_col);
   }
 
-  pub fn move_col(&mut self, dist: i32) {
-    let max_col = self.max_column();
+  pub fn move_col_rel(&mut self, dist: i32) { self.move_to_col(self.cursor.column + dist as i32); }
 
-    let col = self.cursor.column + dist as i32;
-    self.cursor.column = col.clamp(max_col);
+  fn move_to_col(&mut self, col: Column) {
+    self.cursor.column = col.clamp(self.max_column());
     self.cursor.target_column = self.cursor.column;
   }
 
@@ -67,10 +66,13 @@ impl EditorState {
 
   fn perform_move(&mut self, m: be_input::Move) {
     match m {
-      Move::Left => self.move_col(-1),
-      Move::Right => self.move_col(1),
-      Move::Up => self.move_row(-1),
-      Move::Down => self.move_row(1),
+      Move::Left => self.move_col_rel(-1),
+      Move::Right => self.move_col_rel(1),
+      Move::Up => self.move_row_rel(-1),
+      Move::Down => self.move_row_rel(1),
+
+      Move::LineEnd => self.move_to_col(self.max_column()),
+      Move::LineStart => self.move_to_col(Column(0)),
 
       _ => {}
     }
@@ -86,11 +88,11 @@ mod tests {
   fn move_col_works() {
     let mut state = EditorState::from("ab");
 
-    state.move_col(1);
+    state.move_col_rel(1);
     assert_eq!(state.cursor.line, 0);
     assert_eq!(state.cursor.column, 1);
 
-    state.move_col(1);
+    state.move_col_rel(1);
     assert_eq!(state.cursor.line, 0);
     assert_eq!(state.cursor.column, 1);
   }
