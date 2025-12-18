@@ -12,7 +12,8 @@ pub struct Render<'a> {
   store: &'a RenderStore,
   scene: vello::Scene,
 
-  size: Size,
+  scale: f64,
+  size:  Size,
 }
 
 mod blitter;
@@ -103,7 +104,11 @@ impl App {
     let mut render = Render {
       store: &self.store,
       scene: vello::Scene::new(),
-      size:  Size::new(surface.texture.width() as f64, surface.texture.height() as f64),
+      scale,
+      size: Size::new(
+        surface.texture.width() as f64 / scale,
+        surface.texture.height() as f64 / scale,
+      ),
     };
 
     self.state.draw(&mut render);
@@ -143,7 +148,7 @@ impl Render<'_> {
   pub fn fill(&mut self, shape: &impl Shape, color: Color) {
     self.scene.fill(
       peniko::Fill::NonZero,
-      Affine::IDENTITY,
+      Affine::scale(self.scale),
       peniko::Brush::Solid(encode_color(color)),
       None,
       shape,
