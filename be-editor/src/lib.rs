@@ -1,4 +1,4 @@
-use be_doc::{Cursor, Document};
+use be_doc::{Column, Cursor, Document, Line};
 use be_input::Mode;
 
 pub struct EditorState {
@@ -18,18 +18,29 @@ impl EditorState {
     EditorState { doc: Document::new(), cursor: Cursor::START, mode: Mode::Normal }
   }
 
+  pub fn doc(&self) -> &Document { &self.doc }
+  pub fn cursor(&self) -> &Cursor { &self.cursor }
+  pub fn mode(&self) -> Mode { self.mode }
+
   pub fn move_row(&mut self, dist: i32) {
-    let max_line = self.doc.len_lines();
-
     let line = self.cursor.line + dist;
-    self.cursor.line = line.clamp(max_line.saturating_sub(1));
+    self.cursor.line = line.clamp(self.max_line());
 
-    let line = self.doc.line(self.cursor.line);
-    let max_col = line.graphemes().count();
+    let max_col = self.max_column();
     self.cursor.column = self.cursor.target_column.clamp(max_col);
   }
 
   pub fn move_col(&mut self, dist: i32) {
+    let max_col = self.max_column();
+
+    let col = self.cursor.column + dist as i32;
+    self.cursor.column = col.clamp(max_col);
+    self.cursor.target_column = self.cursor.column;
+  }
+
+  fn max_line(&self) -> Line { Line(self.doc.len_lines().saturating_sub(1)) }
+
+  fn max_column(&self) -> Column {
     let line = self.doc.line(self.cursor.line);
 
     let mut max_col = line.graphemes().count();
@@ -37,8 +48,12 @@ impl EditorState {
       max_col = max_col.saturating_sub(1);
     }
 
-    let col = self.cursor.column + dist as i32;
-    self.cursor.column = col.clamp(max_col);
+    Column(max_col)
+  }
+
+  pub fn set_mode(&mut self, m: Mode) {
+    self.mode = m;
+    self.cursor.column = self.max_column();
     self.cursor.target_column = self.cursor.column;
   }
 }

@@ -14,3 +14,4 @@ winit = "0.30.12"
 
 be-doc = { path = "../be-doc" }
 be-input = { path = "../be-input" }
+be-editor = { path = "../be-editor" }

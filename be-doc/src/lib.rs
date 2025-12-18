@@ -15,11 +15,11 @@ pub struct Cursor {
 
 /// A visual line, ie, lines from the start of the file.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Line(usize);
+pub struct Line(pub usize);
 
 /// A visual column, ie, graphemes from the start of the line.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Column(usize);
+pub struct Column(pub usize);
 
 impl From<&str> for Document {
   fn from(s: &str) -> Document { Document { rope: Rope::from(s) } }
@@ -46,12 +46,12 @@ impl Document {
 
 impl Column {
   pub fn as_usize(&self) -> usize { self.0 }
-  pub fn clamp(self, max: usize) -> Column { Column(self.0.clamp(0, max)) }
+  pub fn clamp(self, max: Column) -> Column { Column(self.0.clamp(0, max.0)) }
 }
 
 impl Line {
   pub fn as_usize(&self) -> usize { self.0 }
-  pub fn clamp(self, max: usize) -> Line { Line(self.0.clamp(0, max)) }
+  pub fn clamp(self, max: Line) -> Line { Line(self.0.clamp(0, max.0)) }
 }
 
 impl Add<i32> for Column {
