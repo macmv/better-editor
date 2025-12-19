@@ -119,6 +119,11 @@ impl EditorState {
       _ => {}
     }
   }
+
+  pub fn cursor_column_byte(&self) -> usize {
+    let line = self.doc.line(self.cursor.line);
+    line.graphemes().take(self.cursor.column.0).map(|g| g.len()).sum()
+  }
 }
 
 impl CommandState {
