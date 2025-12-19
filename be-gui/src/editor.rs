@@ -2,7 +2,7 @@ use be_editor::EditorState;
 use be_input::{Action, Key, Mode};
 use kurbo::{Point, Rect, Vec2};
 
-use crate::{Render, oklch};
+use crate::{CursorMode, Render, oklch};
 
 pub struct Editor {
   editor: EditorState,
@@ -80,7 +80,7 @@ impl Editor {
 
       render.draw_text(&layout);
 
-      let cursor = layout.cursor(command.cursor as usize);
+      let cursor = layout.cursor(command.cursor as usize, CursorMode::Line);
       render.fill(&cursor, oklch(1.0, 0.0, 0.0));
     }
   }

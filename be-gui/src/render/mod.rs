@@ -232,28 +232,43 @@ impl Render<'_> {
   }
 }
 
+#[derive(Copy, Clone)]
+pub enum CursorMode {
+  Line,
+  Block,
+  Underline,
+}
+
 impl TextLayout {
-  pub fn cursor(&self, index: usize) -> Rect {
+  pub fn cursor(&self, index: usize, mode: CursorMode) -> Rect {
     let cursor = parley::Cursor::from_byte_index(&self.layout, index, parley::Affinity::Downstream);
     let rect = match cursor.visual_clusters(&self.layout) {
       [_, Some(cluster)] => {
         let line = cluster.line();
         let metrics = line.metrics();
-        Rect::new(
-          cluster.visual_offset().unwrap_or_default() as f64,
-          metrics.min_coord as f64,
-          (cluster.visual_offset().unwrap_or_default() + cluster.advance()) as f64,
-          metrics.max_coord as f64,
-        )
+
+        let width = match mode {
+          CursorMode::Line => 1.0, // NB: 1 pixel, not scaled.
+          CursorMode::Block | CursorMode::Underline => cluster.advance() as f64,
+        };
+
+        let x = cluster.visual_offset().unwrap_or_default() as f64;
+        Rect::new(x, metrics.min_coord as f64, x + width, metrics.max_coord as f64)
       }
 
       [Some(cluster), _] => {
         let line = cluster.line();
         let metrics = line.metrics();
+
+        match mode {
+          CursorMode::Line => {}
+          CursorMode::Block | CursorMode::Underline => return Rect::ZERO,
+        };
+
         Rect::new(
           (cluster.visual_offset().unwrap_or_default() + cluster.advance()) as f64,
           metrics.min_coord as f64,
-          (cluster.visual_offset().unwrap_or_default() + cluster.advance() * 2.0) as f64,
+          (cluster.visual_offset().unwrap_or_default() + cluster.advance() + 1.0) as f64,
           metrics.max_coord as f64,
         )
       }
