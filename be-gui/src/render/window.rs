@@ -2,6 +2,7 @@ use be_input::{Key, KeyStroke};
 use winit::{
   event::WindowEvent,
   event_loop::{self, ActiveEventLoop},
+  keyboard::NamedKey,
 };
 
 type AppBuilder = fn(&wgpu::Device, &wgpu::SurfaceConfiguration) -> super::App;
@@ -12,7 +13,8 @@ struct App {
 }
 
 struct Init {
-  app: super::App,
+  app:  super::App,
+  keys: KeyState,
 
   surface: wgpu::Surface<'static>,
   device:  wgpu::Device,
@@ -22,6 +24,14 @@ struct Init {
 
   // SAFETY: Keep this field last so we don't segfault on exit.
   window: winit::window::Window,
+}
+
+#[derive(Default)]
+struct KeyState {
+  left_control:  bool,
+  right_control: bool,
+  left_alt:      bool,
+  right_alt:     bool,
 }
 
 impl winit::application::ApplicationHandler for App {
@@ -65,6 +75,7 @@ impl winit::application::ApplicationHandler for App {
 
     self.init = Some(Init {
       app: (self.builder)(&device, &config),
+      keys: Default::default(),
       surface,
       device,
       queue,
@@ -99,12 +110,41 @@ impl winit::application::ApplicationHandler for App {
       WindowEvent::KeyboardInput {
         event:
           winit::event::KeyEvent {
+            logical_key: winit::keyboard::Key::Named(key @ (NamedKey::Control | NamedKey::Alt)),
+            location,
+            state,
+            ..
+          },
+        ..
+      } => {
+        if let Some(init) = &mut self.init {
+          let key = match (key, location) {
+            (NamedKey::Control, winit::keyboard::KeyLocation::Left) => &mut init.keys.left_control,
+            (NamedKey::Control, winit::keyboard::KeyLocation::Right) => {
+              &mut init.keys.right_control
+            }
+            (NamedKey::Alt, winit::keyboard::KeyLocation::Left) => &mut init.keys.left_alt,
+            (NamedKey::Alt, winit::keyboard::KeyLocation::Right) => &mut init.keys.right_alt,
+
+            _ => unreachable!(),
+          };
+
+          match state {
+            winit::event::ElementState::Pressed => *key = true,
+            winit::event::ElementState::Released => *key = false,
+          }
+        }
+      }
+
+      WindowEvent::KeyboardInput {
+        event:
+          winit::event::KeyEvent {
             logical_key: key, state: winit::event::ElementState::Pressed, ..
           },
         ..
       } => {
         if let Some(init) = &mut self.init
-          && let Some(key) = parse_key(key)
+          && let Some(key) = init.keys.parse_key(key)
         {
           init.app.state.on_key(key);
           init.window.request_redraw();
@@ -150,24 +190,30 @@ pub fn run(builder: AppBuilder) {
   event_loop.run_app(&mut app).unwrap();
 }
 
-fn parse_key(key: winit::keyboard::Key) -> Option<KeyStroke> {
-  use winit::keyboard::{Key as WKey, NamedKey::*};
+impl KeyState {
+  fn parse_key(&self, key: winit::keyboard::Key) -> Option<KeyStroke> {
+    use winit::keyboard::{Key as WKey, NamedKey::*};
 
-  let key = match key {
-    WKey::Character(s) if s.len() == 1 => Some(Key::Char(s.chars().next()?)),
-    WKey::Named(Escape) => Some(Key::Escape),
-    WKey::Named(Tab) => None, // TODO
-    WKey::Named(Enter) => Some(Key::Char('\n')),
-    WKey::Named(Space) => Some(Key::Char(' ')),
-    WKey::Named(Backspace) => Some(Key::Backspace),
-    WKey::Named(Delete) => Some(Key::Delete),
-    WKey::Named(ArrowUp) => Some(Key::ArrowUp),
-    WKey::Named(ArrowDown) => Some(Key::ArrowDown),
-    WKey::Named(ArrowLeft) => Some(Key::ArrowLeft),
-    WKey::Named(ArrowRight) => Some(Key::ArrowRight),
+    let key = match key {
+      WKey::Character(s) if s.len() == 1 => Some(Key::Char(s.chars().next()?)),
+      WKey::Named(Escape) => Some(Key::Escape),
+      WKey::Named(Tab) => None, // TODO
+      WKey::Named(Enter) => Some(Key::Char('\n')),
+      WKey::Named(Space) => Some(Key::Char(' ')),
+      WKey::Named(Backspace) => Some(Key::Backspace),
+      WKey::Named(Delete) => Some(Key::Delete),
+      WKey::Named(ArrowUp) => Some(Key::ArrowUp),
+      WKey::Named(ArrowDown) => Some(Key::ArrowDown),
+      WKey::Named(ArrowLeft) => Some(Key::ArrowLeft),
+      WKey::Named(ArrowRight) => Some(Key::ArrowRight),
 
-    _ => None,
-  };
+      _ => None,
+    };
 
-  key.map(|key| KeyStroke { key, control: false, alt: false })
+    key.map(|key| KeyStroke {
+      key,
+      control: self.left_control || self.right_control,
+      alt: self.left_alt || self.right_alt,
+    })
+  }
 }
