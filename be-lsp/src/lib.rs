@@ -1,5 +1,8 @@
+use serde::de;
+use serde_json::value::RawValue;
 use std::{
   collections::VecDeque,
+  fmt,
   io::{Read, Write},
   process::{Child, ChildStdin, ChildStdout, Stdio},
 };
@@ -102,12 +105,11 @@ impl Sender {
   fn new(stdin: ChildStdin) -> Sender { Sender { messages: Vec::new(), writer: stdin } }
 }
 
-#[derive(serde::Deserialize)]
-#[serde(untagged)]
 enum Message {
-  Request { id: u64, method: String, params: Box<serde_json::value::RawValue> },
-  Response { id: u64, result: Box<serde_json::value::RawValue> },
-  Notification { method: String, params: Box<serde_json::value::RawValue> },
+  Request { id: u64, method: String, params: Option<Box<RawValue>> },
+  Response { id: u64, result: Box<RawValue> },
+  Error { id: u64, error: Box<RawValue> },
+  Notification { method: String, params: Option<Box<RawValue>> },
 }
 
 impl Receiver {
@@ -166,6 +168,142 @@ impl Receiver {
     println!("msg: {}", String::from_utf8_lossy(&msg));
 
     Some(serde_json::from_slice::<Message>(&msg).unwrap())
+  }
+}
+
+#[derive(Debug)]
+enum Field {
+  Jsonrpc,
+  Id,
+  Result,
+  Error,
+  Method,
+  Params,
+  Other,
+}
+
+impl<'de> de::Deserialize<'de> for Field {
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: de::Deserializer<'de>,
+  {
+    struct FieldVisitor;
+
+    impl<'de> de::Visitor<'de> for FieldVisitor {
+      type Value = Field;
+
+      fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("a JSON-RPC field name")
+      }
+
+      fn visit_str<E>(self, v: &str) -> Result<Field, E>
+      where
+        E: de::Error,
+      {
+        Ok(match v {
+          "jsonrpc" => Field::Jsonrpc,
+          "id" => Field::Id,
+          "result" => Field::Result,
+          "error" => Field::Error,
+          "method" => Field::Method,
+          "params" => Field::Params,
+          _ => Field::Other,
+        })
+      }
+
+      fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Field, E>
+      where
+        E: de::Error,
+      {
+        self.visit_str(v)
+      }
+    }
+
+    deserializer.deserialize_identifier(FieldVisitor)
+  }
+}
+
+impl<'de> de::Deserialize<'de> for Message {
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: de::Deserializer<'de>,
+  {
+    struct MsgVisitor;
+
+    impl<'de> de::Visitor<'de> for MsgVisitor {
+      type Value = Message;
+
+      fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("a JSON-RPC message object")
+      }
+
+      fn visit_map<A>(self, mut map: A) -> Result<Message, A::Error>
+      where
+        A: de::MapAccess<'de>,
+      {
+        let mut jsonrpc: Option<&str> = None;
+
+        let mut id: Option<u64> = None;
+        let mut result: Option<Box<RawValue>> = None;
+        let mut error: Option<Box<RawValue>> = None;
+
+        let mut method: Option<String> = None;
+        let mut params: Option<Option<Box<RawValue>>> = None;
+
+        while let Some(key) = map.next_key::<Field>()? {
+          macro_rules! fields {
+            ($($field:ident: $var:ident,)*) => {
+              match key {
+                $(
+                  Field::$field => {
+
+                    if $var.is_some() {
+                      return Err(de::Error::duplicate_field(stringify!($var)));
+                    }
+
+                    $var = Some(map.next_value()?);
+                  }
+                )*
+
+                Field::Other => {
+                  map.next_value::<de::IgnoredAny>()?;
+                }
+              }
+            }
+          }
+
+          fields!(
+            Jsonrpc: jsonrpc,
+            Id: id,
+            Result: result,
+            Error: error,
+            Method: method,
+            Params: params,
+          );
+        }
+
+        if let Some(v) = jsonrpc {
+          if v != "2.0" {
+            return Err(de::Error::custom("unsupported jsonrpc version"));
+          }
+        }
+
+        match (method, id, params, result, error) {
+          (None, Some(id), None, Some(result), None) => Ok(Message::Response { id, result }),
+          (None, Some(id), None, None, Some(error)) => Ok(Message::Error { id, error }),
+          (Some(method), Some(id), Some(params), None, None) => {
+            Ok(Message::Request { id, method, params })
+          }
+          (Some(method), None, Some(params), None, None) => {
+            Ok(Message::Notification { method, params })
+          }
+
+          _ => Err(de::Error::custom("invalid or ambiguous JSON-RPC message")),
+        }
+      }
+    }
+
+    deserializer.deserialize_map(MsgVisitor)
   }
 }
 
