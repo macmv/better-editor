@@ -108,7 +108,7 @@ impl Editor {
         axis:    Axis::Vertical,
         percent: 0.2,
         active:  Side::Right,
-        left:    Box::new(Pane::Content(Content::FileTree(FileTree::new()))),
+        left:    Box::new(Pane::Content(Content::FileTree(FileTree::current_directory()))),
         right:   Box::new(Pane::Content(Content::Editor(EditorView {
           editor:      EditorState::from("hello\nworld\n"),
           line_height: 20.0,
