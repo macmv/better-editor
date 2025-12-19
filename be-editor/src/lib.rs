@@ -17,8 +17,8 @@ pub struct EditorState {
 
 #[derive(Default)]
 pub struct CommandState {
-  text:   String,
-  cursor: usize, // in graphemes
+  pub text:   String,
+  pub cursor: usize, // in graphemes
 }
 
 impl From<&str> for EditorState {
@@ -35,6 +35,7 @@ impl EditorState {
   pub fn doc(&self) -> &Document { &self.doc }
   pub fn cursor(&self) -> &Cursor { &self.cursor }
   pub fn mode(&self) -> Mode { self.mode }
+  pub fn command(&self) -> Option<&CommandState> { self.command.as_ref() }
 
   pub fn move_line_rel(&mut self, dist: i32) { self.move_to_line(self.cursor.line + dist); }
   pub fn move_col_rel(&mut self, dist: i32) { self.move_to_col(self.cursor.column + dist as i32); }

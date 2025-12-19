@@ -60,5 +60,24 @@ impl Editor {
 
       y += self.line_height;
     }
+
+    if let Some(command) = self.editor.command() {
+      render.fill(
+        &Rect::new(
+          0.0,
+          render.size().height - 40.0,
+          render.size().width,
+          render.size().height - 20.0,
+        ),
+        oklch(0.4, 0.0, 0.0),
+      );
+
+      let layout = render.layout_text(
+        &command.text,
+        (20.0, render.size().height - 40.0),
+        oklch(1.0, 0.0, 0.0),
+      );
+      render.draw_text(layout);
+    }
   }
 }
