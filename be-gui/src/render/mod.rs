@@ -163,14 +163,14 @@ impl<'a> Render<'a> {
     if let Some(top) = self.stack.last() { top.size() } else { self.size }
   }
 
-  pub fn clip(&mut self, mut rect: Rect) {
+  pub fn clipped(&mut self, mut rect: Rect, f: impl FnOnce(&mut Render)) {
     rect = rect + self.offset();
 
     self.stack.push(rect);
     self.scene.push_clip_layer(Affine::IDENTITY, &rect.scale_from_origin(self.scale));
-  }
 
-  pub fn pop_clip(&mut self) {
+    f(self);
+
     self.stack.pop().expect("no clip layer to pop");
     self.scene.pop_layer();
   }

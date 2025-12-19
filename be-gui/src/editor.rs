@@ -79,12 +79,8 @@ impl Split {
       ),
     };
 
-    render.clip(left);
-    self.left.draw(render);
-    render.pop_clip();
-    render.clip(right);
-    self.right.draw(render);
-    render.pop_clip();
+    render.clipped(left, |render| self.left.draw(render));
+    render.clipped(right, |render| self.right.draw(render));
   }
 }
 
