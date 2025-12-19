@@ -38,6 +38,13 @@ enum Side {
 }
 
 impl Pane {
+  fn draw(&self, render: &mut Render) {
+    match self {
+      Pane::Content(content) => content.draw(render),
+      Pane::Split(split) => split.draw(render),
+    }
+  }
+
   fn active(&self) -> &Content {
     match self {
       Pane::Content(content) => content,
@@ -56,6 +63,28 @@ impl Pane {
         Side::Right => split.right.active_mut(),
       },
     }
+  }
+}
+
+impl Split {
+  fn draw(&self, render: &mut Render) {
+    let (left, right) = match self.axis {
+      Axis::Vertical => (
+        Rect::new(0.0, 0.0, render.size().width / 2.0, render.size().height),
+        Rect::new(render.size().width / 2.0, 0.0, render.size().width, render.size().height),
+      ),
+      Axis::Horizontal => (
+        Rect::new(0.0, 0.0, render.size().width, render.size().height / 2.0),
+        Rect::new(0.0, render.size().height / 2.0, render.size().width, render.size().height),
+      ),
+    };
+
+    render.clip(left);
+    self.left.draw(render);
+    render.pop_clip();
+    render.clip(right);
+    self.right.draw(render);
+    render.pop_clip();
   }
 }
 
@@ -105,7 +134,7 @@ impl Editor {
     Ok(())
   }
 
-  pub fn draw(&self, render: &mut Render) { self.root.active().draw(render) }
+  pub fn draw(&self, render: &mut Render) { self.root.draw(render); }
 }
 
 impl EditorView {

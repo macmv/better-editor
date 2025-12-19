@@ -1,4 +1,4 @@
-use kurbo::{Affine, Point, Rect, Shape, Size, Stroke};
+use kurbo::{Affine, Point, Rect, Shape, Size, Stroke, Vec2};
 use peniko::{
   Fill,
   color::{AlphaColor, Oklab, Oklch, Srgb},
@@ -20,6 +20,8 @@ pub struct Render<'a> {
 
   scale: f64,
   size:  Size,
+
+  stack: Vec<Rect>,
 }
 
 struct App {
@@ -120,6 +122,7 @@ impl App {
         surface.texture.width() as f64 / scale,
         surface.texture.height() as f64 / scale,
       ),
+      stack: vec![],
     };
 
     self.state.draw(&mut render);
@@ -155,15 +158,35 @@ impl App {
   }
 }
 
-impl Render<'_> {
-  pub fn size(&self) -> Size { self.size }
+impl<'a> Render<'a> {
+  pub fn size(&self) -> Size {
+    if let Some(top) = self.stack.last() { top.size() } else { self.size }
+  }
+
+  pub fn clip(&mut self, mut rect: Rect) {
+    rect = rect + self.offset();
+
+    self.stack.push(rect);
+    self.scene.push_clip_layer(Affine::IDENTITY, &rect.scale_from_origin(self.scale));
+  }
+
+  pub fn pop_clip(&mut self) {
+    self.stack.pop().expect("no clip layer to pop");
+    self.scene.pop_layer();
+  }
+
+  fn offset(&self) -> Vec2 {
+    if let Some(top) = self.stack.last() { top.origin().to_vec2() } else { Vec2::ZERO }
+  }
+
+  fn transform(&self) -> Affine { Affine::scale(self.scale) * Affine::translate(self.offset()) }
 
   pub fn stroke(&mut self, shape: &impl Shape, color: Color, mut stroke: Stroke) {
     stroke.width *= self.scale;
 
     self.scene.stroke(
       &stroke,
-      Affine::scale(self.scale),
+      self.transform(),
       peniko::Brush::Solid(encode_color(color)),
       None,
       shape,
@@ -173,7 +196,7 @@ impl Render<'_> {
   pub fn fill(&mut self, shape: &impl Shape, color: Color) {
     self.scene.fill(
       peniko::Fill::NonZero,
-      Affine::scale(self.scale),
+      self.transform(),
       peniko::Brush::Solid(encode_color(color)),
       None,
       shape,
@@ -198,6 +221,8 @@ impl Render<'_> {
     let mut rect =
       Rect::new(0.0, 0.0, f64::from(text.layout.full_width()), f64::from(text.layout.height()));
 
+    let offset = self.offset();
+
     for line in text.layout.lines() {
       for item in line.items() {
         let parley::PositionedLayoutItem::GlyphRun(glyph_run) = item else { continue };
@@ -212,7 +237,7 @@ impl Render<'_> {
           .draw_glyphs(run.font())
           .brush(&glyph_run.style().brush)
           .hint(true)
-          .transform(Affine::translate(text.origin.to_vec2() * self.scale))
+          .transform(Affine::translate((text.origin.to_vec2() + offset) * self.scale))
           .glyph_transform(
             run.synthesis().skew().map(|angle| Affine::skew(angle.to_radians().tan() as f64, 0.0)),
           )
