@@ -194,7 +194,10 @@ impl<'a> Render<'a> {
           distance += self.size().width;
         }
 
-        left_bounds.x1 = distance;
+        // HACK: Without this overlap, there's a gap between splits. This is probably
+        // from something being rounded somewhere, as changing the window size
+        // makes the gap flicker.
+        left_bounds.x1 = distance + 1.0;
         right_bounds.x0 = distance;
       }
       Axis::Horizontal => {
@@ -203,7 +206,7 @@ impl<'a> Render<'a> {
           distance += self.size().height;
         }
 
-        left_bounds.y1 = distance;
+        left_bounds.y1 = distance + 1.0;
         right_bounds.y0 = distance;
       }
     }
