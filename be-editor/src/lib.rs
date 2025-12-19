@@ -132,7 +132,10 @@ impl CommandState {
   }
   fn perform_edit(&mut self, e: Edit) {
     match e {
-      Edit::Insert(c) => self.text.insert(self.cursor, c),
+      Edit::Insert(c) => {
+        self.text.insert(self.cursor, c);
+        self.move_cursor(1);
+      }
 
       _ => {}
     }
