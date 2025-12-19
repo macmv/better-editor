@@ -40,6 +40,36 @@ impl EditorState {
 
   pub fn move_line_rel(&mut self, dist: i32) { self.move_to_line(self.cursor.line + dist); }
   pub fn move_col_rel(&mut self, dist: i32) { self.move_to_col(self.cursor.column + dist as i32); }
+  pub fn move_graphemes(&mut self, delta: isize) {
+    let mut target_column = self.cursor.column.0 as isize + delta;
+
+    while target_column < 0 {
+      if self.cursor.line == 0 {
+        self.cursor.line.0 = 0;
+        self.move_to_col(Column(0));
+        return;
+      }
+
+      self.cursor.column.0 = 0;
+      self.cursor.line.0 -= 1;
+      target_column += self.doc.line_with_terminator(self.cursor.line).graphemes().count() as isize;
+    }
+
+    while target_column
+      >= self.doc.line_with_terminator(self.cursor.line).graphemes().count() as isize
+    {
+      if self.cursor.line == self.max_line() {
+        self.move_to_col(self.max_column());
+        return;
+      }
+
+      target_column -= self.doc.line_with_terminator(self.cursor.line).graphemes().count() as isize;
+      self.cursor.column.0 = 0;
+      self.cursor.line.0 += 1;
+    }
+
+    self.cursor.column.0 = target_column as usize;
+  }
 
   fn move_to_line(&mut self, line: Line) {
     self.cursor.line = line.clamp(self.max_line());
@@ -114,7 +144,7 @@ impl EditorState {
         let mut bytes = [0; 4];
         let s = c.encode_utf8(&mut bytes);
         self.doc.insert(self.cursor, s);
-        self.move_col_rel(1);
+        self.move_graphemes(1);
       }
 
       _ => {}
@@ -175,5 +205,26 @@ mod tests {
     state.move_col_rel(1);
     assert_eq!(state.cursor.line, 0);
     assert_eq!(state.cursor.column, 1);
+  }
+
+  #[test]
+  fn move_graphemes_works() {
+    let mut state = EditorState::from("abc\ndef");
+
+    state.move_graphemes(1);
+    assert_eq!(state.cursor.line, 0);
+    assert_eq!(state.cursor.column, 1);
+
+    state.move_graphemes(1);
+    assert_eq!(state.cursor.line, 0);
+    assert_eq!(state.cursor.column, 2);
+
+    state.move_graphemes(1);
+    assert_eq!(state.cursor.line, 0);
+    assert_eq!(state.cursor.column, 3);
+
+    state.move_graphemes(1);
+    assert_eq!(state.cursor.line, 1);
+    assert_eq!(state.cursor.column, 0);
   }
 }
