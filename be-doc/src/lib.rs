@@ -107,6 +107,9 @@ impl Document {
   }
 
   pub fn line(&self, line: Line) -> RopeSlice<'_> { self.rope.line(line.0) }
+  pub fn line_with_terminator(&self, line: Line) -> RopeSlice<'_> {
+    self.rope.line_slice(line.0..line.0 + 1)
+  }
   pub fn len_lines(&self) -> usize { self.rope.line_len() }
 
   fn cursor_offset(&self, cursor: Cursor) -> usize {
