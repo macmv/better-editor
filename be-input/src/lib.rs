@@ -1,8 +1,9 @@
 mod action;
 mod key;
 
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Default, Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub enum Mode {
+  #[default]
   Normal,
   Insert,
   Visual,

@@ -6,6 +6,7 @@ use std::{
 
 use crop::{Rope, RopeBuilder, RopeSlice};
 
+#[derive(Default)]
 pub struct Document {
   pub rope: Rope,
 }
@@ -32,6 +33,10 @@ impl From<&str> for Document {
 impl Cursor {
   pub const START: Cursor =
     Cursor { line: Line(0), column: Column(0), target_column: Column(0) };
+}
+
+impl Default for Cursor {
+  fn default() -> Self { Cursor::START }
 }
 
 impl PartialEq<usize> for Line {

@@ -5,6 +5,7 @@ use crate::fs::OpenedFile;
 
 mod fs;
 
+#[derive(Default)]
 pub struct EditorState {
   doc:    Document,
   cursor: Cursor,
@@ -15,24 +16,14 @@ pub struct EditorState {
 
 impl From<&str> for EditorState {
   fn from(s: &str) -> EditorState {
-    EditorState {
-      doc:    Document::from(s),
-      cursor: Cursor::START,
-      mode:   Mode::Normal,
-      file:   None,
-    }
+    let mut state = EditorState::default();
+    state.doc = Document::from(s);
+    state
   }
 }
 
 impl EditorState {
-  pub fn new() -> EditorState {
-    EditorState {
-      doc:    Document::new(),
-      cursor: Cursor::START,
-      mode:   Mode::Normal,
-      file:   None,
-    }
-  }
+  pub fn new() -> EditorState { EditorState::default() }
 
   pub fn doc(&self) -> &Document { &self.doc }
   pub fn cursor(&self) -> &Cursor { &self.cursor }
