@@ -29,11 +29,20 @@ enum TabContent {
 
 impl State {
   fn draw(&self, render: &mut Render) {
+    render.clip(Rect::new(0.0, 0.0, render.size().width, render.size().height - 20.0));
     match &self.tabs[self.active].content {
       TabContent::Shell(shell) => shell.draw(render),
       TabContent::Editor(editor) => editor.draw(render),
     }
+    render.pop_clip();
+    render.clip(Rect::new(
+      0.0,
+      render.size().height - 20.0,
+      render.size().width,
+      render.size().height,
+    ));
     self.draw_tabs(render);
+    render.pop_clip();
   }
 
   fn on_key(&mut self, key: Key) {
