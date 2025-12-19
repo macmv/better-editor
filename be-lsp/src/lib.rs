@@ -61,8 +61,7 @@ impl LspClient {
     })
     .unwrap();
 
-    let message = format!("Content-Length: {}\r\n\r\n{}", content.len(), content);
-    self.tx.writer.write_all(message.as_bytes()).unwrap();
+    write!(self.tx.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content).unwrap();
   }
 }
 
