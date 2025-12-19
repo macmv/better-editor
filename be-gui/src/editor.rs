@@ -82,7 +82,7 @@ impl Content {
   fn draw(&self, render: &mut Render) {
     match self {
       Content::Editor(editor) => editor.draw(render),
-      Content::FileTree(_) => {}
+      Content::FileTree(file_tree) => file_tree.draw(render),
     }
   }
 
