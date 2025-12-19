@@ -86,11 +86,56 @@ impl Receiver {
   }
 
   fn decode(&mut self) -> Option<String> {
-    let terminator = self.read.iter().position(|c| *c == b'\n')?;
+    let mut iter = self.read.iter();
+    let mut prev = 0;
+    let mut len = None;
+    loop {
+      let terminator = iter.position(|c| *c == b'\n')? + 1;
 
-    let msg = self.read.drain(..=terminator).collect::<Vec<u8>>();
+      let header = self.read.range(prev..prev + terminator).copied().collect::<Vec<u8>>();
+      let header = String::from_utf8_lossy(&header);
+      let header = header.trim();
+      prev += terminator;
 
-    Some(String::from_utf8_lossy(&msg).to_string().trim().to_string())
+      if header == "" {
+        break;
+      }
+
+      let Some((key, value)) = header.split_once(':') else { continue };
+      let key = key.trim();
+      let value = value.trim();
+
+      match key {
+        "Content-Length" => {
+          len = Some(value.parse::<u32>().unwrap());
+        }
+
+        _ => {}
+      }
+    }
+
+    let Some(len) = len else { return None };
+
+    if self.read.len() < prev + len as usize {
+      return None;
+    }
+
+    self.read.drain(..prev);
+    let msg = self.read.drain(..len as usize).collect::<Vec<u8>>();
+
+    #[derive(serde::Deserialize)]
+    struct Message<'a> {
+      id:     u64,
+      #[serde(borrow)]
+      result: &'a serde_json::value::RawValue,
+    }
+
+    let msg = serde_json::from_slice::<Message>(&msg).unwrap();
+
+    dbg!(msg.id);
+    dbg!(msg.result);
+
+    Some(msg.result.to_string())
   }
 }
 
@@ -102,7 +147,6 @@ mod tests {
   fn spawn_client() {
     let mut client = LspClient::spawn("rust-analyzer");
 
-    dbg!(client.rx.recv());
-    panic!();
+    while client.rx.recv().is_none() {}
   }
 }
