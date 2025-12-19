@@ -180,7 +180,7 @@ impl<'a> Render<'a> {
   pub fn split(
     &mut self,
     axis: Axis,
-    mut distance: Distance,
+    distance: Distance,
     left: impl FnOnce(&mut Render),
     right: impl FnOnce(&mut Render),
   ) {
