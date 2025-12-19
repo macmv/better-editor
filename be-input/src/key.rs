@@ -4,4 +4,9 @@ pub enum Key {
   Backspace,
   Delete,
   Escape,
+
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
 }

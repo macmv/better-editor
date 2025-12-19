@@ -161,6 +161,10 @@ fn parse_key(key: winit::keyboard::Key) -> Option<Key> {
     WKey::Named(Space) => Some(Key::Char(' ')),
     WKey::Named(Backspace) => Some(Key::Backspace),
     WKey::Named(Delete) => Some(Key::Delete),
+    WKey::Named(ArrowUp) => Some(Key::ArrowUp),
+    WKey::Named(ArrowDown) => Some(Key::ArrowDown),
+    WKey::Named(ArrowLeft) => Some(Key::ArrowLeft),
+    WKey::Named(ArrowRight) => Some(Key::ArrowRight),
 
     _ => None,
   }

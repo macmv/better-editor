@@ -50,6 +50,11 @@ impl Action {
         Ok(Action::Edit { count: NonZero::new(count), e: Edit::$($e)* })
       };
     }
+    macro_rules! m {
+      ($($e:tt)*) => {
+        Ok(Action::Move { count: NonZero::new(count), m: Move::$($e)* })
+      };
+    }
 
     let mut iter = input.iter().copied();
 
@@ -58,6 +63,10 @@ impl Action {
         (Mode::Insert | Mode::Command, Key::Char(c)) => e!(Insert(c)),
         (Mode::Insert | Mode::Command, Key::Backspace) => e!(Backspace),
         (Mode::Insert | Mode::Command, Key::Escape) => Ok(Action::SetMode(Mode::Normal)),
+        (Mode::Insert | Mode::Command, Key::ArrowUp) => m!(Up),
+        (Mode::Insert | Mode::Command, Key::ArrowDown) => m!(Down),
+        (Mode::Insert | Mode::Command, Key::ArrowLeft) => m!(Left),
+        (Mode::Insert | Mode::Command, Key::ArrowRight) => m!(Right),
 
         (Mode::Normal, Key::Char(c @ '1'..='9')) => {
           count += u32::from(c) - u32::from('0');
@@ -95,10 +104,10 @@ fn parse_move(key: Key, mut iter: impl Iterator<Item = Key>) -> Result<Move, Act
   use Move::*;
 
   Ok(match key {
-    Key::Char('h') => Left,
-    Key::Char('j') => Down,
-    Key::Char('k') => Up,
-    Key::Char('l') => Right,
+    Key::Char('h') | Key::ArrowLeft => Left,
+    Key::Char('j') | Key::ArrowDown => Down,
+    Key::Char('k') | Key::ArrowUp => Up,
+    Key::Char('l') | Key::ArrowRight => Right,
     Key::Char('w') => NextWord,
     Key::Char('e') => EndWord,
     Key::Char('b') => PrevWord,
