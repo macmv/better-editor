@@ -253,7 +253,15 @@ impl TextLayout {
         };
 
         let x = cluster.visual_offset().unwrap_or_default() as f64;
-        Rect::new(x, metrics.min_coord as f64, x + width, metrics.max_coord as f64)
+        Rect::new(
+          x,
+          match mode {
+            CursorMode::Underline => metrics.max_coord as f64 - 1.0,
+            _ => metrics.min_coord as f64,
+          },
+          x + width,
+          metrics.max_coord as f64,
+        )
       }
 
       [Some(cluster), _] => {
@@ -267,7 +275,10 @@ impl TextLayout {
 
         Rect::new(
           (cluster.visual_offset().unwrap_or_default() + cluster.advance()) as f64,
-          metrics.min_coord as f64,
+          match mode {
+            CursorMode::Underline => metrics.max_coord as f64 - 1.0,
+            _ => metrics.min_coord as f64,
+          },
           (cluster.visual_offset().unwrap_or_default() + cluster.advance() + 1.0) as f64,
           metrics.max_coord as f64,
         )
