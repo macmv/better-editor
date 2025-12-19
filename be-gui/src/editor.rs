@@ -1,32 +1,114 @@
 use be_editor::EditorState;
 use be_input::{Action, Key, Mode};
-use kurbo::{Point, Rect};
+use kurbo::{Axis, Point, Rect};
 
-use crate::{CursorMode, Render, theme::Theme};
+use crate::{CursorMode, Render, file_tree::FileTree, theme::Theme};
 
 pub struct Editor {
+  root: Pane,
+}
+
+enum Pane {
+  Content(Content),
+  Split(Split),
+}
+
+enum Content {
+  Editor(EditorView),
+  FileTree(FileTree),
+}
+
+struct EditorView {
   editor: EditorState,
 
   line_height: f64,
   scroll:      Point,
 }
 
+struct Split {
+  axis:   Axis,
+  active: Side,
+  left:   Box<Pane>,
+  right:  Box<Pane>,
+}
+
+enum Side {
+  Left,
+  Right,
+}
+
+impl Pane {
+  fn active(&self) -> &Content {
+    match self {
+      Pane::Content(content) => content,
+      Pane::Split(split) => match split.active {
+        Side::Left => split.left.active(),
+        Side::Right => split.right.active(),
+      },
+    }
+  }
+
+  fn active_mut(&mut self) -> &mut Content {
+    match self {
+      Pane::Content(content) => content,
+      Pane::Split(split) => match split.active {
+        Side::Left => split.left.active_mut(),
+        Side::Right => split.right.active_mut(),
+      },
+    }
+  }
+}
+
+impl Content {
+  fn draw(&self, render: &mut Render) {
+    match self {
+      Content::Editor(editor) => editor.draw(render),
+      Content::FileTree(_) => {}
+    }
+  }
+
+  fn mode(&self) -> Mode {
+    match self {
+      Content::Editor(editor) => editor.editor.mode(),
+      Content::FileTree(_) => Mode::Normal,
+    }
+  }
+
+  fn perform_action(&mut self, action: Action) {
+    match self {
+      Content::Editor(editor) => editor.editor.perform_action(action),
+      Content::FileTree(_) => {}
+    }
+  }
+}
+
 impl Editor {
   pub fn new() -> Self {
     Editor {
-      editor:      EditorState::from("hello\nworld\n"),
-      line_height: 20.0,
-      scroll:      Point::ZERO,
+      root: Pane::Split(Split {
+        axis:   Axis::Vertical,
+        active: Side::Right,
+        left:   Box::new(Pane::Content(Content::FileTree(FileTree::new()))),
+        right:  Box::new(Pane::Content(Content::Editor(EditorView {
+          editor:      EditorState::from("hello\nworld\n"),
+          line_height: 20.0,
+          scroll:      Point::ZERO,
+        }))),
+      }),
     }
   }
 
   pub fn on_key(&mut self, keys: &[Key]) -> Result<(), be_input::ActionError> {
-    let action = Action::from_input(self.editor.mode(), keys)?;
-    self.editor.perform_action(action);
+    let action = Action::from_input(self.root.active().mode(), keys)?;
+    self.root.active_mut().perform_action(action);
 
     Ok(())
   }
 
+  pub fn draw(&self, render: &mut Render) { self.root.active().draw(render) }
+}
+
+impl EditorView {
   pub fn draw(&self, render: &mut Render) {
     let theme = Theme::current();
 

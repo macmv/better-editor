@@ -7,6 +7,7 @@ pub use render::*;
 use crate::{editor::Editor, shell::Shell, theme::Theme};
 
 mod editor;
+mod file_tree;
 mod shell;
 mod theme;
 
