@@ -9,7 +9,10 @@ use std::{
 
 mod init;
 
+pub extern crate lsp_types as lsp;
+
 pub struct LspClient {
+  #[allow(dead_code)]
   child: Child,
 
   tx: Sender,
@@ -17,8 +20,7 @@ pub struct LspClient {
 }
 
 struct Sender {
-  messages: Vec<String>,
-  writer:   ChildStdin,
+  writer: ChildStdin,
 }
 
 struct Receiver {
@@ -27,7 +29,7 @@ struct Receiver {
 }
 
 impl LspClient {
-  pub fn spawn(cmd: &str) -> LspClient {
+  pub fn spawn(cmd: &str) -> (LspClient, lsp_types::ServerCapabilities) {
     let mut child =
       std::process::Command::new(cmd).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
 
@@ -56,11 +58,11 @@ impl LspClient {
       _ => panic!(),
     };
 
-    let _result: lsp_types::InitializeResult = serde_json::from_str(&result.get()).unwrap();
+    let result: lsp_types::InitializeResult = serde_json::from_str(&result.get()).unwrap();
 
     client.notify::<lsp_types::notification::Initialized>(lsp_types::InitializedParams {});
 
-    client
+    (client, result.capabilities)
   }
 
   fn send<T: lsp_types::request::Request>(&mut self, req: T::Params) {
@@ -97,15 +99,13 @@ impl LspClient {
 
     write!(self.tx.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content).unwrap();
   }
-
-  fn recv(&self) {}
 }
 
 impl Sender {
-  fn new(stdin: ChildStdin) -> Sender { Sender { messages: Vec::new(), writer: stdin } }
+  fn new(stdin: ChildStdin) -> Sender { Sender { writer: stdin } }
 }
 
-enum Message {
+pub enum Message {
   Request { id: u64, method: String, params: Option<Box<RawValue>> },
   Response { id: u64, result: Box<RawValue> },
   Error { id: u64, error: Box<RawValue> },
@@ -164,8 +164,6 @@ impl Receiver {
 
     self.read.drain(..prev);
     let msg = self.read.drain(..len as usize).collect::<Vec<u8>>();
-
-    println!("msg: {}", String::from_utf8_lossy(&msg));
 
     Some(serde_json::from_slice::<Message>(&msg).unwrap())
   }
@@ -313,7 +311,7 @@ mod tests {
 
   #[test]
   fn spawn_client() {
-    let mut client = LspClient::spawn("rust-analyzer");
+    let (mut client, _) = LspClient::spawn("rust-analyzer");
 
     while client.rx.recv().is_none() {}
   }
