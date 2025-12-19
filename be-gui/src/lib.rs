@@ -1,6 +1,6 @@
 mod render;
 
-use be_input::Key;
+use be_input::KeyStroke;
 use kurbo::{Axis, Cap, Line, Point, Rect, Stroke};
 pub use render::*;
 
@@ -12,7 +12,7 @@ mod shell;
 mod theme;
 
 struct State {
-  keys:   Vec<Key>,
+  keys:   Vec<KeyStroke>,
   active: usize,
   tabs:   Vec<Tab>,
 }
@@ -40,7 +40,7 @@ impl State {
     );
   }
 
-  fn on_key(&mut self, key: Key) {
+  fn on_key(&mut self, key: KeyStroke) {
     self.keys.push(key);
 
     match &mut self.tabs[self.active].content {

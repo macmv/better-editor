@@ -1,4 +1,4 @@
-use be_input::Key;
+use be_input::{Key, KeyStroke};
 use winit::{
   event::WindowEvent,
   event_loop::{self, ActiveEventLoop},
@@ -150,10 +150,10 @@ pub fn run(builder: AppBuilder) {
   event_loop.run_app(&mut app).unwrap();
 }
 
-fn parse_key(key: winit::keyboard::Key) -> Option<Key> {
+fn parse_key(key: winit::keyboard::Key) -> Option<KeyStroke> {
   use winit::keyboard::{Key as WKey, NamedKey::*};
 
-  match key {
+  let key = match key {
     WKey::Character(s) if s.len() == 1 => Some(Key::Char(s.chars().next()?)),
     WKey::Named(Escape) => Some(Key::Escape),
     WKey::Named(Tab) => None, // TODO
@@ -167,5 +167,7 @@ fn parse_key(key: winit::keyboard::Key) -> Option<Key> {
     WKey::Named(ArrowRight) => Some(Key::ArrowRight),
 
     _ => None,
-  }
+  };
+
+  key.map(|key| KeyStroke { key, control: false, alt: false })
 }

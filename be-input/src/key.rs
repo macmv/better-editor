@@ -10,3 +10,10 @@ pub enum Key {
   ArrowLeft,
   ArrowRight,
 }
+
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+pub struct KeyStroke {
+  pub key:     Key,
+  pub control: bool,
+  pub alt:     bool,
+}

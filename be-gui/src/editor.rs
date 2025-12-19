@@ -1,5 +1,5 @@
 use be_editor::EditorState;
-use be_input::{Action, Key, Mode};
+use be_input::{Action, KeyStroke, Mode};
 use kurbo::{Axis, Point, Rect};
 
 use crate::{CursorMode, Distance, Render, file_tree::FileTree, theme::Theme};
@@ -118,7 +118,7 @@ impl Editor {
     }
   }
 
-  pub fn on_key(&mut self, keys: &[Key]) -> Result<(), be_input::ActionError> {
+  pub fn on_key(&mut self, keys: &[KeyStroke]) -> Result<(), be_input::ActionError> {
     let action = Action::from_input(self.root.active().mode(), keys)?;
     self.root.active_mut().perform_action(action);
 

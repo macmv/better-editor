@@ -1,6 +1,6 @@
 use std::num::NonZero;
 
-use crate::{Mode, key::Key};
+use crate::{KeyStroke, Mode, key::Key};
 
 pub enum Action {
   SetMode(Mode),
@@ -42,7 +42,7 @@ pub enum ActionError {
 }
 
 impl Action {
-  pub fn from_input(mode: Mode, input: &[Key]) -> Result<Action, ActionError> {
+  pub fn from_input(mode: Mode, input: &[KeyStroke]) -> Result<Action, ActionError> {
     let mut count = 0;
 
     macro_rules! e {
@@ -59,7 +59,7 @@ impl Action {
     let mut iter = input.iter().copied();
 
     while let Some(key) = iter.next() {
-      return match (mode, key) {
+      return match (mode, key.key) {
         (Mode::Insert | Mode::Command, Key::Char(c)) => e!(Insert(c)),
         (Mode::Insert | Mode::Command, Key::Backspace) => e!(Backspace),
         (Mode::Insert | Mode::Command, Key::Escape) => Ok(Action::SetMode(Mode::Normal)),
@@ -75,7 +75,7 @@ impl Action {
         }
 
         // === edits ===
-        (Mode::Normal, Key::Char('r')) => match iter.next().ok_or(ActionError::Incomplete)? {
+        (Mode::Normal, Key::Char('r')) => match iter.next().ok_or(ActionError::Incomplete)?.key {
           Key::Char(c) => e!(Replace(c)),
           _ => Err(ActionError::Unrecognized),
         },
@@ -100,10 +100,13 @@ impl Action {
   }
 }
 
-fn parse_move(key: Key, mut iter: impl Iterator<Item = Key>) -> Result<Move, ActionError> {
+fn parse_move(
+  key: KeyStroke,
+  mut iter: impl Iterator<Item = KeyStroke>,
+) -> Result<Move, ActionError> {
   use Move::*;
 
-  Ok(match key {
+  Ok(match key.key {
     Key::Char('h') | Key::ArrowLeft => Left,
     Key::Char('j') | Key::ArrowDown => Down,
     Key::Char('k') | Key::ArrowUp => Up,
@@ -115,16 +118,16 @@ fn parse_move(key: Key, mut iter: impl Iterator<Item = Key>) -> Result<Move, Act
     Key::Char('^') => LineStartOfText,
     Key::Char('$') => LineEnd,
     Key::Char('%') => MatchingBracket,
-    Key::Char('g') => match iter.next().ok_or(ActionError::Incomplete)? {
+    Key::Char('g') => match iter.next().ok_or(ActionError::Incomplete)?.key {
       Key::Char('g') => FileStart,
       _ => return Err(ActionError::Unrecognized),
     },
     Key::Char('G') => FileEnd,
-    Key::Char('f') => match iter.next().ok_or(ActionError::Incomplete)? {
+    Key::Char('f') => match iter.next().ok_or(ActionError::Incomplete)?.key {
       Key::Char(c) => Forward(c),
       _ => return Err(ActionError::Unrecognized),
     },
-    Key::Char('F') => match iter.next().ok_or(ActionError::Incomplete)? {
+    Key::Char('F') => match iter.next().ok_or(ActionError::Incomplete)?.key {
       Key::Char(c) => Backward(c),
       _ => return Err(ActionError::Unrecognized),
     },
