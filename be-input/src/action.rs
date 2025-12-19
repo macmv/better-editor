@@ -56,7 +56,6 @@ impl Action {
     while let Some(key) = iter.next() {
       return match (mode, key) {
         (Mode::Insert | Mode::Command, Key::Char(c)) => e!(Insert(c)),
-        (Mode::Insert | Mode::Command, Key::Enter) => e!(Insert('\n')),
         (Mode::Insert | Mode::Command, Key::Backspace) => e!(Backspace),
         (Mode::Insert | Mode::Command, Key::Escape) => Ok(Action::SetMode(Mode::Normal)),
 
