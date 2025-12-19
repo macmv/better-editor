@@ -1,6 +1,8 @@
 use be_doc::{Column, Cursor, Document, Line};
 use be_input::{Action, Mode, Move};
 
+mod fs;
+
 pub struct EditorState {
   doc:    Document,
   cursor: Cursor,

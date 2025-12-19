@@ -1,4 +1,8 @@
-use std::{io, ops::Add, path::Path};
+use std::{
+  io::{self, BufWriter, Write},
+  ops::Add,
+  path::Path,
+};
 
 use crop::{Rope, RopeBuilder, RopeSlice};
 
@@ -81,6 +85,16 @@ impl Document {
     }
 
     Ok(Document { rope: builder.build() })
+  }
+
+  pub fn write(&self, writer: &mut impl std::io::Write) -> io::Result<()> {
+    let mut writer = BufWriter::new(writer);
+
+    for chunk in self.rope.chunks() {
+      writer.write_all(chunk.as_bytes())?;
+    }
+
+    Ok(())
   }
 
   pub fn read(path: &Path) -> io::Result<Document> {
