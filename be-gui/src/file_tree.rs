@@ -1,28 +1,56 @@
-use std::path::{Path, PathBuf};
+use std::{
+  borrow::Cow,
+  path::{Path, PathBuf},
+};
 
-use kurbo::Rect;
+use kurbo::{Point, Rect, Vec2};
 
 use crate::{Render, theme::Theme};
 
 pub struct FileTree {
-  root: PathBuf,
-
   tree: Directory,
 }
 
+#[derive(PartialOrd, PartialEq, Eq, Ord)]
 enum Item {
-  File(File),
   Directory(Directory),
+  File(File),
 }
 
+#[derive(Eq)]
 struct Directory {
-  name:     String,
+  path:     PathBuf,
   items:    Option<Vec<Item>>,
   expanded: bool,
 }
 
+#[derive(Eq)]
 struct File {
   name: String,
+}
+
+impl PartialEq for File {
+  fn eq(&self, other: &Self) -> bool { self.name == other.name }
+}
+
+impl PartialOrd for File {
+  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
+}
+
+impl Ord for File {
+  fn cmp(&self, other: &Self) -> std::cmp::Ordering { self.name.cmp(&other.name) }
+}
+
+impl PartialEq for Directory {
+  fn eq(&self, other: &Self) -> bool { self.name() == other.name() }
+}
+
+impl PartialOrd for Directory {
+  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
+}
+
+impl Ord for Directory {
+  fn cmp(&self, other: &Self) -> std::cmp::Ordering { self.name().cmp(&other.name()) }
 }
 
 impl FileTree {
@@ -30,19 +58,42 @@ impl FileTree {
 
   pub fn new(path: &Path) -> Self {
     let path = path.canonicalize().unwrap();
-    let tree = Directory::new(&path);
+    let mut tree = Directory::new(path);
+    tree.expand();
 
-    FileTree { root: path, tree }
+    FileTree { tree }
   }
 }
 
 impl Directory {
-  fn new(path: &Path) -> Directory {
-    Directory {
-      name:     path.file_name().unwrap().to_string_lossy().to_string(),
-      items:    None,
-      expanded: false,
+  fn new(path: PathBuf) -> Directory { Directory { path, items: None, expanded: false } }
+
+  fn name(&self) -> Cow<'_, str> { self.path.file_name().unwrap().to_string_lossy() }
+
+  fn expand(&mut self) {
+    self.expanded = true;
+    if self.items.is_none() {
+      self.populate();
     }
+  }
+
+  fn populate(&mut self) {
+    let mut items = vec![];
+
+    for entry in std::fs::read_dir(&self.path).unwrap() {
+      let entry = entry.unwrap();
+      let path = entry.path();
+      if path.is_dir() {
+        items.push(Item::Directory(Directory::new(path)));
+      } else {
+        items
+          .push(Item::File(File { name: path.file_name().unwrap().to_string_lossy().to_string() }));
+      }
+    }
+
+    items.sort_unstable();
+
+    self.items = Some(items);
   }
 }
 
@@ -55,17 +106,46 @@ impl FileTree {
       theme.background_lower,
     );
 
-    self.tree.draw(render);
+    self.tree.draw(Point::ZERO, render);
   }
 }
 
 impl Directory {
-  fn draw(&self, render: &mut Render) {
+  fn draw(&self, pos: Point, render: &mut Render) -> f64 {
     let theme = Theme::current();
 
-    render.fill(&Rect::new(0.0, 0.0, render.size().width, 20.0), theme.background_raised);
+    render
+      .fill(&Rect::new(pos.x, pos.y, render.size().width, pos.y + 20.0), theme.background_raised);
 
-    let text = render.layout_text(&self.name, (20.0, 0.0), theme.text);
+    let text = render.layout_text(&self.name(), pos + Vec2::new(20.0, 0.0), theme.text);
+    render.draw_text(&text);
+
+    if self.expanded
+      && let Some(items) = &self.items
+    {
+      let mut y = 20.0;
+      for item in items {
+        match item {
+          Item::File(file) => {
+            file.draw(pos + Vec2::new(20.0, y), render);
+            y += 20.0;
+          }
+          Item::Directory(dir) => {
+            y += dir.draw(pos + Vec2::new(20.0, y), render);
+          }
+        }
+      }
+      y
+    } else {
+      20.0
+    }
+  }
+}
+impl File {
+  fn draw(&self, pos: Point, render: &mut Render) {
+    let theme = Theme::current();
+
+    let text = render.layout_text(&self.name, pos + Vec2::new(20.0, 0.0), theme.text);
     render.draw_text(&text);
   }
 }
