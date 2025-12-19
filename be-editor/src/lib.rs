@@ -1,23 +1,37 @@
 use be_doc::{Column, Cursor, Document, Line};
 use be_input::{Action, Mode, Move};
 
+use crate::fs::OpenedFile;
+
 mod fs;
 
 pub struct EditorState {
   doc:    Document,
   cursor: Cursor,
   mode:   Mode,
+
+  file: Option<OpenedFile>,
 }
 
 impl From<&str> for EditorState {
   fn from(s: &str) -> EditorState {
-    EditorState { doc: Document::from(s), cursor: Cursor::START, mode: Mode::Normal }
+    EditorState {
+      doc:    Document::from(s),
+      cursor: Cursor::START,
+      mode:   Mode::Normal,
+      file:   None,
+    }
   }
 }
 
 impl EditorState {
   pub fn new() -> EditorState {
-    EditorState { doc: Document::new(), cursor: Cursor::START, mode: Mode::Normal }
+    EditorState {
+      doc:    Document::new(),
+      cursor: Cursor::START,
+      mode:   Mode::Normal,
+      file:   None,
+    }
   }
 
   pub fn doc(&self) -> &Document { &self.doc }
