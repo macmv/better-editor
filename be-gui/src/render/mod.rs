@@ -1,4 +1,4 @@
-use kurbo::{Affine, Point, Rect, Shape, Size, Stroke, Vec2};
+use kurbo::{Affine, Axis, Point, Rect, Shape, Size, Stroke, Vec2};
 use peniko::{
   Fill,
   color::{AlphaColor, Oklab, Oklch, Srgb},
@@ -161,6 +161,39 @@ impl App {
 impl<'a> Render<'a> {
   pub fn size(&self) -> Size {
     if let Some(top) = self.stack.last() { top.size() } else { self.size }
+  }
+
+  pub fn split(
+    &mut self,
+    axis: Axis,
+    mut distance: f64,
+    left: impl FnOnce(&mut Render),
+    right: impl FnOnce(&mut Render),
+  ) {
+    let mut left_bounds = Rect::from_origin_size(Point::ZERO, self.size());
+    let mut right_bounds = Rect::from_origin_size(Point::ZERO, self.size());
+
+    match axis {
+      Axis::Vertical => {
+        if distance < 0.0 {
+          distance += self.size().width;
+        }
+
+        left_bounds.x1 = distance;
+        right_bounds.x0 = distance;
+      }
+      Axis::Horizontal => {
+        if distance < 0.0 {
+          distance += self.size().height;
+        }
+
+        left_bounds.y1 = distance;
+        right_bounds.y0 = distance;
+      }
+    }
+
+    self.clipped(left_bounds, left);
+    self.clipped(right_bounds, right);
   }
 
   pub fn clipped(&mut self, mut rect: Rect, f: impl FnOnce(&mut Render)) {

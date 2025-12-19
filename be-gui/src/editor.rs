@@ -68,19 +68,15 @@ impl Pane {
 
 impl Split {
   fn draw(&self, render: &mut Render) {
-    let (left, right) = match self.axis {
-      Axis::Vertical => (
-        Rect::new(0.0, 0.0, render.size().width / 2.0, render.size().height),
-        Rect::new(render.size().width / 2.0, 0.0, render.size().width, render.size().height),
-      ),
-      Axis::Horizontal => (
-        Rect::new(0.0, 0.0, render.size().width, render.size().height / 2.0),
-        Rect::new(0.0, render.size().height / 2.0, render.size().width, render.size().height),
-      ),
-    };
-
-    render.clipped(left, |render| self.left.draw(render));
-    render.clipped(right, |render| self.right.draw(render));
+    render.split(
+      self.axis,
+      match self.axis {
+        Axis::Vertical => render.size().width / 2.0,
+        Axis::Horizontal => render.size().height / 2.0,
+      },
+      |render| self.left.draw(render),
+      |render| self.right.draw(render),
+    );
   }
 }
 

@@ -1,7 +1,7 @@
 mod render;
 
 use be_input::Key;
-use kurbo::{Cap, Line, Rect, Stroke};
+use kurbo::{Axis, Cap, Line, Rect, Stroke};
 pub use render::*;
 
 use crate::{editor::Editor, shell::Shell, theme::Theme};
@@ -29,15 +29,13 @@ enum TabContent {
 
 impl State {
   fn draw(&self, render: &mut Render) {
-    render.clipped(
-      Rect::new(0.0, 0.0, render.size().width, render.size().height - 20.0),
+    render.split(
+      Axis::Horizontal,
+      -20.0,
       |render| match &self.tabs[self.active].content {
         TabContent::Shell(shell) => shell.draw(render),
         TabContent::Editor(editor) => editor.draw(render),
       },
-    );
-    render.clipped(
-      Rect::new(0.0, render.size().height - 20.0, render.size().width, render.size().height),
       |render| self.draw_tabs(render),
     );
   }
