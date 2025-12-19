@@ -12,7 +12,13 @@ pub struct EditorState {
   mode:   Mode,
 
   file:    Option<OpenedFile>,
-  command: Option<String>,
+  command: Option<CommandState>,
+}
+
+#[derive(Default)]
+pub struct CommandState {
+  text:   String,
+  cursor: usize, // in graphemes
 }
 
 impl From<&str> for EditorState {
@@ -58,6 +64,12 @@ impl EditorState {
   pub fn set_mode(&mut self, m: Mode) {
     self.mode = m;
     self.move_to_col(self.cursor.column.clamp(self.max_column()));
+
+    if m == Mode::Command {
+      self.command = Some(CommandState::default());
+    } else {
+      self.command = None;
+    }
   }
 
   pub fn perform_action(&mut self, action: Action) {
@@ -69,6 +81,11 @@ impl EditorState {
   }
 
   fn perform_move(&mut self, m: be_input::Move) {
+    if let Some(command) = &mut self.command {
+      command.perform_move(m);
+      return;
+    }
+
     match m {
       Move::Left => self.move_col_rel(-1),
       Move::Right => self.move_col_rel(1),
@@ -85,6 +102,11 @@ impl EditorState {
     }
   }
   fn perform_edit(&mut self, e: Edit) {
+    if let Some(command) = &mut self.command {
+      command.perform_edit(e);
+      return;
+    }
+
     match e {
       Edit::Insert(c) => {
         let mut bytes = [0; 4];
@@ -94,6 +116,37 @@ impl EditorState {
       }
 
       _ => {}
+    }
+  }
+}
+
+impl CommandState {
+  fn perform_move(&mut self, m: Move) {
+    match m {
+      Move::Left => self.move_cursor(-1),
+      Move::Right => self.move_cursor(1),
+
+      _ => {}
+    }
+  }
+  fn perform_edit(&mut self, e: Edit) {
+    match e {
+      Edit::Insert(c) => self.text.insert(self.cursor, c),
+
+      _ => {}
+    }
+  }
+
+  fn move_cursor(&mut self, dist: i32) {
+    // TODO: Graphemes.
+    if dist >= 0 {
+      for c in self.text[self.cursor..].chars().take(dist as usize) {
+        self.cursor += c.len_utf8();
+      }
+    } else {
+      for c in self.text[..self.cursor].chars().rev().take(-dist as usize) {
+        self.cursor -= c.len_utf8();
+      }
     }
   }
 }
