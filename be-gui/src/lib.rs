@@ -70,7 +70,7 @@ impl State {
       }
 
       x += layout.bounds().width();
-      render.draw_text(layout);
+      render.draw_text(&layout);
 
       x += 5.0;
       render.stroke(

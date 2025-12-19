@@ -194,7 +194,7 @@ impl Render<'_> {
     TextLayout { origin: pos.into(), layout, scale: self.scale }
   }
 
-  pub fn draw_text(&mut self, text: TextLayout) {
+  pub fn draw_text(&mut self, text: &TextLayout) {
     let mut rect =
       Rect::new(0.0, 0.0, f64::from(text.layout.full_width()), f64::from(text.layout.height()));
 
@@ -233,6 +233,37 @@ impl Render<'_> {
 }
 
 impl TextLayout {
+  pub fn cursor(&self, index: usize) -> Rect {
+    let cursor = parley::Cursor::from_byte_index(&self.layout, index, parley::Affinity::Downstream);
+    let rect = match cursor.visual_clusters(&self.layout) {
+      [_, Some(cluster)] => {
+        let line = cluster.line();
+        let metrics = line.metrics();
+        Rect::new(
+          cluster.visual_offset().unwrap_or_default() as f64,
+          metrics.min_coord as f64,
+          (cluster.visual_offset().unwrap_or_default() + cluster.advance()) as f64,
+          metrics.max_coord as f64,
+        )
+      }
+
+      [Some(cluster), _] => {
+        let line = cluster.line();
+        let metrics = line.metrics();
+        Rect::new(
+          (cluster.visual_offset().unwrap_or_default() + cluster.advance()) as f64,
+          metrics.min_coord as f64,
+          (cluster.visual_offset().unwrap_or_default() + cluster.advance() * 2.0) as f64,
+          metrics.max_coord as f64,
+        )
+      }
+
+      _ => Rect::ZERO,
+    };
+
+    rect.scale_from_origin(1.0 / self.scale) + self.origin.to_vec2()
+  }
+
   pub fn bounds(&self) -> Rect {
     let rect =
       Rect::new(0.0, 0.0, f64::from(self.layout.full_width()), f64::from(self.layout.height()));

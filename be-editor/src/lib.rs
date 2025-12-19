@@ -18,7 +18,7 @@ pub struct EditorState {
 #[derive(Default)]
 pub struct CommandState {
   pub text:   String,
-  pub cursor: usize, // in graphemes
+  pub cursor: usize, // in bytes
 }
 
 impl From<&str> for EditorState {

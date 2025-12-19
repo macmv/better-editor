@@ -41,7 +41,7 @@ impl Editor {
       self.editor.doc().rope.line_slice(min_line as usize..max_line as usize).lines().enumerate()
     {
       let layout = render.layout_text(&line.to_string(), (20.0, y), oklch(1.0, 0.0, 0.0));
-      render.draw_text(layout);
+      render.draw_text(&layout);
 
       if self.editor.cursor().line == i + min_line {
         const CHAR_WIDTH: f64 = 8.0;
@@ -77,7 +77,11 @@ impl Editor {
         (20.0, render.size().height - 40.0),
         oklch(1.0, 0.0, 0.0),
       );
-      render.draw_text(layout);
+
+      render.draw_text(&layout);
+
+      let cursor = layout.cursor(command.cursor as usize);
+      render.fill(&cursor, oklch(1.0, 0.0, 0.0));
     }
   }
 }
