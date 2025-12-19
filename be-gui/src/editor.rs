@@ -26,10 +26,11 @@ struct EditorView {
 }
 
 struct Split {
-  axis:   Axis,
-  active: Side,
-  left:   Box<Pane>,
-  right:  Box<Pane>,
+  axis:    Axis,
+  percent: f64,
+  active:  Side,
+  left:    Box<Pane>,
+  right:   Box<Pane>,
 }
 
 enum Side {
@@ -70,7 +71,7 @@ impl Split {
   fn draw(&self, render: &mut Render) {
     render.split(
       self.axis,
-      Distance::Percent(0.5),
+      Distance::Percent(self.percent),
       |render| self.left.draw(render),
       |render| self.right.draw(render),
     );
@@ -104,10 +105,11 @@ impl Editor {
   pub fn new() -> Self {
     Editor {
       root: Pane::Split(Split {
-        axis:   Axis::Vertical,
-        active: Side::Right,
-        left:   Box::new(Pane::Content(Content::FileTree(FileTree::new()))),
-        right:  Box::new(Pane::Content(Content::Editor(EditorView {
+        axis:    Axis::Vertical,
+        percent: 0.2,
+        active:  Side::Right,
+        left:    Box::new(Pane::Content(Content::FileTree(FileTree::new()))),
+        right:   Box::new(Pane::Content(Content::Editor(EditorView {
           editor:      EditorState::from("hello\nworld\n"),
           line_height: 20.0,
           scroll:      Point::ZERO,
