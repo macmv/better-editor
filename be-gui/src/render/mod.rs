@@ -239,6 +239,10 @@ pub enum CursorMode {
   Underline,
 }
 
+// NB: This is in pixels, not scaled. This is intentional, as we always want the
+// cursor to appear crisp.
+const CURSOR_WIDTH: f64 = 2.0;
+
 impl TextLayout {
   pub fn cursor(&self, index: usize, mode: CursorMode) -> Rect {
     let cursor = parley::Cursor::from_byte_index(&self.layout, index, parley::Affinity::Downstream);
@@ -248,7 +252,7 @@ impl TextLayout {
         let metrics = line.metrics();
 
         let width = match mode {
-          CursorMode::Line => 1.0, // NB: 1 pixel, not scaled.
+          CursorMode::Line => CURSOR_WIDTH,
           CursorMode::Block | CursorMode::Underline => cluster.advance() as f64,
         };
 
@@ -256,7 +260,7 @@ impl TextLayout {
         Rect::new(
           x,
           match mode {
-            CursorMode::Underline => metrics.max_coord as f64 - 1.0,
+            CursorMode::Underline => metrics.max_coord as f64 - CURSOR_WIDTH,
             _ => metrics.min_coord as f64,
           },
           x + width,
@@ -273,13 +277,14 @@ impl TextLayout {
           CursorMode::Block | CursorMode::Underline => return Rect::ZERO,
         };
 
+        let x = cluster.visual_offset().unwrap_or_default() as f64 + cluster.advance() as f64;
         Rect::new(
-          (cluster.visual_offset().unwrap_or_default() + cluster.advance()) as f64,
+          x,
           match mode {
-            CursorMode::Underline => metrics.max_coord as f64 - 1.0,
+            CursorMode::Underline => metrics.max_coord as f64 - CURSOR_WIDTH,
             _ => metrics.min_coord as f64,
           },
-          (cluster.visual_offset().unwrap_or_default() + cluster.advance() + 1.0) as f64,
+          x + CURSOR_WIDTH,
           metrics.max_coord as f64,
         )
       }
