@@ -41,19 +41,35 @@ impl LspClient {
 
     client.send::<lsp_types::request::Initialize>(init);
 
+    let msg = loop {
+      match client.rx.recv() {
+        Some(msg) => break msg,
+        None => {}
+      }
+    };
+
+    let result = match msg {
+      Message::Response { result, .. } => result,
+      _ => panic!(),
+    };
+
+    let _result: lsp_types::InitializeResult = serde_json::from_str(&result.get()).unwrap();
+
+    client.notify::<lsp_types::notification::Initialized>(lsp_types::InitializedParams {});
+
     client
   }
 
   fn send<T: lsp_types::request::Request>(&mut self, req: T::Params) {
     #[derive(serde::Serialize)]
-    struct Message<P> {
+    struct Request<P> {
       jsonrpc: &'static str,
       id:      u64,
       method:  &'static str,
       params:  P,
     }
 
-    let content = serde_json::to_string(&Message {
+    let content = serde_json::to_string(&Request {
       jsonrpc: "2.0",
       id:      1,
       method:  T::METHOD,
@@ -63,16 +79,41 @@ impl LspClient {
 
     write!(self.tx.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content).unwrap();
   }
+
+  fn notify<T: lsp_types::notification::Notification>(&mut self, req: T::Params) {
+    #[derive(serde::Serialize)]
+    struct Notification<P> {
+      jsonrpc: &'static str,
+      method:  &'static str,
+      params:  P,
+    }
+
+    let content =
+      serde_json::to_string(&Notification { jsonrpc: "2.0", method: T::METHOD, params: req })
+        .unwrap();
+
+    write!(self.tx.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content).unwrap();
+  }
+
+  fn recv(&self) {}
 }
 
 impl Sender {
   fn new(stdin: ChildStdin) -> Sender { Sender { messages: Vec::new(), writer: stdin } }
 }
 
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum Message {
+  Request { id: u64, method: String, params: Box<serde_json::value::RawValue> },
+  Response { id: u64, result: Box<serde_json::value::RawValue> },
+  Notification { method: String, params: Box<serde_json::value::RawValue> },
+}
+
 impl Receiver {
   fn new(stdout: ChildStdout) -> Receiver { Receiver { reader: stdout, read: VecDeque::new() } }
 
-  fn recv(&mut self) -> Option<String> {
+  fn recv(&mut self) -> Option<Message> {
     if let Some(msg) = self.decode() {
       return Some(msg);
     }
@@ -84,7 +125,7 @@ impl Receiver {
     self.decode()
   }
 
-  fn decode(&mut self) -> Option<String> {
+  fn decode(&mut self) -> Option<Message> {
     let mut iter = self.read.iter();
     let mut prev = 0;
     let mut len = None;
@@ -122,19 +163,9 @@ impl Receiver {
     self.read.drain(..prev);
     let msg = self.read.drain(..len as usize).collect::<Vec<u8>>();
 
-    #[derive(serde::Deserialize)]
-    struct Message<'a> {
-      id:     u64,
-      #[serde(borrow)]
-      result: &'a serde_json::value::RawValue,
-    }
+    println!("msg: {}", String::from_utf8_lossy(&msg));
 
-    let msg = serde_json::from_slice::<Message>(&msg).unwrap();
-
-    dbg!(msg.id);
-    dbg!(msg.result);
-
-    Some(msg.result.to_string())
+    Some(serde_json::from_slice::<Message>(&msg).unwrap())
   }
 }
 
