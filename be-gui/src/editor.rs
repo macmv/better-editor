@@ -2,7 +2,7 @@ use be_editor::EditorState;
 use be_input::{Action, Key, Mode};
 use kurbo::{Axis, Point, Rect};
 
-use crate::{CursorMode, Render, file_tree::FileTree, theme::Theme};
+use crate::{CursorMode, Distance, Render, file_tree::FileTree, theme::Theme};
 
 pub struct Editor {
   root: Pane,
@@ -70,10 +70,7 @@ impl Split {
   fn draw(&self, render: &mut Render) {
     render.split(
       self.axis,
-      match self.axis {
-        Axis::Vertical => render.size().width / 2.0,
-        Axis::Horizontal => render.size().height / 2.0,
-      },
+      Distance::Percent(0.5),
       |render| self.left.draw(render),
       |render| self.right.draw(render),
     );

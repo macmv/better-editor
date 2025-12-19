@@ -31,7 +31,7 @@ impl State {
   fn draw(&self, render: &mut Render) {
     render.split(
       Axis::Horizontal,
-      -20.0,
+      Distance::Pixels(-20.0),
       |render| match &self.tabs[self.active].content {
         TabContent::Shell(shell) => shell.draw(render),
         TabContent::Editor(editor) => editor.draw(render),

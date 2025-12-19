@@ -158,6 +158,20 @@ impl App {
   }
 }
 
+pub enum Distance {
+  Pixels(f64),
+  Percent(f64),
+}
+
+impl Distance {
+  pub fn to_pixels_in(self, size: f64) -> f64 {
+    match self {
+      Distance::Pixels(pixels) => pixels,
+      Distance::Percent(percent) => size * percent,
+    }
+  }
+}
+
 impl<'a> Render<'a> {
   pub fn size(&self) -> Size {
     if let Some(top) = self.stack.last() { top.size() } else { self.size }
@@ -166,7 +180,7 @@ impl<'a> Render<'a> {
   pub fn split(
     &mut self,
     axis: Axis,
-    mut distance: f64,
+    mut distance: Distance,
     left: impl FnOnce(&mut Render),
     right: impl FnOnce(&mut Render),
   ) {
@@ -175,6 +189,7 @@ impl<'a> Render<'a> {
 
     match axis {
       Axis::Vertical => {
+        let mut distance = distance.to_pixels_in(self.size().width);
         if distance < 0.0 {
           distance += self.size().width;
         }
@@ -183,6 +198,7 @@ impl<'a> Render<'a> {
         right_bounds.x0 = distance;
       }
       Axis::Horizontal => {
+        let mut distance = distance.to_pixels_in(self.size().width);
         if distance < 0.0 {
           distance += self.size().height;
         }
