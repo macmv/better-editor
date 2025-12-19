@@ -2,7 +2,7 @@ use be_editor::EditorState;
 use be_input::{Action, Key, Mode};
 use kurbo::{Point, Rect};
 
-use crate::{CursorMode, Render, oklch};
+use crate::{CursorMode, Render, theme::Theme};
 
 pub struct Editor {
   editor: EditorState,
@@ -28,8 +28,9 @@ impl Editor {
   }
 
   pub fn draw(&self, render: &mut Render) {
-    render
-      .fill(&Rect::new(0.0, 0.0, render.size().width, render.size().height), oklch(0.3, 0.0, 0.0));
+    let theme = Theme::current();
+
+    render.fill(&Rect::new(0.0, 0.0, render.size().width, render.size().height), theme.background);
 
     let min_line = ((self.scroll.y / self.line_height).floor() as usize)
       .clamp(0, self.editor.doc().rope.lines().len());
@@ -40,7 +41,7 @@ impl Editor {
     for (i, line) in
       self.editor.doc().rope.line_slice(min_line as usize..max_line as usize).lines().enumerate()
     {
-      let layout = render.layout_text(&line.to_string(), (20.0, y), oklch(1.0, 0.0, 0.0));
+      let layout = render.layout_text(&line.to_string(), (20.0, y), theme.text);
       render.draw_text(&layout);
 
       if self.editor.cursor().line == i + min_line {
@@ -53,7 +54,7 @@ impl Editor {
 
         if let Some(mode) = mode {
           let cursor = layout.cursor(self.editor.cursor_column_byte(), mode);
-          render.fill(&cursor, oklch(1.0, 0.0, 0.0));
+          render.fill(&cursor, theme.text);
         }
       }
 
@@ -68,19 +69,16 @@ impl Editor {
           render.size().width,
           render.size().height - 20.0,
         ),
-        oklch(0.4, 0.0, 0.0),
+        theme.background_raised,
       );
 
-      let layout = render.layout_text(
-        &command.text,
-        (20.0, render.size().height - 40.0),
-        oklch(1.0, 0.0, 0.0),
-      );
+      let layout =
+        render.layout_text(&command.text, (20.0, render.size().height - 40.0), theme.text);
 
       render.draw_text(&layout);
 
       let cursor = layout.cursor(command.cursor as usize, CursorMode::Line);
-      render.fill(&cursor, oklch(1.0, 0.0, 0.0));
+      render.fill(&cursor, theme.text);
     }
   }
 }

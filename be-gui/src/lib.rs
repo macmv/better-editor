@@ -4,10 +4,11 @@ use be_input::Key;
 use kurbo::{Cap, Line, Rect, Stroke};
 pub use render::*;
 
-use crate::{editor::Editor, shell::Shell};
+use crate::{editor::Editor, shell::Shell, theme::Theme};
 
 mod editor;
 mod shell;
+mod theme;
 
 struct State {
   keys:   Vec<Key>,
@@ -47,15 +48,16 @@ impl State {
   }
 
   fn draw_tabs(&self, render: &mut Render) {
+    let theme = Theme::current();
+
     render.fill(
       &Rect::new(0.0, render.size().height - 20.0, render.size().width, render.size().height),
-      oklch(0.3, 0.0, 0.0),
+      theme.background_lower,
     );
 
     let mut x = 10.0;
     for (i, tab) in self.tabs.iter().enumerate() {
-      let layout =
-        render.layout_text(&tab.title, (x, render.size().height - 20.0), oklch(1.0, 0.0, 0.0));
+      let layout = render.layout_text(&tab.title, (x, render.size().height - 20.0), theme.text);
 
       if i == self.active {
         render.fill(
@@ -65,7 +67,7 @@ impl State {
             layout.bounds().x1 + 5.0,
             render.size().height,
           ),
-          oklch(0.5, 0.0, 0.0),
+          theme.background,
         );
       }
 
@@ -75,7 +77,7 @@ impl State {
       x += 5.0;
       render.stroke(
         &Line::new((x, render.size().height - 20.0), (x, render.size().height)),
-        oklch(1.0, 0.0, 0.0),
+        theme.text,
         Stroke::new(1.0).with_caps(Cap::Butt),
       );
       x += 6.0;
