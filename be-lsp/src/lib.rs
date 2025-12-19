@@ -1,8 +1,10 @@
 use std::{
   collections::VecDeque,
-  io::Read,
+  io::{Read, Write},
   process::{Child, ChildStdin, ChildStdout, Stdio},
 };
+
+mod init;
 
 pub struct LspClient {
   child: Child,
@@ -31,7 +33,36 @@ impl LspClient {
 
     let mut client = LspClient { child, tx: Sender::new(stdin), rx: Receiver::new(stdout) };
 
+    let init = lsp_types::InitializeParams {
+      process_id: Some(std::process::id()),
+      capabilities: init::client_capabilities(),
+      ..Default::default()
+    };
+
+    client.send::<lsp_types::request::Initialize>(init);
+
     client
+  }
+
+  fn send<T: lsp_types::request::Request>(&mut self, req: T::Params) {
+    #[derive(serde::Serialize)]
+    struct Message<P> {
+      jsonrpc: &'static str,
+      id:      u64,
+      method:  &'static str,
+      params:  P,
+    }
+
+    let content = serde_json::to_string(&Message {
+      jsonrpc: "2.0",
+      id:      1,
+      method:  T::METHOD,
+      params:  req,
+    })
+    .unwrap();
+
+    let message = format!("Content-Length: {}\r\n\r\n{}", content.len(), content);
+    self.tx.writer.write_all(message.as_bytes()).unwrap();
   }
 }
 
@@ -72,5 +103,6 @@ mod tests {
     let mut client = LspClient::spawn("rust-analyzer");
 
     dbg!(client.rx.recv());
+    panic!();
   }
 }
