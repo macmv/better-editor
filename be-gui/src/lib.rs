@@ -1,7 +1,7 @@
 mod render;
 
 use be_input::Key;
-use kurbo::{Axis, Cap, Line, Rect, Stroke};
+use kurbo::{Axis, Cap, Line, Point, Rect, Stroke};
 pub use render::*;
 
 use crate::{editor::Editor, shell::Shell, theme::Theme};
@@ -55,14 +55,11 @@ impl State {
   fn draw_tabs(&self, render: &mut Render) {
     let theme = Theme::current();
 
-    render.fill(
-      &Rect::new(0.0, render.size().height - 20.0, render.size().width, render.size().height),
-      theme.background_lower,
-    );
+    render.fill(&Rect::from_origin_size(Point::ZERO, render.size()), theme.background_lower);
 
     let mut x = 10.0;
     for (i, tab) in self.tabs.iter().enumerate() {
-      let layout = render.layout_text(&tab.title, (x, render.size().height - 20.0), theme.text);
+      let layout = render.layout_text(&tab.title, (x, 0.0), theme.text);
 
       if i == self.active {
         render.fill(
@@ -81,7 +78,7 @@ impl State {
 
       x += 5.0;
       render.stroke(
-        &Line::new((x, render.size().height - 20.0), (x, render.size().height)),
+        &Line::new((x, 0.0), (x, render.size().height)),
         theme.text,
         Stroke::new(1.0).with_caps(Cap::Butt),
       );
