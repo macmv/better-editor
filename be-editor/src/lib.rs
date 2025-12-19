@@ -1,5 +1,5 @@
 use be_doc::{Column, Cursor, Document, Line};
-use be_input::{Action, Mode, Move};
+use be_input::{Action, Edit, Mode, Move};
 
 use crate::fs::OpenedFile;
 
@@ -11,7 +11,8 @@ pub struct EditorState {
   cursor: Cursor,
   mode:   Mode,
 
-  file: Option<OpenedFile>,
+  file:    Option<OpenedFile>,
+  command: Option<String>,
 }
 
 impl From<&str> for EditorState {
@@ -83,7 +84,18 @@ impl EditorState {
       _ => {}
     }
   }
-  fn perform_edit(&mut self, _: be_input::Edit) {}
+  fn perform_edit(&mut self, e: Edit) {
+    match e {
+      Edit::Insert(c) => {
+        let mut bytes = [0; 4];
+        let s = c.encode_utf8(&mut bytes);
+        self.doc.insert(self.cursor, s);
+        self.move_col_rel(1);
+      }
+
+      _ => {}
+    }
+  }
 }
 
 #[cfg(test)]

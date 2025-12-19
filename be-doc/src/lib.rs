@@ -108,6 +108,18 @@ impl Document {
 
   pub fn line(&self, line: Line) -> RopeSlice<'_> { self.rope.line(line.0) }
   pub fn len_lines(&self) -> usize { self.rope.line_len() }
+
+  fn cursor_offset(&self, cursor: Cursor) -> usize {
+    let mut offset = self.rope.byte_of_line(cursor.line.0);
+    for g in self.rope.line(cursor.line.0).graphemes().take(cursor.column.0) {
+      offset += g.len();
+    }
+    offset
+  }
+
+  pub fn insert(&mut self, cursor: Cursor, s: &str) {
+    self.rope.insert(self.cursor_offset(cursor), s)
+  }
 }
 
 impl Column {
