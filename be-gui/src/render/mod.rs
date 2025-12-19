@@ -198,7 +198,7 @@ impl<'a> Render<'a> {
         right_bounds.x0 = distance;
       }
       Axis::Horizontal => {
-        let mut distance = distance.to_pixels_in(self.size().width);
+        let mut distance = distance.to_pixels_in(self.size().height);
         if distance < 0.0 {
           distance += self.size().height;
         }
