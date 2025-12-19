@@ -1,5 +1,6 @@
 use be_doc::{Column, Cursor, Document, Line};
 use be_input::{Action, Edit, Mode, Move};
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::fs::OpenedFile;
 
@@ -147,14 +148,13 @@ impl CommandState {
   }
 
   fn move_cursor(&mut self, dist: i32) {
-    // TODO: Graphemes.
     if dist >= 0 {
-      for c in self.text[self.cursor..].chars().take(dist as usize) {
-        self.cursor += c.len_utf8();
+      for c in self.text[self.cursor..].graphemes(true).take(dist as usize) {
+        self.cursor += c.len();
       }
     } else {
-      for c in self.text[..self.cursor].chars().rev().take(-dist as usize) {
-        self.cursor -= c.len_utf8();
+      for c in self.text[..self.cursor].graphemes(true).rev().take(-dist as usize) {
+        self.cursor -= c.len();
       }
     }
   }

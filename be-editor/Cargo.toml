@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 be-doc = { path = "../be-doc" }
 be-input = { path = "../be-input" }
+unicode-segmentation = "1.12.0"

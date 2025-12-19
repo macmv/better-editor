@@ -138,6 +138,7 @@ version = "0.1.0"
 dependencies = [
  "be-doc",
  "be-input",
+ "unicode-segmentation",
 ]
 
 [[package]]
