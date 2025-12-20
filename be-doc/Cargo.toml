@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 crop = { version = "0.4.3", features = ["graphemes"] }
+unicode-width = { version = "0.2.2", default-features = false }

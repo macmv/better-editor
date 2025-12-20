@@ -130,6 +130,7 @@ name = "be-doc"
 version = "0.1.0"
 dependencies = [
  "crop",
+ "unicode-width",
 ]
 
 [[package]]

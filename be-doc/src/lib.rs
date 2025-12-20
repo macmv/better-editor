@@ -1,6 +1,7 @@
 use std::ops::Add;
 
 use crop::{Rope, RopeSlice};
+use unicode_width::UnicodeWidthStr;
 
 mod fs;
 
@@ -56,6 +57,14 @@ impl Document {
     self.rope.line_slice(line.0..line.0 + 1)
   }
   pub fn len_lines(&self) -> usize { self.rope.line_len() }
+
+  pub fn visual_column(&self, cursor: Cursor) -> VisualColumn {
+    let mut offset = 0;
+    for g in self.rope.line(cursor.line.0).graphemes().take(cursor.column.0) {
+      offset += g.width();
+    }
+    VisualColumn(offset)
+  }
 
   fn cursor_offset(&self, cursor: Cursor) -> usize {
     let mut offset = self.rope.byte_of_line(cursor.line.0);
