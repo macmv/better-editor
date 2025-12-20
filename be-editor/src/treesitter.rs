@@ -48,37 +48,42 @@ fn install_grammar(ft: &FileType) -> Option<PathBuf> {
 
   let grammar_path = language_path.join("tree-sitter");
 
-  std::process::Command::new("git")
-    .arg("clone")
-    .arg("--depth=1")
-    .arg(repo)
-    .arg(&grammar_path)
-    .status()
-    .unwrap();
+  if !grammar_path.exists() {
+    std::process::Command::new("git")
+      .arg("clone")
+      .arg("--depth=1")
+      .arg(repo)
+      .arg(&grammar_path)
+      .status()
+      .unwrap();
+  }
 
-  std::process::Command::new("cc")
-    .args(["-Isrc", "-std=c11", "-fPIC", "-O3", "-c", "-o", "src/parser.o", "src/parser.c"])
-    .current_dir(&grammar_path)
-    .status()
-    .unwrap();
-  std::process::Command::new("cc")
-    .args(["-Isrc", "-std=c11", "-fPIC", "-O3", "-c", "-o", "src/scanner.o", "src/scanner.c"])
-    .current_dir(&grammar_path)
-    .status()
-    .unwrap();
-  std::process::Command::new("cc")
-    .args([
-      "-O3",
-      "-shared",
-      "-Wl,-soname,libtree-sitter.so",
-      "src/parser.o",
-      "src/scanner.o",
-      "-o",
-      "libtree-sitter.so",
-    ])
-    .current_dir(&grammar_path)
-    .status()
-    .unwrap();
+  let so_path = grammar_path.join("libtree-sitter.so");
+  if !so_path.exists() {
+    std::process::Command::new("cc")
+      .args(["-Isrc", "-std=c11", "-fPIC", "-O3", "-c", "-o", "src/parser.o", "src/parser.c"])
+      .current_dir(&grammar_path)
+      .status()
+      .unwrap();
+    std::process::Command::new("cc")
+      .args(["-Isrc", "-std=c11", "-fPIC", "-O3", "-c", "-o", "src/scanner.o", "src/scanner.c"])
+      .current_dir(&grammar_path)
+      .status()
+      .unwrap();
+    std::process::Command::new("cc")
+      .args([
+        "-O3",
+        "-shared",
+        "-Wl,-soname,libtree-sitter.so",
+        "src/parser.o",
+        "src/scanner.o",
+        "-o",
+        "libtree-sitter.so",
+      ])
+      .current_dir(&grammar_path)
+      .status()
+      .unwrap();
+  }
 
   Some(grammar_path)
 }
