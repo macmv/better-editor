@@ -270,7 +270,3 @@ pub enum CursorMode {
   Block,
   Underline,
 }
-
-// NB: This is in pixels, not scaled. This is intentional, as we always want the
-// cursor to appear crisp.
-const CURSOR_WIDTH: f64 = 2.0;
