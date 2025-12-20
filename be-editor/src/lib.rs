@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{ops::Range, path::Path};
 
 use be_doc::{Column, Cursor, Document, Line};
 use be_input::{Action, Edit, Mode, Move};
@@ -23,6 +23,11 @@ pub struct EditorState {
 
   filetype:   Option<filetype::FileType>,
   highligher: Option<treesitter::Highlighter>,
+}
+
+struct Change {
+  range: Range<usize>,
+  text:  String,
 }
 
 #[derive(Default)]
@@ -176,20 +181,22 @@ impl EditorState {
       Edit::Insert(c) => {
         let mut bytes = [0; 4];
         let s = c.encode_utf8(&mut bytes);
-        self.doc.insert(self.cursor, s);
+        self.change(Change::insert(self.doc.cursor_offset(self.cursor), s));
         self.move_graphemes(1);
       }
       Edit::Delete => {
-        self.doc.delete_graphemes(self.cursor, 1);
+        self.change(Change::remove(self.doc.grapheme_slice(self.cursor, 1)));
       }
       Edit::Backspace => {
         self.move_graphemes(-1);
-        self.doc.delete_graphemes(self.cursor, 1);
+        self.change(Change::remove(self.doc.grapheme_slice(self.cursor, 1)));
       }
 
       _ => {}
     }
   }
+
+  fn change(&mut self, change: Change) { self.doc.replace_range(change.range, &change.text); }
 
   fn run_command(&mut self) {
     let Some(command) = self.command.take() else { return };
@@ -220,6 +227,11 @@ impl EditorState {
     let line = self.doc.line(self.cursor.line);
     line.graphemes().take(self.cursor.column.0).map(|g| g.len()).sum()
   }
+}
+
+impl Change {
+  pub fn insert(at: usize, text: &str) -> Self { Change { range: at..at, text: text.to_string() } }
+  pub fn remove(range: Range<usize>) -> Self { Change { range, text: String::new() } }
 }
 
 impl CommandState {

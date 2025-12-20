@@ -1,4 +1,4 @@
-use std::ops::Add;
+use std::ops::{Add, Range};
 
 use crop::{Rope, RopeSlice};
 use unicode_width::UnicodeWidthStr;
@@ -81,7 +81,7 @@ impl Document {
     )
   }
 
-  fn cursor_offset(&self, cursor: Cursor) -> usize {
+  pub fn cursor_offset(&self, cursor: Cursor) -> usize {
     let mut offset = self.rope.byte_of_line(cursor.line.0);
     for g in self.rope.line(cursor.line.0).graphemes().take(cursor.column.0) {
       offset += g.len();
@@ -89,15 +89,15 @@ impl Document {
     offset
   }
 
-  pub fn insert(&mut self, cursor: Cursor, s: &str) {
-    self.rope.insert(self.cursor_offset(cursor), s)
-  }
-
-  pub fn delete_graphemes(&mut self, cursor: Cursor, len: usize) {
+  pub fn grapheme_slice(&self, cursor: Cursor, len: usize) -> Range<usize> {
     let offset = self.cursor_offset(cursor);
     let count =
       self.rope.byte_slice(offset..).graphemes().take(len).map(|g| g.len()).sum::<usize>();
-    self.rope.delete(offset..offset + count)
+    offset..offset + count
+  }
+
+  pub fn replace_range(&mut self, range: Range<usize>, text: &str) {
+    self.rope.replace(range, text);
   }
 }
 
@@ -130,14 +130,14 @@ mod tests {
   #[test]
   fn delete_graphemes() {
     let mut doc = Document::from("abc");
-    doc.delete_graphemes(Cursor::START, 2);
+    doc.replace_range(doc.grapheme_slice(Cursor::START, 2), "");
     assert_eq!(doc.rope, "c");
   }
 
   #[test]
   fn delete_graphemes_handles_emojis() {
     let mut doc = Document::from("💖a💖");
-    doc.delete_graphemes(Cursor::START, 2);
+    doc.replace_range(doc.grapheme_slice(Cursor::START, 2), "");
     assert_eq!(doc.rope, "💖");
   }
 }
