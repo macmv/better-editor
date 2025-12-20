@@ -7,6 +7,8 @@ mod blitter;
 mod text;
 mod window;
 
+pub use text::TextLayout;
+
 struct RenderStore {
   font:         parley::FontContext,
   layout:       parley::LayoutContext<peniko::Brush>,
@@ -33,12 +35,6 @@ struct App {
   texture_view: wgpu::TextureView,
 
   blitter: blitter::TextureBlitterConvert,
-}
-
-pub struct TextLayout {
-  origin: Point,
-  layout: parley::Layout<peniko::Brush>,
-  scale:  f64,
 }
 
 pub type Color = AlphaColor<Oklab>;
@@ -272,62 +268,3 @@ pub enum CursorMode {
 // NB: This is in pixels, not scaled. This is intentional, as we always want the
 // cursor to appear crisp.
 const CURSOR_WIDTH: f64 = 2.0;
-
-impl TextLayout {
-  pub fn cursor(&self, index: usize, mode: CursorMode) -> Rect {
-    let cursor = parley::Cursor::from_byte_index(&self.layout, index, parley::Affinity::Downstream);
-    let rect = match cursor.visual_clusters(&self.layout) {
-      [_, Some(cluster)] => {
-        let line = cluster.line();
-        let metrics = line.metrics();
-
-        let width = match mode {
-          CursorMode::Line => CURSOR_WIDTH,
-          CursorMode::Block | CursorMode::Underline => cluster.advance() as f64,
-        };
-
-        let x = cluster.visual_offset().unwrap_or_default() as f64;
-        Rect::new(
-          x,
-          match mode {
-            CursorMode::Underline => metrics.max_coord as f64 - CURSOR_WIDTH,
-            _ => metrics.min_coord as f64,
-          },
-          x + width,
-          metrics.max_coord as f64,
-        )
-      }
-
-      [Some(cluster), _] => {
-        let line = cluster.line();
-        let metrics = line.metrics();
-
-        match mode {
-          CursorMode::Line => {}
-          CursorMode::Block | CursorMode::Underline => return Rect::ZERO,
-        };
-
-        let x = cluster.visual_offset().unwrap_or_default() as f64 + cluster.advance() as f64;
-        Rect::new(
-          x,
-          match mode {
-            CursorMode::Underline => metrics.max_coord as f64 - CURSOR_WIDTH,
-            _ => metrics.min_coord as f64,
-          },
-          x + CURSOR_WIDTH,
-          metrics.max_coord as f64,
-        )
-      }
-
-      _ => Rect::ZERO,
-    };
-
-    rect.scale_from_origin(1.0 / self.scale) + self.origin.to_vec2()
-  }
-
-  pub fn bounds(&self) -> Rect {
-    let rect =
-      Rect::new(0.0, 0.0, f64::from(self.layout.full_width()), f64::from(self.layout.height()));
-    rect.scale_from_origin(1.0 / self.scale) + self.origin.to_vec2()
-  }
-}
