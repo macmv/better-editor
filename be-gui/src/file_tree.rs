@@ -8,7 +8,8 @@ use kurbo::{Point, Rect, Vec2};
 use crate::Render;
 
 pub struct FileTree {
-  tree: Directory,
+  tree:    Directory,
+  focused: bool,
 }
 
 #[derive(PartialOrd, PartialEq, Eq, Ord)]
@@ -56,12 +57,14 @@ impl Ord for Directory {
 impl FileTree {
   pub fn current_directory() -> Self { FileTree::new(Path::new(".")) }
 
+  pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
+
   pub fn new(path: &Path) -> Self {
     let path = path.canonicalize().unwrap();
     let mut tree = Directory::new(path);
     tree.expand();
 
-    FileTree { tree }
+    FileTree { tree, focused: false }
   }
 }
 

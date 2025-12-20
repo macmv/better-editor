@@ -21,7 +21,8 @@ enum Content {
 struct EditorView {
   editor: EditorState,
 
-  scroll: Point,
+  scroll:  Point,
+  focused: bool,
 }
 
 struct Split {
@@ -109,6 +110,17 @@ impl Split {
         _ => return false,
       }
 
+      match self.active {
+        Side::Left => {
+          self.left.active_mut().on_focus(true);
+          self.right.active_mut().on_focus(false);
+        }
+        Side::Right => {
+          self.right.active_mut().on_focus(true);
+          self.left.active_mut().on_focus(false);
+        }
+      }
+
       true
     } else {
       false
@@ -137,6 +149,13 @@ impl Content {
       Content::FileTree(_) => {}
     }
   }
+
+  fn on_focus(&mut self, focus: bool) {
+    match self {
+      Content::Editor(editor) => editor.on_focus(focus),
+      Content::FileTree(file_tree) => file_tree.on_focus(focus),
+    }
+  }
 }
 
 impl Editor {
@@ -148,8 +167,9 @@ impl Editor {
         active:  Side::Right,
         left:    Box::new(Pane::Content(Content::FileTree(FileTree::current_directory()))),
         right:   Box::new(Pane::Content(Content::Editor(EditorView {
-          editor: EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n"),
-          scroll: Point::ZERO,
+          editor:  EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n"),
+          scroll:  Point::ZERO,
+          focused: true,
         }))),
       }),
     }
@@ -198,6 +218,8 @@ enum Direction {
 }
 
 impl EditorView {
+  fn on_focus(&mut self, focus: bool) { self.focused = focus; }
+
   pub fn draw(&self, render: &mut Render) {
     render.fill(
       &Rect::new(0.0, 0.0, render.size().width, render.size().height),
@@ -218,7 +240,7 @@ impl EditorView {
       let layout = render.layout_text(&line.to_string(), (20.0, y), render.theme().text);
       render.draw_text(&layout);
 
-      if self.editor.cursor().line == i + min_line {
+      if self.focused && self.editor.cursor().line == i + min_line {
         let mode = match self.editor.mode() {
           Mode::Normal | Mode::Visual => Some(CursorMode::Block),
           Mode::Insert => Some(CursorMode::Line),
