@@ -5,7 +5,7 @@ use std::{
 
 use kurbo::{Point, Rect, Vec2};
 
-use crate::{Render, theme::Theme};
+use crate::Render;
 
 pub struct FileTree {
   tree: Directory,
@@ -99,11 +99,9 @@ impl Directory {
 
 impl FileTree {
   pub fn draw(&self, render: &mut Render) {
-    let theme = Theme::current();
-
     render.fill(
       &Rect::new(0.0, 0.0, render.size().width, render.size().height),
-      theme.background_lower,
+      render.theme().background_lower,
     );
 
     self.tree.draw(Point::ZERO, render);
@@ -112,13 +110,16 @@ impl FileTree {
 
 impl Directory {
   fn draw(&self, pos: Point, render: &mut Render) -> f64 {
-    let theme = Theme::current();
+    render.fill(
+      &Rect::new(pos.x, pos.y, render.size().width, pos.y + 20.0),
+      render.theme().background_raised,
+    );
 
-    render
-      .fill(&Rect::new(pos.x, pos.y, render.size().width, pos.y + 20.0), theme.background_raised);
-
-    let text =
-      render.layout_text(&format!(" {}", self.name()), pos + Vec2::new(20.0, 0.0), theme.text);
+    let text = render.layout_text(
+      &format!(" {}", self.name()),
+      pos + Vec2::new(20.0, 0.0),
+      render.theme().text,
+    );
     render.draw_text(&text);
 
     if self.expanded
@@ -144,9 +145,7 @@ impl Directory {
 }
 impl File {
   fn draw(&self, pos: Point, render: &mut Render) {
-    let theme = Theme::current();
-
-    let text = render.layout_text(&self.name, pos + Vec2::new(20.0, 0.0), theme.text);
+    let text = render.layout_text(&self.name, pos + Vec2::new(20.0, 0.0), render.theme().text);
     render.draw_text(&text);
   }
 }

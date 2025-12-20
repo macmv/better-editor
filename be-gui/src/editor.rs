@@ -2,7 +2,7 @@ use be_editor::EditorState;
 use be_input::{Action, Key, KeyStroke, Mode};
 use kurbo::{Axis, Point, Rect};
 
-use crate::{CursorMode, Distance, Render, file_tree::FileTree, theme::Theme};
+use crate::{CursorMode, Distance, Render, file_tree::FileTree};
 
 pub struct Editor {
   root: Pane,
@@ -199,9 +199,10 @@ enum Direction {
 
 impl EditorView {
   pub fn draw(&self, render: &mut Render) {
-    let theme = Theme::current();
-
-    render.fill(&Rect::new(0.0, 0.0, render.size().width, render.size().height), theme.background);
+    render.fill(
+      &Rect::new(0.0, 0.0, render.size().width, render.size().height),
+      render.theme().background,
+    );
 
     let line_height = render.font_metrics().line_height;
 
@@ -214,7 +215,7 @@ impl EditorView {
     for (i, line) in
       self.editor.doc().rope.line_slice(min_line as usize..max_line as usize).lines().enumerate()
     {
-      let layout = render.layout_text(&line.to_string(), (20.0, y), theme.text);
+      let layout = render.layout_text(&line.to_string(), (20.0, y), render.theme().text);
       render.draw_text(&layout);
 
       if self.editor.cursor().line == i + min_line {
@@ -227,7 +228,7 @@ impl EditorView {
 
         if let Some(mode) = mode {
           let cursor = layout.cursor(self.editor.cursor_column_byte(), mode);
-          render.fill(&cursor, theme.text);
+          render.fill(&cursor, render.theme().text);
         }
       }
 
@@ -242,16 +243,16 @@ impl EditorView {
           render.size().width,
           render.size().height - 20.0,
         ),
-        theme.background_raised,
+        render.theme().background_raised,
       );
 
       let layout =
-        render.layout_text(&command.text, (20.0, render.size().height - 40.0), theme.text);
+        render.layout_text(&command.text, (20.0, render.size().height - 40.0), render.theme().text);
 
       render.draw_text(&layout);
 
       let cursor = layout.cursor(command.cursor as usize, CursorMode::Line);
-      render.fill(&cursor, theme.text);
+      render.fill(&cursor, render.theme().text);
     }
   }
 }

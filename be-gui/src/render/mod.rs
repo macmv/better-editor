@@ -1,7 +1,7 @@
 use kurbo::{Affine, Axis, Point, Rect, Shape, Size, Stroke, Vec2};
 use peniko::color::{AlphaColor, Oklab, Oklch, Srgb};
 
-use crate::render::text::FontMetrics;
+use crate::{render::text::FontMetrics, theme::Theme};
 
 mod blitter;
 mod text;
@@ -14,6 +14,7 @@ struct RenderStore {
   layout:       parley::LayoutContext<peniko::Brush>,
   font_metrics: FontMetrics,
 
+  theme:  Theme,
   render: vello::Renderer,
 }
 
@@ -77,6 +78,7 @@ pub fn run() {
         layout:       parley::LayoutContext::new(),
         render:       vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),
         font_metrics: FontMetrics::default(),
+        theme:        Theme::default_theme(),
       },
 
       texture,
@@ -178,6 +180,8 @@ impl<'a> Render<'a> {
   pub fn size(&self) -> Size {
     if let Some(top) = self.stack.last() { top.size() } else { self.size }
   }
+
+  pub fn theme(&self) -> &Theme { &self.store.theme }
 
   pub fn font_metrics(&self) -> &FontMetrics { &self.store.font_metrics }
 
