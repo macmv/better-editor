@@ -179,6 +179,8 @@ impl<'a> Render<'a> {
     if let Some(top) = self.stack.last() { top.size() } else { self.size }
   }
 
+  pub fn font_metrics(&self) -> &FontMetrics { &self.store.font_metrics }
+
   pub fn split(
     &mut self,
     axis: Axis,

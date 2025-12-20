@@ -18,8 +18,8 @@ use crate::{Color, CursorMode, Render, encode_color, render::RenderStore};
 
 #[derive(Clone, Default)]
 pub struct FontMetrics {
-  line_height:     f64,
-  character_width: f64,
+  pub line_height:     f64,
+  pub character_width: f64,
 }
 
 pub struct TextLayout {

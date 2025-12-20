@@ -21,8 +21,7 @@ enum Content {
 struct EditorView {
   editor: EditorState,
 
-  line_height: f64,
-  scroll:      Point,
+  scroll: Point,
 }
 
 struct Split {
@@ -110,9 +109,8 @@ impl Editor {
         active:  Side::Right,
         left:    Box::new(Pane::Content(Content::FileTree(FileTree::current_directory()))),
         right:   Box::new(Pane::Content(Content::Editor(EditorView {
-          editor:      EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n"),
-          line_height: 20.0,
-          scroll:      Point::ZERO,
+          editor: EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n"),
+          scroll: Point::ZERO,
         }))),
       }),
     }
@@ -134,9 +132,11 @@ impl EditorView {
 
     render.fill(&Rect::new(0.0, 0.0, render.size().width, render.size().height), theme.background);
 
-    let min_line = ((self.scroll.y / self.line_height).floor() as usize)
+    let line_height = render.font_metrics().line_height;
+
+    let min_line = ((self.scroll.y / line_height).floor() as usize)
       .clamp(0, self.editor.doc().rope.lines().len());
-    let max_line = (((self.scroll.y + render.size().height) / self.line_height).ceil() as usize)
+    let max_line = (((self.scroll.y + render.size().height) / line_height).ceil() as usize)
       .clamp(0, self.editor.doc().rope.lines().len());
 
     let mut y = 0.0;
@@ -160,7 +160,7 @@ impl EditorView {
         }
       }
 
-      y += self.line_height;
+      y += line_height;
     }
 
     if let Some(command) = self.editor.command() {
