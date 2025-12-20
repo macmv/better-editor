@@ -1,4 +1,6 @@
-use std::path::PathBuf;
+use std::{ffi::CString, path::PathBuf};
+
+use tree_sitter::Language;
 
 use crate::filetype::FileType;
 
@@ -47,6 +49,24 @@ pub fn load_grammar(ft: &FileType) {
       .current_dir(&grammar_path)
       .status()
       .unwrap();
+
+    let so_path = grammar_path.join("libtree-sitter.so");
+
+    let language = unsafe {
+      let so_path_c = CString::new(so_path.to_str().unwrap()).unwrap();
+      let object = libc::dlopen(so_path_c.as_ptr(), libc::RTLD_LAZY | libc::RTLD_LOCAL);
+      if object.is_null() {
+        panic!("Failed to load grammar");
+      }
+      let language = libc::dlsym(object, c"tree_sitter_rust".as_ptr());
+      if language.is_null() {
+        panic!("Failed to load grammar");
+      }
+
+      Language::new(std::mem::transmute(language))
+    };
+
+    dbg!(&language);
   }
 }
 
