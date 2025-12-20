@@ -17,3 +17,12 @@ pub struct KeyStroke {
   pub control: bool,
   pub alt:     bool,
 }
+
+impl PartialEq<char> for Key {
+  fn eq(&self, other: &char) -> bool {
+    match self {
+      Key::Char(c) => c == other,
+      _ => false,
+    }
+  }
+}

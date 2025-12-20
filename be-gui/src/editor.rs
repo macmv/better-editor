@@ -1,5 +1,5 @@
 use be_editor::EditorState;
-use be_input::{Action, KeyStroke, Mode};
+use be_input::{Action, Key, KeyStroke, Mode};
 use kurbo::{Axis, Point, Rect};
 
 use crate::{CursorMode, Distance, Render, file_tree::FileTree, theme::Theme};
@@ -32,6 +32,7 @@ struct Split {
   right:   Box<Pane>,
 }
 
+#[derive(Copy, Clone)]
 enum Side {
   Left,
   Right,
@@ -48,20 +49,21 @@ impl Pane {
   fn active(&self) -> &Content {
     match self {
       Pane::Content(content) => content,
-      Pane::Split(split) => match split.active {
-        Side::Left => split.left.active(),
-        Side::Right => split.right.active(),
-      },
+      Pane::Split(split) => split.active(),
     }
   }
 
   fn active_mut(&mut self) -> &mut Content {
     match self {
       Pane::Content(content) => content,
-      Pane::Split(split) => match split.active {
-        Side::Left => split.left.active_mut(),
-        Side::Right => split.right.active_mut(),
-      },
+      Pane::Split(split) => split.active_mut(),
+    }
+  }
+
+  fn focus(&mut self, direction: Direction) -> bool {
+    match self {
+      Pane::Content(_) => false,
+      Pane::Split(split) => split.focus(direction),
     }
   }
 }
@@ -74,6 +76,43 @@ impl Split {
       |render| self.left.draw(render),
       |render| self.right.draw(render),
     );
+  }
+
+  fn active(&self) -> &Content {
+    match self.active {
+      Side::Left => self.left.active(),
+      Side::Right => self.right.active(),
+    }
+  }
+
+  fn active_mut(&mut self) -> &mut Content {
+    match self.active {
+      Side::Left => self.left.active_mut(),
+      Side::Right => self.right.active_mut(),
+    }
+  }
+
+  /// Returns true if the focus changed.
+  fn focus(&mut self, direction: Direction) -> bool {
+    let focused = match self.active {
+      Side::Left => &mut self.left,
+      Side::Right => &mut self.right,
+    };
+
+    if !focused.focus(direction) {
+      match (self.active, self.axis, direction) {
+        (Side::Left, Axis::Vertical, Direction::Right) => self.active = Side::Right,
+        (Side::Right, Axis::Vertical, Direction::Left) => self.active = Side::Left,
+        (Side::Left, Axis::Horizontal, Direction::Down) => self.active = Side::Right,
+        (Side::Right, Axis::Horizontal, Direction::Up) => self.active = Side::Left,
+
+        _ => return false,
+      }
+
+      true
+    } else {
+      false
+    }
   }
 }
 
@@ -117,6 +156,30 @@ impl Editor {
   }
 
   pub fn on_key(&mut self, keys: &[KeyStroke]) -> Result<(), be_input::ActionError> {
+    if keys.get(0).is_some_and(|k| k.control && k.key == 'w') {
+      if keys.len() == 1 {
+        return Err(be_input::ActionError::Incomplete);
+      }
+
+      match keys[1].key {
+        Key::Char('h') => {
+          self.root.focus(Direction::Left);
+        }
+        Key::Char('j') => {
+          self.root.focus(Direction::Down);
+        }
+        Key::Char('k') => {
+          self.root.focus(Direction::Up);
+        }
+        Key::Char('l') => {
+          self.root.focus(Direction::Right);
+        }
+        _ => {}
+      }
+
+      return Ok(());
+    }
+
     let action = Action::from_input(self.root.active().mode(), keys)?;
     self.root.active_mut().perform_action(action);
 
@@ -124,6 +187,14 @@ impl Editor {
   }
 
   pub fn draw(&self, render: &mut Render) { self.root.draw(render); }
+}
+
+#[derive(Copy, Clone)]
+enum Direction {
+  Up,
+  Down,
+  Left,
+  Right,
 }
 
 impl EditorView {
