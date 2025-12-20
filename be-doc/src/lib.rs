@@ -14,7 +14,7 @@ pub struct Document {
 pub struct Cursor {
   pub line:          Line,
   pub column:        Column,
-  pub target_column: Column,
+  pub target_column: VisualColumn,
 }
 
 /// A logical line, ie, lines from the start of the file.
@@ -35,7 +35,7 @@ impl From<&str> for Document {
 
 impl Cursor {
   pub const START: Cursor =
-    Cursor { line: Line(0), column: Column(0), target_column: Column(0) };
+    Cursor { line: Line(0), column: Column(0), target_column: VisualColumn(0) };
 }
 
 impl Default for Cursor {
@@ -64,6 +64,21 @@ impl Document {
       offset += g.width();
     }
     VisualColumn(offset)
+  }
+
+  pub fn column_from_visual(&self, line: Line, visual_column: VisualColumn) -> Column {
+    let mut offset = 0;
+    Column(
+      self
+        .rope
+        .line(line.0)
+        .graphemes()
+        .take_while(|g| {
+          offset += g.width();
+          offset <= visual_column.0
+        })
+        .count(),
+    )
   }
 
   fn cursor_offset(&self, cursor: Cursor) -> usize {

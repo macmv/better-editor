@@ -73,11 +73,14 @@ impl EditorState {
 
   fn move_to_line(&mut self, line: Line) {
     self.cursor.line = line.clamp(self.max_line());
-    self.cursor.column = self.cursor.target_column.clamp(self.max_column());
+    self.cursor.column = self
+      .doc
+      .column_from_visual(self.cursor.line, self.cursor.target_column)
+      .clamp(self.max_column());
   }
   fn move_to_col(&mut self, col: Column) {
     self.cursor.column = col.clamp(self.max_column());
-    self.cursor.target_column = self.cursor.column;
+    self.cursor.target_column = self.doc.visual_column(self.cursor);
   }
 
   fn max_line(&self) -> Line { Line(self.doc.len_lines().saturating_sub(1)) }
