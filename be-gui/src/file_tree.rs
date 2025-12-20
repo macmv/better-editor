@@ -10,6 +10,7 @@ use crate::Render;
 pub struct FileTree {
   tree:    Directory,
   focused: bool,
+  active:  usize,
 }
 
 #[derive(PartialOrd, PartialEq, Eq, Ord)]
@@ -64,7 +65,7 @@ impl FileTree {
     let mut tree = Directory::new(path);
     tree.expand();
 
-    FileTree { tree, focused: false }
+    FileTree { tree, focused: false, active: 0 }
   }
 }
 
@@ -107,23 +108,28 @@ impl FileTree {
       render.theme().background_lower,
     );
 
-    TreeDraw { line: 0, indent: 0 }.draw_directory(&self.tree, render);
+    TreeDraw { line: 0, indent: 0, active: if self.focused { Some(self.active) } else { None } }
+      .draw_directory(&self.tree, render);
   }
 }
 
 struct TreeDraw {
-  line:   u32,
-  indent: u32,
+  line:   usize,
+  indent: usize,
+
+  active: Option<usize>,
 }
 
 impl TreeDraw {
   fn pos(&self) -> Point { Point::new(self.indent as f64 * 20.0, self.line as f64 * 20.0) }
 
   fn draw_directory(&mut self, dir: &Directory, render: &mut Render) {
-    render.fill(
-      &Rect::new(self.pos().x, self.pos().y, render.size().width, self.pos().y + 20.0),
-      render.theme().background_raised,
-    );
+    if self.active == Some(self.line) {
+      render.fill(
+        &Rect::new(0.0, self.pos().y, render.size().width, self.pos().y + 20.0),
+        render.theme().background_raised,
+      );
+    }
 
     let text = render.layout_text(
       &format!(" {}", dir.name()),
@@ -148,6 +154,13 @@ impl TreeDraw {
   }
 
   fn draw_file(&self, file: &File, render: &mut Render) {
+    if self.active == Some(self.line) {
+      render.fill(
+        &Rect::new(0.0, self.pos().y, render.size().width, self.pos().y + 20.0),
+        render.theme().background_raised,
+      );
+    }
+
     let text =
       render.layout_text(&file.name, self.pos() + Vec2::new(20.0, 0.0), render.theme().text);
     render.draw_text(&text);
