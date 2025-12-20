@@ -92,6 +92,13 @@ impl Document {
   pub fn insert(&mut self, cursor: Cursor, s: &str) {
     self.rope.insert(self.cursor_offset(cursor), s)
   }
+
+  pub fn delete_graphemes(&mut self, cursor: Cursor, len: usize) {
+    let offset = self.cursor_offset(cursor);
+    let count =
+      self.rope.byte_slice(offset..).graphemes().take(len).map(|g| g.len()).sum::<usize>();
+    self.rope.delete(offset..offset + count)
+  }
 }
 
 impl Column {
@@ -114,4 +121,23 @@ impl Add<i32> for Line {
   type Output = Line;
 
   fn add(self, rhs: i32) -> Line { Line((self.0 as isize + rhs as isize).max(0) as usize) }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn delete_graphemes() {
+    let mut doc = Document::from("abc");
+    doc.delete_graphemes(Cursor::START, 2);
+    assert_eq!(doc.rope, "c");
+  }
+
+  #[test]
+  fn delete_graphemes_handles_emojis() {
+    let mut doc = Document::from("💖a💖");
+    doc.delete_graphemes(Cursor::START, 2);
+    assert_eq!(doc.rope, "💖");
+  }
 }

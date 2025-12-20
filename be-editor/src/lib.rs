@@ -150,6 +150,10 @@ impl EditorState {
         self.move_graphemes(1);
       }
 
+      Edit::Delete => {
+        self.doc.delete_graphemes(self.cursor, 1);
+      }
+
       _ => {}
     }
   }
