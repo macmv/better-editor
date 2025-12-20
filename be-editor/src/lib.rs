@@ -9,6 +9,7 @@ use crate::{fs::OpenedFile, status::Status};
 mod filetype;
 mod fs;
 mod status;
+mod treesitter;
 
 #[derive(Default)]
 pub struct EditorState {

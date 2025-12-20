@@ -14,7 +14,7 @@ impl fmt::Display for FileType {
 }
 
 impl FileType {
-  fn name(&self) -> &'static str {
+  pub fn name(&self) -> &'static str {
     match self {
       FileType::Rust => "rust",
       FileType::Toml => "toml",
