@@ -154,6 +154,11 @@ impl EditorState {
         self.doc.delete_graphemes(self.cursor, 1);
       }
 
+      Edit::Backspace => {
+        self.move_graphemes(-1);
+        self.doc.delete_graphemes(self.cursor, 1);
+      }
+
       _ => {}
     }
   }
