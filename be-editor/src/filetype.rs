@@ -10,11 +10,15 @@ pub enum FileType {
 }
 
 impl fmt::Display for FileType {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.name()) }
+}
+
+impl FileType {
+  fn name(&self) -> &'static str {
     match self {
-      FileType::Rust => write!(f, "Rust"),
-      FileType::Toml => write!(f, "Toml"),
-      FileType::Markdown => write!(f, "Markdown"),
+      FileType::Rust => "rust",
+      FileType::Toml => "toml",
+      FileType::Markdown => "markdown",
     }
   }
 }
