@@ -1,13 +1,16 @@
 use kurbo::{Affine, Axis, Point, Rect, Shape, Size, Stroke, Vec2};
 use peniko::color::{AlphaColor, Oklab, Oklch, Srgb};
 
+use crate::render::text::FontMetrics;
+
 mod blitter;
 mod text;
 mod window;
 
 struct RenderStore {
-  font:   parley::FontContext,
-  layout: parley::LayoutContext<peniko::Brush>,
+  font:         parley::FontContext,
+  layout:       parley::LayoutContext<peniko::Brush>,
+  font_metrics: FontMetrics,
 
   render: vello::Renderer,
 }
@@ -70,19 +73,24 @@ pub fn run() {
     });
     let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-    App {
+    let mut app = App {
       state: super::State::default(),
 
       store: RenderStore {
-        font:   parley::FontContext::new(),
-        layout: parley::LayoutContext::new(),
-        render: vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),
+        font:         parley::FontContext::new(),
+        layout:       parley::LayoutContext::new(),
+        render:       vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),
+        font_metrics: FontMetrics::default(),
       },
 
       texture,
       texture_view,
       blitter: blitter::TextureBlitterConvert::new(&device, surface.format),
-    }
+    };
+
+    app.store.update_metrics();
+
+    app
   });
 }
 

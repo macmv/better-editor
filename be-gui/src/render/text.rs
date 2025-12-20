@@ -14,7 +14,37 @@ use skrifa::{
   raw::TableProvider,
 };
 
-use crate::{Color, Render, TextLayout, encode_color};
+use crate::{Color, Render, TextLayout, encode_color, render::RenderStore};
+
+#[derive(Default)]
+pub struct FontMetrics {
+  line_height:     f64,
+  character_width: f64,
+}
+
+impl RenderStore {
+  pub fn update_metrics(&mut self) {
+    const TEXT: &str = " ";
+    let mut builder = self.layout.ranged_builder(&mut self.font, TEXT, 1.0, false);
+    builder.push_default(parley::StyleProperty::FontSize(16.0));
+    builder
+      .push_default(parley::StyleProperty::FontStack(parley::FontStack::Source("Iosevka".into())));
+    let mut layout = builder.build(TEXT);
+
+    layout.break_all_lines(None);
+    layout.align(None, parley::Alignment::Start, parley::AlignmentOptions::default());
+
+    let line = layout.lines().next().unwrap();
+    let parley::PositionedLayoutItem::GlyphRun(glyph_run) = line.items().next().unwrap() else {
+      unreachable!()
+    };
+
+    let metrics = glyph_run.run().metrics();
+
+    self.font_metrics.line_height = f64::from(metrics.line_height);
+    self.font_metrics.character_width = f64::from(glyph_run.run().advance());
+  }
+}
 
 impl Render<'_> {
   pub fn layout_text(&mut self, text: &str, pos: impl Into<Point>, color: Color) -> TextLayout {
