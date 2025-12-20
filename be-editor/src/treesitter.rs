@@ -1,7 +1,6 @@
 use std::{ffi::CString, mem::ManuallyDrop, path::PathBuf};
 
-use tree_sitter::{Language, Parser, Query, QueryCursor};
-use tree_sitter_highlight::{HighlightConfiguration, HighlightEvent, Highlighter};
+use tree_sitter::{Language, Parser, Query, QueryCursor, StreamingIterator};
 
 use crate::filetype::FileType;
 
@@ -46,63 +45,22 @@ pub fn load_grammar(ft: &FileType) {
 
   let source_code = "fn main() {}";
   let tree = parser.parse(source_code, None).unwrap();
+  let mut cursor = QueryCursor::new();
 
-  let mut config = HighlightConfiguration::new(
-    (*language.language).clone(),
-    &grammar.name,
+  let highlights_query = Query::new(
+    &language.language,
     &std::fs::read_to_string(grammar_path.join(&grammar.highlights[0])).unwrap(),
-    &std::fs::read_to_string(grammar_path.join(&grammar.injections[0])).unwrap(),
-    "",
   )
   .unwrap();
-  config.configure(HIGHLIGHT_NAMES);
+  let mut captures = cursor.captures(&highlights_query, tree.root_node(), source_code.as_bytes());
 
-  let mut highlighter = Highlighter::new();
-  let highlights = highlighter.highlight(&config, b"fn main() {}", None, |_| None).unwrap();
+  let names = highlights_query.capture_names();
 
-  for event in highlights {
-    match event.unwrap() {
-      HighlightEvent::Source { start, end } => {
-        println!("source: {start}-{end}");
-      }
-      HighlightEvent::HighlightStart(s) => {
-        println!("highlight style started: {}", HIGHLIGHT_NAMES[s.0]);
-      }
-      HighlightEvent::HighlightEnd => {
-        println!("highlight style ended");
-      }
-    }
+  while let Some((m, i)) = captures.next() {
+    let capture = m.captures[*i];
+    println!("node: {}", names[capture.index as usize]);
   }
 }
-
-const HIGHLIGHT_NAMES: &[&str] = &[
-  "attribute",
-  "comment",
-  "constant",
-  "constant.builtin",
-  "constructor",
-  "embedded",
-  "function",
-  "function.builtin",
-  "keyword",
-  "module",
-  "number",
-  "operator",
-  "property",
-  "property.builtin",
-  "punctuation",
-  "punctuation.bracket",
-  "punctuation.delimiter",
-  "punctuation.special",
-  "string",
-  "string.special",
-  "tag",
-  "type",
-  "type.builtin",
-  "variable",
-  "variable.builtin",
-  "variable.parameter",
-];
 
 fn install_grammar(ft: &FileType) -> Option<PathBuf> {
   let Some(repo) = repo(ft) else { return None };
