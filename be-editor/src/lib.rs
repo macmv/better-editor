@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use be_doc::{Column, Cursor, Document, Line};
 use be_input::{Action, Edit, Mode, Move};
@@ -15,6 +15,7 @@ pub struct EditorState {
   mode:   Mode,
 
   file:    Option<OpenedFile>,
+  status:  Option<String>,
   command: Option<CommandState>,
 }
 
@@ -39,6 +40,7 @@ impl EditorState {
   pub fn cursor(&self) -> &Cursor { &self.cursor }
   pub fn mode(&self) -> Mode { self.mode }
   pub fn command(&self) -> Option<&CommandState> { self.command.as_ref() }
+  pub fn status(&self) -> Option<&str> { self.status.as_deref() }
 
   pub fn move_line_rel(&mut self, dist: i32) { self.move_to_line(self.cursor.line + dist); }
   pub fn move_col_rel(&mut self, dist: i32) { self.move_to_col(self.cursor.column + dist as i32); }
@@ -188,10 +190,7 @@ impl EditorState {
 
     match res {
       Ok(()) => {}
-      Err(_) => {
-        // TODO
-        // self.set_status(&e.to_string());
-      }
+      Err(e) => self.status = Some(e.to_string()),
     }
   }
 

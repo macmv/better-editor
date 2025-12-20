@@ -253,6 +253,20 @@ impl EditorView {
 
       let cursor = layout.cursor(command.cursor as usize, CursorMode::Line);
       render.fill(&cursor, render.theme().text);
+    } else if let Some(status) = self.editor.status() {
+      render.fill(
+        &Rect::new(
+          0.0,
+          render.size().height - 40.0,
+          render.size().width,
+          render.size().height - 20.0,
+        ),
+        render.theme().background_raised,
+      );
+
+      let layout =
+        render.layout_text(status, (20.0, render.size().height - 40.0), render.theme().text);
+      render.draw_text(&layout);
     }
   }
 }
