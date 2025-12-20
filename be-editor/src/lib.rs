@@ -21,7 +21,8 @@ pub struct EditorState {
   status:  Option<Status>,
   command: Option<CommandState>,
 
-  filetype: Option<filetype::FileType>,
+  filetype:   Option<filetype::FileType>,
+  highligher: Option<treesitter::Highlighter>,
 }
 
 #[derive(Default)]

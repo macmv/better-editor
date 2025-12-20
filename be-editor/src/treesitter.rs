@@ -1,8 +1,17 @@
 use std::{ffi::CString, mem::ManuallyDrop, path::PathBuf};
 
-use tree_sitter::{Language, Parser, Query, QueryCursor, StreamingIterator};
+use tree_sitter::{Language, Parser, Query, QueryCursor, StreamingIterator, Tree};
 
 use crate::filetype::FileType;
+
+pub struct Highlighter {
+  parser:           Parser,
+  tree:             Tree,
+  highlights_query: Query,
+
+  // SAFETY: Drop last!
+  language: LoadedLanguage,
+}
 
 #[derive(serde::Deserialize)]
 struct TreeSitterSpec {
@@ -21,9 +30,9 @@ struct LoadedLanguage {
   language: ManuallyDrop<Language>,
 }
 
-pub fn load_grammar(ft: &FileType) {
+pub fn load_grammar(ft: &FileType) -> Option<Highlighter> {
   if repo(ft).is_none() {
-    return;
+    return None;
   }
 
   let grammar_path = install_grammar(ft).unwrap();
@@ -32,7 +41,7 @@ pub fn load_grammar(ft: &FileType) {
   let spec = serde_json::from_str::<TreeSitterSpec>(&spec).unwrap();
 
   if spec.grammars.is_empty() {
-    return;
+    return None;
   }
 
   let grammar = &spec.grammars[0];
@@ -43,22 +52,29 @@ pub fn load_grammar(ft: &FileType) {
   let mut parser = Parser::new();
   parser.set_language(&language.language).unwrap();
 
-  let source_code = "fn main() {}";
-  let tree = parser.parse(source_code, None).unwrap();
-  let mut cursor = QueryCursor::new();
+  let tree = parser.parse("", None).unwrap();
 
   let highlights_query = Query::new(
     &language.language,
     &std::fs::read_to_string(grammar_path.join(&grammar.highlights[0])).unwrap(),
   )
   .unwrap();
-  let mut captures = cursor.captures(&highlights_query, tree.root_node(), source_code.as_bytes());
 
-  let names = highlights_query.capture_names();
+  Some(Highlighter { parser, tree, highlights_query, language })
+}
 
-  while let Some((m, i)) = captures.next() {
-    let capture = m.captures[*i];
-    println!("node: {}", names[capture.index as usize]);
+impl Highlighter {
+  fn highlights(&self, source_code: &str) {
+    let names = self.highlights_query.capture_names();
+
+    let mut cursor = QueryCursor::new();
+    let mut captures =
+      cursor.captures(&self.highlights_query, self.tree.root_node(), source_code.as_bytes());
+
+    while let Some((m, i)) = captures.next() {
+      let capture = m.captures[*i];
+      println!("node: {}", names[capture.index as usize]);
+    }
   }
 }
 
@@ -165,5 +181,9 @@ mod tests {
   use super::*;
 
   #[test]
-  fn it_works() { load_grammar(&FileType::Rust); }
+  fn it_works() {
+    let highlighter = load_grammar(&FileType::Rust).unwrap();
+
+    highlighter.highlights("fn main() {}");
+  }
 }
