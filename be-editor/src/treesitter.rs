@@ -1,4 +1,4 @@
-use std::{ffi::CString, path::PathBuf};
+use std::{ffi::CString, mem::ManuallyDrop, path::PathBuf};
 
 use tree_sitter::Language;
 
@@ -13,6 +13,11 @@ struct TreeSitterSpec {
 struct GrammarSpec {
   name:       String,
   highlights: Vec<String>,
+}
+
+struct LoadedLanguage {
+  object:   *mut libc::c_void,
+  language: ManuallyDrop<Language>,
 }
 
 pub fn load_grammar(ft: &FileType) {
@@ -30,24 +35,10 @@ pub fn load_grammar(ft: &FileType) {
   }
 
   let so_path = grammar_path.join("libtree-sitter.so");
-  let symbol = format!("tree_sitter_{}", spec.grammars[0].name);
 
-  let language = unsafe {
-    let so_path_c = CString::new(so_path.to_str().unwrap()).unwrap();
-    let object = libc::dlopen(so_path_c.as_ptr(), libc::RTLD_LAZY | libc::RTLD_LOCAL);
-    if object.is_null() {
-      panic!("Failed to load grammar");
-    }
-    let symbol = CString::new(symbol).unwrap();
-    let language = libc::dlsym(object, symbol.as_ptr());
-    if language.is_null() {
-      panic!("Failed to load grammar");
-    }
+  let language = LoadedLanguage::load(so_path, &spec.grammars[0].name);
 
-    Language::new(std::mem::transmute(language))
-  };
-
-  dbg!(&language);
+  dbg!(&language.language);
 }
 
 fn install_grammar(ft: &FileType) -> Option<PathBuf> {
@@ -103,6 +94,40 @@ fn install_grammar(ft: &FileType) -> Option<PathBuf> {
   }
 
   Some(grammar_path)
+}
+
+impl LoadedLanguage {
+  fn load(so_path: PathBuf, name: &str) -> LoadedLanguage {
+    unsafe {
+      let so_path_c = CString::new(so_path.to_str().unwrap()).unwrap();
+      let object = libc::dlopen(so_path_c.as_ptr(), libc::RTLD_LAZY | libc::RTLD_LOCAL);
+      if object.is_null() {
+        panic!("Failed to load grammar");
+      }
+      let symbol = format!("tree_sitter_{}", name);
+      let symbol = CString::new(symbol).unwrap();
+      let language = libc::dlsym(object, symbol.as_ptr());
+      if language.is_null() {
+        panic!("Failed to load grammar");
+      }
+
+      // `transmute` because I don't want to depend on `tree-sitter-language`, which
+      // exports a single transparent wrapper for a language function.
+      let language = Language::new(std::mem::transmute(language));
+
+      LoadedLanguage { object, language: ManuallyDrop::new(language) }
+    }
+  }
+}
+
+impl Drop for LoadedLanguage {
+  fn drop(&mut self) {
+    // SAFETY: Drop the language before closing the object.
+    unsafe {
+      ManuallyDrop::drop(&mut self.language);
+      libc::dlclose(self.object);
+    }
+  }
 }
 
 // See https://github.com/tree-sitter/tree-sitter/wiki/List-of-parsers
