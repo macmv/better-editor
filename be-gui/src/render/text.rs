@@ -267,12 +267,12 @@ impl Render<'_> {
           }
           self.scene.draw_image(image.as_ref(), transform);
         }
-        EmojiLikeGlyph::Colr(colr) => {
-          let transform = transform
+        EmojiLikeGlyph::Colr(_colr) => {
+          let _transform = transform
             * Affine::translate(Vec2::new(glyph.x.into(), glyph.y.into()))
             * colr_scale
             * glyph_transform.unwrap_or(Affine::IDENTITY);
-          todo!()
+          todo!("render colr glyphs");
           /*
           colr
             .paint(
