@@ -117,7 +117,8 @@ impl Directory {
     render
       .fill(&Rect::new(pos.x, pos.y, render.size().width, pos.y + 20.0), theme.background_raised);
 
-    let text = render.layout_text(&self.name(), pos + Vec2::new(20.0, 0.0), theme.text);
+    let text =
+      render.layout_text(&format!(" {}", self.name()), pos + Vec2::new(20.0, 0.0), theme.text);
     render.draw_text(&text);
 
     if self.expanded

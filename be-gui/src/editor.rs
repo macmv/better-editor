@@ -110,7 +110,7 @@ impl Editor {
         active:  Side::Right,
         left:    Box::new(Pane::Content(Content::FileTree(FileTree::current_directory()))),
         right:   Box::new(Pane::Content(Content::Editor(EditorView {
-          editor:      EditorState::from("hello\nworld\n"),
+          editor:      EditorState::from("hello\nfoobar\n💖world\n"),
           line_height: 20.0,
           scroll:      Point::ZERO,
         }))),
