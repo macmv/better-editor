@@ -16,13 +16,15 @@ use skrifa::{
 
 use crate::{Color, CursorMode, Render, encode_color, render::RenderStore};
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct FontMetrics {
   line_height:     f64,
   character_width: f64,
 }
 
 pub struct TextLayout {
+  metrics: FontMetrics,
+
   origin: Point,
   layout: parley::Layout<peniko::Brush>,
   scale:  f64,
@@ -64,7 +66,12 @@ impl Render<'_> {
     layout.break_all_lines(None);
     layout.align(None, parley::Alignment::Start, parley::AlignmentOptions::default());
 
-    TextLayout { origin: pos.into(), layout, scale: self.scale }
+    TextLayout {
+      metrics: self.store.font_metrics.clone(),
+      origin: pos.into(),
+      layout,
+      scale: self.scale,
+    }
   }
 
   pub fn draw_text(&mut self, text: &TextLayout) {
@@ -365,7 +372,18 @@ impl TextLayout {
         )
       }
 
-      _ => Rect::ZERO,
+      _ => Rect::new(
+        0.0,
+        match mode {
+          CursorMode::Underline => self.metrics.line_height * self.scale - CURSOR_WIDTH,
+          _ => 0.0,
+        },
+        match mode {
+          CursorMode::Block | CursorMode::Underline => self.metrics.character_width * self.scale,
+          CursorMode::Line => CURSOR_WIDTH,
+        },
+        self.metrics.line_height * self.scale,
+      ),
     };
 
     rect.scale_from_origin(1.0 / self.scale) + self.origin.to_vec2()
