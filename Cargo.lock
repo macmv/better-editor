@@ -152,6 +152,7 @@ dependencies = [
  "parley",
  "peniko",
  "pollster",
+ "skrifa",
  "vello",
  "wgpu",
  "winit",

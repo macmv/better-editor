@@ -1,5 +1,6 @@
 use kurbo::{Affine, Point, Rect};
 use peniko::Fill;
+use skrifa::{MetadataProvider, raw::TableProvider};
 
 use crate::{Color, Render, TextLayout, encode_color};
 
@@ -24,6 +25,8 @@ impl Render<'_> {
 
     let offset = self.offset();
 
+    let transform = Affine::translate((text.origin.to_vec2() + offset) * self.scale);
+
     for line in text.layout.lines() {
       for item in line.items() {
         let parley::PositionedLayoutItem::GlyphRun(glyph_run) = item else { continue };
@@ -33,26 +36,56 @@ impl Render<'_> {
         let mut x = rect.x0 as f32 + glyph_run.offset();
         let baseline = (rect.y0 as f32 + glyph_run.baseline()).round();
 
-        self
-          .scene
-          .draw_glyphs(run.font())
-          .brush(&glyph_run.style().brush)
-          .hint(true)
-          .transform(Affine::translate((text.origin.to_vec2() + offset) * self.scale))
-          .glyph_transform(
-            run.synthesis().skew().map(|angle| Affine::skew(angle.to_radians().tan() as f64, 0.0)),
-          )
-          .font_size(run.font_size())
-          .normalized_coords(run.normalized_coords())
-          .draw(
-            Fill::NonZero,
-            glyph_run.glyphs().map(|glyph| {
-              let gx = x + glyph.x;
-              let gy = baseline + glyph.y;
-              x += glyph.advance;
-              vello::Glyph { id: glyph.id.into(), x: gx, y: gy }
-            }),
-          );
+        let font_data = run.font();
+        let font = skrifa::FontRef::from_index(font_data.data.as_ref(), font_data.index).unwrap();
+        let bitmaps = font.bitmap_strikes();
+
+        if font.colr().is_ok() && font.cpal().is_ok() || !bitmaps.is_empty() {
+          // Emojis need color conversion, so we rasterize them by hand.
+          for g in glyph_run.glyphs() {
+            let r = Rect::new(
+              (x + g.x) as f64,
+              (baseline + g.y - run.metrics().ascent) as f64,
+              (x + g.x + g.advance) as f64,
+              (baseline + g.y + run.metrics().descent) as f64,
+            );
+
+            self.scene.fill(
+              Fill::NonZero,
+              transform,
+              &encode_color(super::oklch(1.0, 0.0, 0.0)),
+              None,
+              &r,
+            );
+
+            x += g.advance;
+          }
+        } else {
+          // Normal characters can be drawn with vello.
+          self
+            .scene
+            .draw_glyphs(run.font())
+            .brush(&glyph_run.style().brush)
+            .hint(true)
+            .transform(transform)
+            .glyph_transform(
+              run
+                .synthesis()
+                .skew()
+                .map(|angle| Affine::skew(angle.to_radians().tan() as f64, 0.0)),
+            )
+            .font_size(run.font_size())
+            .normalized_coords(run.normalized_coords())
+            .draw(
+              Fill::NonZero,
+              glyph_run.glyphs().map(|glyph| {
+                let gx = x + glyph.x;
+                let gy = baseline + glyph.y;
+                x += glyph.advance;
+                vello::Glyph { id: glyph.id.into(), x: gx, y: gy }
+              }),
+            );
+        }
       }
     }
   }
