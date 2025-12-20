@@ -39,6 +39,8 @@ impl EditorState {
 }
 
 impl OpenedFile {
+  pub fn path(&self) -> &Path { &self.path }
+
   pub fn open(path: &Path) -> io::Result<(OpenedFile, Document)> {
     let path = path.canonicalize()?;
     let stat = path.metadata()?;

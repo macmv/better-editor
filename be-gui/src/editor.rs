@@ -267,8 +267,11 @@ impl EditorView {
         render.theme().background_raised,
       );
 
-      let layout =
-        render.layout_text(status, (20.0, render.size().height - line_height), render.theme().text);
+      let layout = render.layout_text(
+        &status.message,
+        (20.0, render.size().height - line_height),
+        render.theme().text,
+      );
       render.draw_text(&layout);
     }
   }

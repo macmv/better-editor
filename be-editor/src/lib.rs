@@ -4,9 +4,10 @@ use be_doc::{Column, Cursor, Document, Line};
 use be_input::{Action, Edit, Mode, Move};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::fs::OpenedFile;
+use crate::{fs::OpenedFile, status::Status};
 
 mod fs;
+mod status;
 
 #[derive(Default)]
 pub struct EditorState {
@@ -15,7 +16,7 @@ pub struct EditorState {
   mode:   Mode,
 
   file:    Option<OpenedFile>,
-  status:  Option<String>,
+  status:  Option<Status>,
   command: Option<CommandState>,
 }
 
@@ -40,7 +41,7 @@ impl EditorState {
   pub fn cursor(&self) -> &Cursor { &self.cursor }
   pub fn mode(&self) -> Mode { self.mode }
   pub fn command(&self) -> Option<&CommandState> { self.command.as_ref() }
-  pub fn status(&self) -> Option<&str> { self.status.as_deref() }
+  pub fn status(&self) -> Option<&Status> { self.status.as_ref() }
 
   pub fn move_line_rel(&mut self, dist: i32) { self.move_to_line(self.cursor.line + dist); }
   pub fn move_col_rel(&mut self, dist: i32) { self.move_to_col(self.cursor.column + dist as i32); }
@@ -180,8 +181,12 @@ impl EditorState {
     let (cmd, args) = command.text.split_once(' ').unwrap_or((&command.text, ""));
 
     let res = match cmd {
-      "w" => self.save(),
-      "e" => self.open(Path::new(args)),
+      "w" => {
+        self.save().map(|()| format!("{}: written", self.file.as_ref().unwrap().path().display()))
+      }
+      "e" => self
+        .open(Path::new(args))
+        .map(|()| format!("{}: opened", self.file.as_ref().unwrap().path().display())),
 
       _ => Err(std::io::Error::new(
         std::io::ErrorKind::InvalidInput,
@@ -190,8 +195,8 @@ impl EditorState {
     };
 
     match res {
-      Ok(()) => {}
-      Err(e) => self.status = Some(e.to_string()),
+      Ok(m) => self.status = Some(Status::for_success(m)),
+      Err(e) => self.status = Some(Status::for_error(e)),
     }
   }
 
