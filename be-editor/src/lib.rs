@@ -6,6 +6,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{fs::OpenedFile, status::Status};
 
+mod filetype;
 mod fs;
 mod status;
 
@@ -18,6 +19,8 @@ pub struct EditorState {
   file:    Option<OpenedFile>,
   status:  Option<Status>,
   command: Option<CommandState>,
+
+  filetype: Option<filetype::FileType>,
 }
 
 #[derive(Default)]
@@ -42,6 +45,16 @@ impl EditorState {
   pub fn mode(&self) -> Mode { self.mode }
   pub fn command(&self) -> Option<&CommandState> { self.command.as_ref() }
   pub fn status(&self) -> Option<&Status> { self.status.as_ref() }
+  pub fn file_type(&self) -> Option<filetype::FileType> { self.filetype }
+
+  fn on_open_file(&mut self) {
+    let Some(_) = self.file.as_ref() else { return };
+
+    self.move_to_col(Column(0));
+    self.move_to_line(Line(0));
+
+    self.detect_filetype();
+  }
 
   pub fn move_line_rel(&mut self, dist: i32) { self.move_to_line(self.cursor.line + dist); }
   pub fn move_col_rel(&mut self, dist: i32) { self.move_to_col(self.cursor.column + dist as i32); }

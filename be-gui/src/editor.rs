@@ -274,5 +274,14 @@ impl EditorView {
       );
       render.draw_text(&layout);
     }
+
+    if let Some(ft) = self.editor.file_type() {
+      let layout = render.layout_text(
+        &format!("{ft}"),
+        (render.size().width - 50.0, render.size().height - line_height),
+        render.theme().text,
+      );
+      render.draw_text(&layout);
+    }
   }
 }

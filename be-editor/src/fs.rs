@@ -26,6 +26,9 @@ impl EditorState {
     let (file, doc) = OpenedFile::open(&canon)?;
     self.file = Some(file);
     self.doc = doc;
+
+    self.on_open_file();
+
     Ok(())
   }
 
