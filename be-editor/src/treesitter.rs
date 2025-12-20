@@ -1,6 +1,7 @@
 use std::{ffi::CString, mem::ManuallyDrop, path::PathBuf};
 
-use tree_sitter::Language;
+use tree_sitter::{Language, Parser, Query, QueryCursor};
+use tree_sitter_highlight::{HighlightConfiguration, HighlightEvent, Highlighter};
 
 use crate::filetype::FileType;
 
@@ -13,6 +14,7 @@ struct TreeSitterSpec {
 struct GrammarSpec {
   name:       String,
   highlights: Vec<String>,
+  injections: Vec<String>,
 }
 
 struct LoadedLanguage {
@@ -35,11 +37,70 @@ pub fn load_grammar(ft: &FileType) {
   }
 
   let so_path = grammar_path.join("libtree-sitter.so");
-
   let language = LoadedLanguage::load(so_path, &spec.grammars[0].name);
 
-  dbg!(&language.language);
+  let mut parser = Parser::new();
+  parser.set_language(&language.language).unwrap();
+
+  let source_code = "fn main() {}";
+  let tree = parser.parse(source_code, None).unwrap();
+
+  let mut config = HighlightConfiguration::new(
+    (*language.language).clone(),
+    &spec.grammars[0].name,
+    &std::fs::read_to_string(grammar_path.join(&spec.grammars[0].highlights[0])).unwrap(),
+    &std::fs::read_to_string(grammar_path.join(&spec.grammars[0].injections[0])).unwrap(),
+    "",
+  )
+  .unwrap();
+  config.configure(HIGHLIGHT_NAMES);
+
+  let mut highlighter = Highlighter::new();
+  let highlights = highlighter.highlight(&config, b"fn main() {}", None, |_| None).unwrap();
+
+  for event in highlights {
+    match event.unwrap() {
+      HighlightEvent::Source { start, end } => {
+        println!("source: {start}-{end}");
+      }
+      HighlightEvent::HighlightStart(s) => {
+        println!("highlight style started: {}", HIGHLIGHT_NAMES[s.0]);
+      }
+      HighlightEvent::HighlightEnd => {
+        println!("highlight style ended");
+      }
+    }
+  }
 }
+
+const HIGHLIGHT_NAMES: &[&str] = &[
+  "attribute",
+  "comment",
+  "constant",
+  "constant.builtin",
+  "constructor",
+  "embedded",
+  "function",
+  "function.builtin",
+  "keyword",
+  "module",
+  "number",
+  "operator",
+  "property",
+  "property.builtin",
+  "punctuation",
+  "punctuation.bracket",
+  "punctuation.delimiter",
+  "punctuation.special",
+  "string",
+  "string.special",
+  "tag",
+  "type",
+  "type.builtin",
+  "variable",
+  "variable.builtin",
+  "variable.parameter",
+];
 
 fn install_grammar(ft: &FileType) -> Option<PathBuf> {
   let Some(repo) = repo(ft) else { return None };
