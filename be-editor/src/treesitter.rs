@@ -36,8 +36,10 @@ pub fn load_grammar(ft: &FileType) {
     return;
   }
 
+  let grammar = &spec.grammars[0];
+
   let so_path = grammar_path.join("libtree-sitter.so");
-  let language = LoadedLanguage::load(so_path, &spec.grammars[0].name);
+  let language = LoadedLanguage::load(so_path, &grammar.name);
 
   let mut parser = Parser::new();
   parser.set_language(&language.language).unwrap();
@@ -47,9 +49,9 @@ pub fn load_grammar(ft: &FileType) {
 
   let mut config = HighlightConfiguration::new(
     (*language.language).clone(),
-    &spec.grammars[0].name,
-    &std::fs::read_to_string(grammar_path.join(&spec.grammars[0].highlights[0])).unwrap(),
-    &std::fs::read_to_string(grammar_path.join(&spec.grammars[0].injections[0])).unwrap(),
+    &grammar.name,
+    &std::fs::read_to_string(grammar_path.join(&grammar.highlights[0])).unwrap(),
+    &std::fs::read_to_string(grammar_path.join(&grammar.injections[0])).unwrap(),
     "",
   )
   .unwrap();
