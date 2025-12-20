@@ -25,6 +25,10 @@ pub fn load_grammar(ft: &FileType) {
   let spec = std::fs::read_to_string(grammar_path.join("tree-sitter.json")).unwrap();
   let spec = serde_json::from_str::<TreeSitterSpec>(&spec).unwrap();
 
+  if spec.grammars.is_empty() {
+    return;
+  }
+
   let so_path = grammar_path.join("libtree-sitter.so");
   let symbol = format!("tree_sitter_{}", spec.grammars[0].name);
 
