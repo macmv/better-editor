@@ -161,11 +161,9 @@ impl EditorState {
         self.doc.insert(self.cursor, s);
         self.move_graphemes(1);
       }
-
       Edit::Delete => {
         self.doc.delete_graphemes(self.cursor, 1);
       }
-
       Edit::Backspace => {
         self.move_graphemes(-1);
         self.doc.delete_graphemes(self.cursor, 1);
@@ -221,6 +219,15 @@ impl CommandState {
         self.text.insert(self.cursor, c);
         self.move_cursor(1);
       }
+      Edit::Delete => {
+        self.delete_graphemes(1);
+      }
+      Edit::Backspace => {
+        if self.cursor > 0 {
+          self.move_cursor(-1);
+          self.delete_graphemes(1);
+        }
+      }
 
       _ => {}
     }
@@ -236,6 +243,11 @@ impl CommandState {
         self.cursor -= c.len();
       }
     }
+  }
+
+  fn delete_graphemes(&mut self, len: usize) {
+    let count = self.text[self.cursor..].graphemes(true).take(len).map(|g| g.len()).sum::<usize>();
+    self.text.replace_range(self.cursor..self.cursor + count, "");
   }
 }
 
