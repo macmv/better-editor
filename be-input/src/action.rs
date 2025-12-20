@@ -3,7 +3,7 @@ use std::num::NonZero;
 use crate::{KeyStroke, Mode, key::Key};
 
 pub enum Action {
-  SetMode(Mode),
+  SetMode { mode: Mode, delta: i32 },
   Move { count: Option<NonZero<u32>>, m: Move },
   Edit { count: Option<NonZero<u32>>, e: Edit },
 }
@@ -62,7 +62,9 @@ impl Action {
       return match (mode, key.key) {
         (Mode::Insert | Mode::Command, Key::Char(c)) => e!(Insert(c)),
         (Mode::Insert | Mode::Command, Key::Backspace) => e!(Backspace),
-        (Mode::Insert | Mode::Command, Key::Escape) => Ok(Action::SetMode(Mode::Normal)),
+        (Mode::Insert | Mode::Command, Key::Escape) => {
+          Ok(Action::SetMode { mode: Mode::Normal, delta: -1 })
+        }
         (Mode::Insert | Mode::Command, Key::ArrowUp) => m!(Up),
         (Mode::Insert | Mode::Command, Key::ArrowDown) => m!(Down),
         (Mode::Insert | Mode::Command, Key::ArrowLeft) => m!(Left),
@@ -82,11 +84,11 @@ impl Action {
         (Mode::Normal, Key::Char('x')) => e!(Delete),
 
         // === modes ===
-        (Mode::Normal, Key::Char('i')) => Ok(Action::SetMode(Mode::Insert)),
-        (Mode::Normal, Key::Char('a')) => Ok(Action::SetMode(Mode::Insert)),
-        (Mode::Normal, Key::Char('v')) => Ok(Action::SetMode(Mode::Visual)),
-        (Mode::Normal, Key::Char('R')) => Ok(Action::SetMode(Mode::Replace)),
-        (Mode::Normal, Key::Char(':')) => Ok(Action::SetMode(Mode::Command)),
+        (Mode::Normal, Key::Char('i')) => Ok(Action::SetMode { mode: Mode::Insert, delta: 0 }),
+        (Mode::Normal, Key::Char('a')) => Ok(Action::SetMode { mode: Mode::Insert, delta: 1 }),
+        (Mode::Normal, Key::Char('v')) => Ok(Action::SetMode { mode: Mode::Visual, delta: 0 }),
+        (Mode::Normal, Key::Char('R')) => Ok(Action::SetMode { mode: Mode::Replace, delta: 0 }),
+        (Mode::Normal, Key::Char(':')) => Ok(Action::SetMode { mode: Mode::Command, delta: 0 }),
 
         (Mode::Normal | Mode::Visual, _) => {
           parse_move(key, iter).map(|m| Action::Move { count: NonZero::new(count), m })

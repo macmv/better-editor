@@ -129,7 +129,10 @@ impl EditorState {
 
   pub fn perform_action(&mut self, action: Action) {
     match action {
-      Action::SetMode(m) => self.set_mode(m),
+      Action::SetMode { mode, delta } => {
+        self.move_graphemes(delta as isize);
+        self.set_mode(mode);
+      }
       Action::Move { count: _, m } => self.perform_move(m),
       Action::Edit { count: _, e } => self.perform_edit(e),
     }
