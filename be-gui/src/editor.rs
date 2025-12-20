@@ -239,15 +239,18 @@ impl EditorView {
       render.fill(
         &Rect::new(
           0.0,
-          render.size().height - 40.0,
+          render.size().height - line_height,
           render.size().width,
-          render.size().height - 20.0,
+          render.size().height,
         ),
         render.theme().background_raised,
       );
 
-      let layout =
-        render.layout_text(&command.text, (20.0, render.size().height - 40.0), render.theme().text);
+      let layout = render.layout_text(
+        &command.text,
+        (20.0, render.size().height - line_height),
+        render.theme().text,
+      );
 
       render.draw_text(&layout);
 
@@ -257,15 +260,15 @@ impl EditorView {
       render.fill(
         &Rect::new(
           0.0,
-          render.size().height - 40.0,
+          render.size().height - line_height,
           render.size().width,
-          render.size().height - 20.0,
+          render.size().height,
         ),
         render.theme().background_raised,
       );
 
       let layout =
-        render.layout_text(status, (20.0, render.size().height - 40.0), render.theme().text);
+        render.layout_text(status, (20.0, render.size().height - line_height), render.theme().text);
       render.draw_text(&layout);
     }
   }
