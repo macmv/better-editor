@@ -1,6 +1,7 @@
 use std::{ffi::CString, mem::ManuallyDrop, path::PathBuf};
 
-use tree_sitter::{Language, Parser, Query, QueryCursor, StreamingIterator, Tree};
+use be_doc::Document;
+use tree_sitter::{Language, Node, Parser, Query, QueryCursor, StreamingIterator, Tree};
 
 use crate::filetype::FileType;
 
@@ -64,12 +65,15 @@ pub fn load_grammar(ft: &FileType) -> Option<Highlighter> {
 }
 
 impl Highlighter {
-  fn highlights(&self, source_code: &str) {
+  fn highlights(&self, doc: &Document) {
     let names = self.highlights_query.capture_names();
 
     let mut cursor = QueryCursor::new();
     let mut captures =
-      cursor.captures(&self.highlights_query, self.tree.root_node(), source_code.as_bytes());
+      cursor.captures(&self.highlights_query, self.tree.root_node(), |node: Node| {
+        let slice = doc.rope.byte_slice(node.byte_range());
+        slice.chunks().map(|c| c.as_bytes())
+      });
 
     while let Some((m, i)) = captures.next() {
       let capture = m.captures[*i];
@@ -184,6 +188,6 @@ mod tests {
   fn it_works() {
     let highlighter = load_grammar(&FileType::Rust).unwrap();
 
-    highlighter.highlights("fn main() {}");
+    highlighter.highlights(&"fn main() {}".into());
   }
 }
