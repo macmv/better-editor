@@ -107,48 +107,49 @@ impl FileTree {
       render.theme().background_lower,
     );
 
-    self.tree.draw(Point::ZERO, render);
+    TreeDraw { line: 0, indent: 0 }.draw_directory(&self.tree, render);
   }
 }
 
-impl Directory {
-  fn draw(&self, pos: Point, render: &mut Render) -> f64 {
+struct TreeDraw {
+  line:   u32,
+  indent: u32,
+}
+
+impl TreeDraw {
+  fn pos(&self) -> Point { Point::new(self.indent as f64 * 20.0, self.line as f64 * 20.0) }
+
+  fn draw_directory(&mut self, dir: &Directory, render: &mut Render) {
     render.fill(
-      &Rect::new(pos.x, pos.y, render.size().width, pos.y + 20.0),
+      &Rect::new(self.pos().x, self.pos().y, render.size().width, self.pos().y + 20.0),
       render.theme().background_raised,
     );
 
     let text = render.layout_text(
-      &format!(" {}", self.name()),
-      pos + Vec2::new(20.0, 0.0),
+      &format!(" {}", dir.name()),
+      self.pos() + Vec2::new(20.0, 0.0),
       render.theme().text,
     );
     render.draw_text(&text);
 
-    if self.expanded
-      && let Some(items) = &self.items
+    if dir.expanded
+      && let Some(items) = &dir.items
     {
-      let mut y = 20.0;
       for item in items {
+        self.line += 1;
+        self.indent += 1;
         match item {
-          Item::File(file) => {
-            file.draw(pos + Vec2::new(20.0, y), render);
-            y += 20.0;
-          }
-          Item::Directory(dir) => {
-            y += dir.draw(pos + Vec2::new(20.0, y), render);
-          }
+          Item::File(file) => self.draw_file(file, render),
+          Item::Directory(dir) => self.draw_directory(dir, render),
         }
+        self.indent -= 1;
       }
-      y
-    } else {
-      20.0
     }
   }
-}
-impl File {
-  fn draw(&self, pos: Point, render: &mut Render) {
-    let text = render.layout_text(&self.name, pos + Vec2::new(20.0, 0.0), render.theme().text);
+
+  fn draw_file(&self, file: &File, render: &mut Render) {
+    let text =
+      render.layout_text(&file.name, self.pos() + Vec2::new(20.0, 0.0), render.theme().text);
     render.draw_text(&text);
   }
 }
