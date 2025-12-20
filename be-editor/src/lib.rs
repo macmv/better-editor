@@ -180,6 +180,7 @@ impl EditorState {
     let (cmd, args) = command.text.split_once(' ').unwrap_or((&command.text, ""));
 
     let res = match cmd {
+      "w" => self.save(),
       "e" => self.open(Path::new(args)),
 
       _ => Err(std::io::Error::new(
