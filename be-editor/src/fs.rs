@@ -1,24 +1,44 @@
 use std::{
+  io,
   os::unix::fs::MetadataExt,
   path::{Path, PathBuf},
 };
 
 use be_doc::Document;
 
+use crate::EditorState;
+
 pub struct OpenedFile {
   path:  PathBuf,
   mtime: i64,
 }
 
-impl OpenedFile {
-  pub fn open(path: &Path) -> (OpenedFile, Document) {
-    let path = path.canonicalize().unwrap();
-    let stat = path.metadata().unwrap();
+impl EditorState {
+  pub fn open(&mut self, path: &Path) -> io::Result<()> {
+    let canon = path.canonicalize()?;
 
-    let doc = Document::read(&path).unwrap();
+    if let Some(current) = &self.file
+      && current.path != canon
+    {
+      // TODO: Confirm save
+    }
+
+    let (file, doc) = OpenedFile::open(&canon)?;
+    self.file = Some(file);
+    self.doc = doc;
+    Ok(())
+  }
+}
+
+impl OpenedFile {
+  pub fn open(path: &Path) -> io::Result<(OpenedFile, Document)> {
+    let path = path.canonicalize()?;
+    let stat = path.metadata()?;
+
+    let doc = Document::read(&path)?;
     let file = OpenedFile { path, mtime: stat.mtime() };
 
-    (file, doc)
+    Ok((file, doc))
   }
 
   pub fn save(&self, doc: &Document) {

@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use be_doc::{Column, Cursor, Document, Line};
 use be_input::{Action, Edit, Mode, Move};
 use unicode_segmentation::UnicodeSegmentation;
@@ -136,8 +138,15 @@ impl EditorState {
       _ => {}
     }
   }
+
   fn perform_edit(&mut self, e: Edit) {
     if let Some(command) = &mut self.command {
+      if matches!(e, Edit::Insert('\n')) {
+        self.run_command();
+        self.set_mode(Mode::Normal);
+        return;
+      }
+
       command.perform_edit(e);
       return;
     }
@@ -160,6 +169,29 @@ impl EditorState {
       }
 
       _ => {}
+    }
+  }
+
+  fn run_command(&mut self) {
+    let Some(command) = self.command.take() else { return };
+
+    let (cmd, args) = command.text.split_once(' ').unwrap_or((&command.text, ""));
+
+    let res = match cmd {
+      "e" => self.open(Path::new(args)),
+
+      _ => Err(std::io::Error::new(
+        std::io::ErrorKind::InvalidInput,
+        format!("unknown command: {}", cmd),
+      )),
+    };
+
+    match res {
+      Ok(()) => {}
+      Err(_) => {
+        // TODO
+        // self.set_status(&e.to_string());
+      }
     }
   }
 
