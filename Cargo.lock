@@ -149,6 +149,8 @@ dependencies = [
  "be-doc",
  "be-input",
  "libc",
+ "serde",
+ "serde_json",
  "tree-sitter",
  "unicode-segmentation",
 ]

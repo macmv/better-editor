@@ -1,11 +1,19 @@
-use std::{
-  ffi::CString,
-  path::{Path, PathBuf},
-};
+use std::{ffi::CString, path::PathBuf};
 
 use tree_sitter::Language;
 
 use crate::filetype::FileType;
+
+#[derive(serde::Deserialize)]
+struct TreeSitterSpec {
+  grammars: Vec<GrammarSpec>,
+}
+
+#[derive(serde::Deserialize)]
+struct GrammarSpec {
+  name:       String,
+  highlights: Vec<String>,
+}
 
 pub fn load_grammar(ft: &FileType) {
   if repo(ft).is_none() {
@@ -14,7 +22,11 @@ pub fn load_grammar(ft: &FileType) {
 
   let grammar_path = install_grammar(ft).unwrap();
 
+  let spec = std::fs::read_to_string(grammar_path.join("tree-sitter.json")).unwrap();
+  let spec = serde_json::from_str::<TreeSitterSpec>(&spec).unwrap();
+
   let so_path = grammar_path.join("libtree-sitter.so");
+  let symbol = format!("tree_sitter_{}", spec.grammars[0].name);
 
   let language = unsafe {
     let so_path_c = CString::new(so_path.to_str().unwrap()).unwrap();
@@ -22,7 +34,8 @@ pub fn load_grammar(ft: &FileType) {
     if object.is_null() {
       panic!("Failed to load grammar");
     }
-    let language = libc::dlsym(object, c"tree_sitter_rust".as_ptr());
+    let symbol = CString::new(symbol).unwrap();
+    let language = libc::dlsym(object, symbol.as_ptr());
     if language.is_null() {
       panic!("Failed to load grammar");
     }
