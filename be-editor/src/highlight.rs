@@ -130,7 +130,7 @@ impl<'a> MergeIterator<'a> {
       return;
     }
 
-    *self.active_counts.entry(highlight.key).or_insert(0) += 1;
+    *self.active_counts.entry(highlight.key).or_default() += 1;
     self.ends.push(Reverse((highlight.end, highlight.key)));
   }
 
@@ -189,40 +189,34 @@ impl<'a> Iterator for MergeIterator<'a> {
       self.apply_all_starts_at(self.base);
     }
 
-    let ns = self.next_start_pos();
-    let ne = self.next_end_pos();
+    loop {
+      let next_pos = match (self.next_start_pos(), self.next_end_pos()) {
+        (Some(s), Some(e)) => s.min(e),
+        (Some(s), None) => s,
+        (None, Some(e)) => e,
+        (None, None) => return None,
+      };
 
-    if ns.is_none() && ne.is_none() {
-      return None;
+      // Emit segment [prev, next_pos) with current actives (before applying at
+      // next_pos).
+      if next_pos > self.prev {
+        let out = HighlightStack { pos: next_pos, highlights: self.snapshot_active() };
+
+        // Apply changes at next_pos for the following segment.
+        // Ends first, then starts (so a span ending and starting at pos behaves
+        // nicely).
+        self.apply_all_ends_at(next_pos);
+        self.apply_all_starts_at(next_pos);
+
+        self.prev = next_pos;
+        return Some(out);
+      } else {
+        // zero-length, just advance state and continue.
+        self.apply_all_ends_at(next_pos);
+        self.apply_all_starts_at(next_pos);
+        self.prev = next_pos;
+      }
     }
-
-    let next_pos = match (ns, ne) {
-      (Some(s), Some(e)) => s.min(e),
-      (Some(s), None) => s,
-      (None, Some(e)) => e,
-      (None, None) => unreachable!(),
-    };
-
-    // Emit segment [prev, next_pos) with current actives (before applying at
-    // next_pos).
-    if next_pos > self.prev {
-      let out = HighlightStack { pos: next_pos, highlights: self.snapshot_active() };
-
-      // Apply changes at next_pos for the following segment.
-      // Ends first, then starts (so a span ending and starting at pos behaves
-      // nicely).
-      self.apply_all_ends_at(next_pos);
-      self.apply_all_starts_at(next_pos);
-
-      self.prev = next_pos;
-      return Some(out);
-    }
-
-    // next_pos == prev: zero-length, just advance state and continue.
-    self.apply_all_ends_at(next_pos);
-    self.apply_all_starts_at(next_pos);
-    self.prev = next_pos;
-    self.next()
   }
 }
 
