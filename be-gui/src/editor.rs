@@ -260,7 +260,7 @@ impl EditorView {
         render.draw_text(&layout);
 
         if self.focused
-          && self.editor.cursor().line == i + min_line
+          && self.editor.cursor().line == i
           && self.editor.cursor_column_byte() + index >= prev
           && self.editor.cursor_column_byte() + index < pos
         {
