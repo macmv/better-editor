@@ -246,32 +246,42 @@ impl EditorView {
     let mut y = 0.0;
     loop {
       let Some(line) = self.editor.doc().rope.byte_slice(index..).raw_lines().next() else { break };
+      let max_index = index + line.byte_len();
 
-      /*
-      let highlights = self.editor.highlights(index..index + line.byte_len());
+      let highlights = self.editor.highlights(index..max_index);
       let mut x = 20.0;
+      let mut prev = index;
       for highlight in highlights {
-        let slice = self.editor.doc().rope.byte_slice(highlight.start..highlight.end);
+        let pos = if highlight.pos > max_index { max_index } else { highlight.pos };
+
+        let slice = self.editor.doc().rope.byte_slice(prev..pos);
         let layout = render.layout_text(&slice.to_string(), (x, y), render.theme().text);
         x += layout.bounds().width();
         render.draw_text(&layout);
-      }
-      */
-      let layout = render.layout_text(&line.to_string(), (20.0, y), render.theme().text);
-      render.draw_text(&layout);
 
-      if self.focused && self.editor.cursor().line == i + min_line {
-        let mode = match self.editor.mode() {
-          Mode::Normal | Mode::Visual => Some(CursorMode::Block),
-          Mode::Insert => Some(CursorMode::Line),
-          Mode::Replace => Some(CursorMode::Underline),
-          Mode::Command => None,
-        };
+        if self.focused
+          && self.editor.cursor().line == i + min_line
+          && self.editor.cursor_column_byte() + index >= prev
+          && self.editor.cursor_column_byte() + index < pos
+        {
+          let mode = match self.editor.mode() {
+            Mode::Normal | Mode::Visual => Some(CursorMode::Block),
+            Mode::Insert => Some(CursorMode::Line),
+            Mode::Replace => Some(CursorMode::Underline),
+            Mode::Command => None,
+          };
 
-        if let Some(mode) = mode {
-          let cursor = layout.cursor(self.editor.cursor_column_byte(), mode);
-          render.fill(&cursor, render.theme().text);
+          if let Some(mode) = mode {
+            let cursor = layout.cursor(self.editor.cursor_column_byte() + index - prev, mode);
+            render.fill(&cursor, render.theme().text);
+          }
         }
+
+        if highlight.pos > max_index {
+          break;
+        }
+
+        prev = highlight.pos;
       }
 
       y += line_height;
