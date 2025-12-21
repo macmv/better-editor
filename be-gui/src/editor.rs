@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use be_editor::EditorState;
 use be_input::{Action, Key, KeyStroke, Mode};
 use kurbo::{Axis, Point, Rect};
@@ -23,6 +25,8 @@ struct EditorView {
 
   scroll:  Point,
   focused: bool,
+
+  cached_layouts: HashMap<usize, TextLayout>,
 }
 
 struct Split {
@@ -168,9 +172,10 @@ impl Editor {
         active:  Side::Right,
         left:    Box::new(Pane::Content(Content::FileTree(FileTree::current_directory()))),
         right:   Box::new(Pane::Content(Content::Editor(EditorView {
-          editor:  EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n"),
-          scroll:  Point::ZERO,
-          focused: true,
+          editor:         EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n"),
+          scroll:         Point::ZERO,
+          focused:        true,
+          cached_layouts: HashMap::new(),
         }))),
       }),
     }
@@ -255,8 +260,10 @@ impl EditorView {
 
     let mut y = 0.0;
     loop {
-      let Some(mut layout) = self.layout_line(render, index) else { break };
+      let Some(layout) = self.layout_line(render, i, index) else { break };
       layout.set_pos(Point::new(20.0, y));
+
+      let layout = self.cached_layouts.get(&i).unwrap();
 
       if self.focused && self.editor.cursor().line == i {
         let mode = match self.editor.mode() {
@@ -332,7 +339,17 @@ impl EditorView {
     }
   }
 
-  fn layout_line(&mut self, render: &mut Render, index: usize) -> Option<TextLayout> {
+  fn layout_line(
+    &mut self,
+    render: &mut Render,
+    i: usize,
+    index: usize,
+  ) -> Option<&mut TextLayout> {
+    let entry = match self.cached_layouts.entry(i) {
+      std::collections::hash_map::Entry::Occupied(entry) => return Some(entry.into_mut()),
+      std::collections::hash_map::Entry::Vacant(entry) => entry,
+    };
+
     let line = self.editor.doc().rope.byte_slice(index..).raw_lines().next()?;
     let max_index = index + line.byte_len();
 
@@ -360,6 +377,6 @@ impl EditorView {
     let layout = layout.build(&line_string);
     let layout = render.build_layout(layout, Point::new(20.0, 0.0));
 
-    Some(layout)
+    Some(entry.insert(layout))
   }
 }
