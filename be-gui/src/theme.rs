@@ -32,10 +32,16 @@ impl Theme {
       background_lower:  oklch(0.20, 0.03, 288.0),
 
       syntax: SyntaxTheme::from([
-        ("keyword", oklch(0.8, 0.14, 288.0)),
-        ("property", oklch(0.8, 0.12, 342.0)),
+        ("constant", oklch(0.8, 0.13, 50.0)),
+        ("function", oklch(0.8, 0.12, 260.0)),
+        ("keyword", oklch(0.8, 0.14, 295.0)),
+        ("operator", oklch(0.6, 0.20, 300.0)),
+        ("property", oklch(0.8, 0.12, 340.0)),
         ("punctuation", oklch(0.5, 0.0, 0.0)),
         ("string", oklch(0.8, 0.14, 131.0)),
+        ("type", oklch(0.8, 0.12, 170.0)),
+        ("variable.builtin", oklch(0.8, 0.13, 50.0)),
+        ("variable.parameter", oklch(0.8, 0.14, 20.0)),
       ]),
     }
   }
