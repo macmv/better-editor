@@ -255,7 +255,11 @@ impl EditorView {
         let pos = if highlight.pos > max_index { max_index } else { highlight.pos };
 
         let slice = self.editor.doc().rope.byte_slice(prev..pos);
-        let layout = render.layout_text(&slice.to_string(), (x, y), render.theme().text);
+        let layout = render.layout_text(
+          &slice.to_string(),
+          (x, y),
+          render.theme().syntax.lookup(&highlight.highlights).unwrap_or(render.theme().text),
+        );
         x += layout.bounds().width();
         render.draw_text(&layout);
 
