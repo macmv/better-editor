@@ -45,8 +45,17 @@ impl SyntaxTheme {
   pub fn lookup(&self, keys: &[HighlightKey]) -> Option<Color> {
     for key in keys {
       if let HighlightKey::TreeSitter(key) = key {
-        if let Some(color) = self.entries.get(*key) {
-          return Some(*color);
+        let mut cur = *key;
+
+        loop {
+          if let Some(v) = self.entries.get(cur) {
+            return Some(*v);
+          }
+
+          match cur.rfind('.') {
+            Some(idx) => cur = &cur[..idx],
+            None => break,
+          }
         }
       }
     }
