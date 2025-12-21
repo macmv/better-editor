@@ -40,6 +40,14 @@ impl Cursor {
     Cursor { line: Line(0), column: Column(0), target_column: VisualColumn(0) };
 }
 
+impl Column {
+  pub const MAX: Column = Column(usize::MAX);
+}
+
+impl VisualColumn {
+  pub const MAX: VisualColumn = VisualColumn(usize::MAX);
+}
+
 impl Default for Cursor {
   fn default() -> Self { Cursor::START }
 }

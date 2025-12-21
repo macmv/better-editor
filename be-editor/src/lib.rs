@@ -110,10 +110,10 @@ impl EditorState {
 
   /// Move to column.
   ///
-  /// If `col` is `usize::MAX`, then the target column will also be set to
-  /// `usize::MAX`. Otherwise, the target column will be set to the visual
-  /// column of the cursor after clamping to the maximum column in the current
-  /// mode.
+  /// If `col` is `Column::MAX`, then the target column will also be set to
+  /// `VisualColumn::MAX`. Otherwise, the target column will be set to the
+  /// visual column of the cursor after clamping to the maximum column in the
+  /// current mode.
   fn move_to_col(&mut self, col: Column) {
     self.cursor.column = col.clamp(self.max_column());
     if col.0 == usize::MAX {
@@ -170,7 +170,7 @@ impl EditorState {
       Move::Up => self.move_line_rel(-1),
       Move::Down => self.move_line_rel(1),
 
-      Move::LineEnd => self.move_to_col(Column(usize::MAX)),
+      Move::LineEnd => self.move_to_col(Column::MAX),
       Move::LineStart => self.move_to_col(Column(0)),
 
       Move::FileStart => self.move_to_line(Line(0)),
