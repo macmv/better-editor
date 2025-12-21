@@ -68,6 +68,9 @@ impl EditorState {
     let Some(ft) = &self.filetype else { return };
 
     self.highligher = load_grammar(ft);
+    if let Some(highligher) = &mut self.highligher {
+      highligher.reparse(&self.doc);
+    }
   }
 
   pub(crate) fn offset_to_ts_point(&mut self, offset: usize) -> tree_sitter::Point {
