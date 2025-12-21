@@ -233,10 +233,30 @@ impl EditorView {
     let max_line = (((self.scroll.y + render.size().height) / line_height).ceil() as usize)
       .clamp(0, self.editor.doc().rope.lines().len());
 
+    let start = self.editor.doc().rope.byte_of_line(min_line);
+    let end = if max_line >= self.editor.doc().rope.line_len() {
+      self.editor.doc().rope.byte_len()
+    } else {
+      self.editor.doc().rope.byte_of_line(max_line + 1)
+    };
+
+    let mut index = start;
+    let mut i = min_line;
+
     let mut y = 0.0;
-    for (i, line) in
-      self.editor.doc().rope.line_slice(min_line as usize..max_line as usize).lines().enumerate()
-    {
+    loop {
+      let Some(line) = self.editor.doc().rope.byte_slice(index..).raw_lines().next() else { break };
+
+      /*
+      let highlights = self.editor.highlights(index..index + line.byte_len());
+      let mut x = 20.0;
+      for highlight in highlights {
+        let slice = self.editor.doc().rope.byte_slice(highlight.start..highlight.end);
+        let layout = render.layout_text(&slice.to_string(), (x, y), render.theme().text);
+        x += layout.bounds().width();
+        render.draw_text(&layout);
+      }
+      */
       let layout = render.layout_text(&line.to_string(), (20.0, y), render.theme().text);
       render.draw_text(&layout);
 
@@ -255,6 +275,11 @@ impl EditorView {
       }
 
       y += line_height;
+      i += 1;
+      index += line.byte_len();
+      if index >= end {
+        break;
+      }
     }
 
     if let Some(command) = self.editor.command() {
