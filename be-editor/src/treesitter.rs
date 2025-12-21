@@ -100,14 +100,31 @@ impl EditorState {
       });
     }
 
-    highlighter.tree =
-      Some(highlighter.parser.parse(&change.text, highlighter.tree.as_ref()).unwrap());
+    highlighter.tree = Some(
+      highlighter
+        .parser
+        .parse_with_options(
+          &mut |i, _| self.doc.rope.byte_slice(i..).chunks().next().unwrap_or(""),
+          highlighter.tree.as_ref(),
+          None,
+        )
+        .unwrap(),
+    );
   }
 }
 
 impl Highlighter {
   fn reparse(&mut self, doc: &Document) {
-    self.tree = Some(self.parser.parse(&doc.rope.to_string(), self.tree.as_ref()).unwrap());
+    self.tree = Some(
+      self
+        .parser
+        .parse_with_options(
+          &mut |i, _| doc.rope.byte_slice(i..).chunks().next().unwrap_or(""),
+          self.tree.as_ref(),
+          None,
+        )
+        .unwrap(),
+    );
   }
 
   pub(crate) fn highlights<'a>(
