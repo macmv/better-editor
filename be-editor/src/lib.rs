@@ -196,7 +196,14 @@ impl EditorState {
     }
   }
 
-  fn change(&mut self, change: Change) { self.doc.replace_range(change.range, &change.text); }
+  fn change(&mut self, change: Change) {
+    let start_pos = self.offset_to_ts_point(change.range.start);
+    let end_pos = self.offset_to_ts_point(change.range.end);
+
+    self.doc.replace_range(change.range.clone(), &change.text);
+
+    self.on_change_highlight(&change, start_pos, end_pos);
+  }
 
   fn run_command(&mut self) {
     let Some(command) = self.command.take() else { return };

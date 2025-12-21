@@ -3,7 +3,7 @@ use std::{ffi::CString, mem::ManuallyDrop, path::PathBuf};
 use be_doc::Document;
 use tree_sitter::{Language, Node, Parser, Query, QueryCursor, StreamingIterator, Tree};
 
-use crate::filetype::FileType;
+use crate::{Change, EditorState, filetype::FileType};
 
 pub struct Highlighter {
   parser:           Parser,
@@ -62,6 +62,36 @@ pub fn load_grammar(ft: &FileType) -> Option<Highlighter> {
   .unwrap();
 
   Some(Highlighter { parser, tree, highlights_query, language })
+}
+
+impl EditorState {
+  pub(crate) fn offset_to_ts_point(&mut self, offset: usize) -> tree_sitter::Point {
+    let row = self.doc.rope.line_of_byte(offset);
+    let column = offset - self.doc.rope.byte_of_line(row);
+
+    tree_sitter::Point { row, column }
+  }
+
+  pub(crate) fn on_change_highlight(
+    &mut self,
+    change: &Change,
+    start_position: tree_sitter::Point,
+    old_end_position: tree_sitter::Point,
+  ) {
+    let new_end_position = self.offset_to_ts_point(change.range.start + change.text.len());
+
+    let Some(highlighter) = &mut self.highligher else { return };
+    highlighter.tree.edit(&tree_sitter::InputEdit {
+      start_byte: change.range.start,
+      old_end_byte: change.range.end,
+      new_end_byte: change.range.start + change.text.len(),
+      start_position,
+      old_end_position,
+      new_end_position,
+    });
+
+    highlighter.tree = highlighter.parser.parse(&change.text, Some(&highlighter.tree)).unwrap();
+  }
 }
 
 impl Highlighter {
