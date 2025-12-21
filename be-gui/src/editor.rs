@@ -2,7 +2,7 @@ use be_editor::EditorState;
 use be_input::{Action, Key, KeyStroke, Mode};
 use kurbo::{Axis, Point, Rect};
 
-use crate::{CursorMode, Distance, Render, file_tree::FileTree};
+use crate::{CursorMode, Distance, Render, TextLayout, file_tree::FileTree};
 
 pub struct Editor {
   root: Pane,
@@ -130,7 +130,7 @@ impl Split {
 }
 
 impl Content {
-  fn draw(&self, render: &mut Render) {
+  fn draw(&mut self, render: &mut Render) {
     match self {
       Content::Editor(editor) => editor.draw(render),
       Content::FileTree(file_tree) => file_tree.draw(render),
@@ -230,7 +230,7 @@ enum Direction {
 impl EditorView {
   fn on_focus(&mut self, focus: bool) { self.focused = focus; }
 
-  pub fn draw(&self, render: &mut Render) {
+  pub fn draw(&mut self, render: &mut Render) {
     render.fill(
       &Rect::new(0.0, 0.0, render.size().width, render.size().height),
       render.theme().background,
@@ -255,32 +255,8 @@ impl EditorView {
 
     let mut y = 0.0;
     loop {
-      let Some(line) = self.editor.doc().rope.byte_slice(index..).raw_lines().next() else { break };
-      let max_index = index + line.byte_len();
-
-      let line_string = line.to_string();
-      let theme = &render.store.theme;
-      let mut layout =
-        render.store.text.layout_builder(&line_string, render.theme().text, render.scale());
-
-      let highlights = self.editor.highlights(index..max_index);
-      let mut prev = index;
-      for highlight in highlights {
-        let pos = if highlight.pos > max_index { max_index } else { highlight.pos };
-
-        if let Some(color) = theme.syntax.lookup(&highlight.highlights) {
-          layout.color_range(prev - index..pos - index, color);
-        }
-
-        if highlight.pos > max_index {
-          break;
-        }
-
-        prev = highlight.pos;
-      }
-
-      let layout = layout.build(&line_string);
-      let layout = render.build_layout(layout, Point::new(20.0, y));
+      let Some(mut layout) = self.layout_line(render, index) else { break };
+      layout.set_pos(Point::new(20.0, y));
 
       if self.focused && self.editor.cursor().line == i {
         let mode = match self.editor.mode() {
@@ -300,7 +276,7 @@ impl EditorView {
 
       y += line_height;
       i += 1;
-      index += line.byte_len();
+      index += self.editor.doc().rope.byte_slice(index..).raw_lines().next().unwrap().byte_len();
       if index >= end {
         break;
       }
@@ -354,5 +330,36 @@ impl EditorView {
       );
       render.draw_text(&layout);
     }
+  }
+
+  fn layout_line(&mut self, render: &mut Render, index: usize) -> Option<TextLayout> {
+    let line = self.editor.doc().rope.byte_slice(index..).raw_lines().next()?;
+    let max_index = index + line.byte_len();
+
+    let line_string = line.to_string();
+    let theme = &render.store.theme;
+    let mut layout =
+      render.store.text.layout_builder(&line_string, render.theme().text, render.scale());
+
+    let highlights = self.editor.highlights(index..max_index);
+    let mut prev = index;
+    for highlight in highlights {
+      let pos = if highlight.pos > max_index { max_index } else { highlight.pos };
+
+      if let Some(color) = theme.syntax.lookup(&highlight.highlights) {
+        layout.color_range(prev - index..pos - index, color);
+      }
+
+      if highlight.pos > max_index {
+        break;
+      }
+
+      prev = highlight.pos;
+    }
+
+    let layout = layout.build(&line_string);
+    let layout = render.build_layout(layout, Point::new(20.0, 0.0));
+
+    Some(layout)
   }
 }

@@ -379,6 +379,8 @@ enum EmojiLikeGlyph<'a> {
 const CURSOR_WIDTH: f64 = 2.0;
 
 impl TextLayout {
+  pub fn set_pos(&mut self, pos: Point) { self.origin = pos; }
+
   pub fn cursor(&self, index: usize, mode: CursorMode) -> Rect {
     let cursor = parley::Cursor::from_byte_index(&self.layout, index, parley::Affinity::Downstream);
     let rect = match cursor.visual_clusters(&self.layout) {
