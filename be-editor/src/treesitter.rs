@@ -7,7 +7,7 @@ use crate::{Change, EditorState, filetype::FileType};
 
 pub struct Highlighter {
   parser:           Parser,
-  tree:             Tree,
+  tree:             Option<Tree>,
   highlights_query: Query,
 
   // SAFETY: Drop last!
@@ -53,15 +53,13 @@ pub fn load_grammar(ft: &FileType) -> Option<Highlighter> {
   let mut parser = Parser::new();
   parser.set_language(&language.language).unwrap();
 
-  let tree = parser.parse("", None).unwrap();
-
   let highlights_query = Query::new(
     &language.language,
     &std::fs::read_to_string(grammar_path.join(&grammar.highlights[0])).unwrap(),
   )
   .unwrap();
 
-  Some(Highlighter { parser, tree, highlights_query, language })
+  Some(Highlighter { parser, tree: None, highlights_query, language })
 }
 
 impl EditorState {
@@ -81,29 +79,33 @@ impl EditorState {
     let new_end_position = self.offset_to_ts_point(change.range.start + change.text.len());
 
     let Some(highlighter) = &mut self.highligher else { return };
-    highlighter.tree.edit(&tree_sitter::InputEdit {
-      start_byte: change.range.start,
-      old_end_byte: change.range.end,
-      new_end_byte: change.range.start + change.text.len(),
-      start_position,
-      old_end_position,
-      new_end_position,
-    });
+    if let Some(tree) = &mut highlighter.tree {
+      tree.edit(&tree_sitter::InputEdit {
+        start_byte: change.range.start,
+        old_end_byte: change.range.end,
+        new_end_byte: change.range.start + change.text.len(),
+        start_position,
+        old_end_position,
+        new_end_position,
+      });
+    }
 
-    highlighter.tree = highlighter.parser.parse(&change.text, Some(&highlighter.tree)).unwrap();
+    highlighter.tree =
+      Some(highlighter.parser.parse(&change.text, highlighter.tree.as_ref()).unwrap());
   }
 }
 
 impl Highlighter {
   fn highlights(&self, doc: &Document) {
+    let Some(tree) = &self.tree else { return };
+
     let names = self.highlights_query.capture_names();
 
     let mut cursor = QueryCursor::new();
-    let mut captures =
-      cursor.captures(&self.highlights_query, self.tree.root_node(), |node: Node| {
-        let slice = doc.rope.byte_slice(node.byte_range());
-        slice.chunks().map(|c| c.as_bytes())
-      });
+    let mut captures = cursor.captures(&self.highlights_query, tree.root_node(), |node: Node| {
+      let slice = doc.rope.byte_slice(node.byte_range());
+      slice.chunks().map(|c| c.as_bytes())
+    });
 
     while let Some((m, i)) = captures.next() {
       let capture = m.captures[*i];
