@@ -27,6 +27,7 @@ struct EditorView {
   focused: bool,
 
   cached_layouts: HashMap<usize, TextLayout>,
+  cached_scale:   f64,
 }
 
 struct Split {
@@ -176,6 +177,7 @@ impl Editor {
           scroll:         Point::ZERO,
           focused:        true,
           cached_layouts: HashMap::new(),
+          cached_scale:   0.0,
         }))),
       }),
     }
@@ -236,6 +238,11 @@ impl EditorView {
   fn on_focus(&mut self, focus: bool) { self.focused = focus; }
 
   pub fn draw(&mut self, render: &mut Render) {
+    if self.cached_scale != render.scale() {
+      self.cached_layouts.clear();
+      self.cached_scale = render.scale();
+    }
+
     render.fill(
       &Rect::new(0.0, 0.0, render.size().width, render.size().height),
       render.theme().background,
