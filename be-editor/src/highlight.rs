@@ -60,10 +60,10 @@ struct MergeIterator<'a> {
   starts: BinaryHeap<Reverse<StartNode<'a>>>,
 
   // min-heap of active ends: (end_pos, key)
-  ends: BinaryHeap<Reverse<(usize, HighlightKey<'a>)>>,
+  ends: BinaryHeap<Reverse<(usize, (usize, HighlightKey<'a>))>>,
 
-  // active key multiset (refcounted)
-  active_counts: BTreeMap<HighlightKey<'a>, usize>,
+  // (length, active key) multiset (refcounted)
+  active_counts: BTreeMap<(usize, HighlightKey<'a>), usize>,
 
   prev:    usize,
   base:    usize,
@@ -97,6 +97,10 @@ impl<'a> Iterator for HighlightIter<'a> {
   }
 }
 
+impl<'a> Highlight<'a> {
+  fn key(&self) -> (usize, HighlightKey<'a>) { (self.end - self.start, self.key) }
+}
+
 impl<'a> MergeIterator<'a> {
   fn new(mut sources: Vec<HighlightIter<'a>>, base: usize) -> Self {
     let mut starts = BinaryHeap::new();
@@ -122,7 +126,7 @@ impl<'a> MergeIterator<'a> {
   }
 
   fn snapshot_active(&self) -> Vec<HighlightKey<'a>> {
-    self.active_counts.keys().cloned().collect()
+    self.active_counts.keys().map(|(_, k)| k.clone()).collect()
   }
 
   fn add_start(&mut self, highlight: Highlight<'a>) {
@@ -130,8 +134,8 @@ impl<'a> MergeIterator<'a> {
       return;
     }
 
-    *self.active_counts.entry(highlight.key).or_default() += 1;
-    self.ends.push(Reverse((highlight.end, highlight.key)));
+    *self.active_counts.entry(highlight.key()).or_default() += 1;
+    self.ends.push(Reverse((highlight.end, highlight.key())));
   }
 
   fn refill_src(&mut self, src: usize) {
@@ -247,6 +251,17 @@ mod tests {
     assert_eq!(
       iter.collect::<Vec<HighlightStack>>(),
       &[stack(1, ["long"]), stack(2, ["a", "long"]), stack(3, ["b", "long"]), stack(4, ["b"])],
+    );
+  }
+
+  #[test]
+  fn merge_sorts_shortest() {
+    let highlights: &[&[Highlight]] = &[&[hl(0..3, "long"), hl(1..2, "y"), hl(2..4, "z")]];
+    let iter = merge_iter(highlights);
+
+    assert_eq!(
+      iter.collect::<Vec<HighlightStack>>(),
+      &[stack(1, ["long"]), stack(2, ["y", "long"]), stack(3, ["z", "long"]), stack(4, ["z"])],
     );
   }
 }
