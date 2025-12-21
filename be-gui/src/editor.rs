@@ -40,7 +40,7 @@ enum Side {
 }
 
 impl Pane {
-  fn draw(&self, render: &mut Render) {
+  fn draw(&mut self, render: &mut Render) {
     match self {
       Pane::Content(content) => content.draw(render),
       Pane::Split(split) => split.draw(render),
@@ -70,12 +70,13 @@ impl Pane {
 }
 
 impl Split {
-  fn draw(&self, render: &mut Render) {
+  fn draw(&mut self, render: &mut Render) {
     render.split(
+      self,
       self.axis,
       Distance::Percent(self.percent),
-      |render| self.left.draw(render),
-      |render| self.right.draw(render),
+      |state, render| state.left.draw(render),
+      |state, render| state.right.draw(render),
     );
   }
 
@@ -215,7 +216,7 @@ impl Editor {
     Ok(())
   }
 
-  pub fn draw(&self, render: &mut Render) { self.root.draw(render); }
+  pub fn draw(&mut self, render: &mut Render) { self.root.draw(render); }
 }
 
 #[derive(Copy, Clone)]

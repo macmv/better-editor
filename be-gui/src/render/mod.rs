@@ -188,12 +188,13 @@ impl<'a> Render<'a> {
 
   pub fn theme(&self) -> &Theme { &self.store.theme }
 
-  pub fn split(
+  pub fn split<S>(
     &mut self,
+    state: &mut S,
     axis: Axis,
     distance: Distance,
-    left: impl FnOnce(&mut Render),
-    right: impl FnOnce(&mut Render),
+    left: impl FnOnce(&mut S, &mut Render),
+    right: impl FnOnce(&mut S, &mut Render),
   ) {
     let mut left_bounds = Rect::from_origin_size(Point::ZERO, self.size());
     let mut right_bounds = Rect::from_origin_size(Point::ZERO, self.size());
@@ -222,8 +223,8 @@ impl<'a> Render<'a> {
       }
     }
 
-    self.clipped(left_bounds, left);
-    self.clipped(right_bounds, right);
+    self.clipped(left_bounds, |render| left(state, render));
+    self.clipped(right_bounds, |render| right(state, render));
   }
 
   pub fn clipped(&mut self, mut rect: Rect, f: impl FnOnce(&mut Render)) {

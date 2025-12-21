@@ -28,15 +28,16 @@ enum TabContent {
 }
 
 impl State {
-  fn draw(&self, render: &mut Render) {
+  fn draw(&mut self, render: &mut Render) {
     render.split(
+      self,
       Axis::Horizontal,
       Distance::Pixels(-20.0),
-      |render| match &self.tabs[self.active].content {
+      |state, render| match &mut state.tabs[state.active].content {
         TabContent::Shell(shell) => shell.draw(render),
         TabContent::Editor(editor) => editor.draw(render),
       },
-      |render| self.draw_tabs(render),
+      |state, render| state.draw_tabs(render),
     );
   }
 
