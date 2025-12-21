@@ -32,10 +32,10 @@ impl Theme {
       background_lower:  oklch(0.20, 0.03, 288.0),
 
       syntax: SyntaxTheme::from([
-        ("punctuation", oklch(0.5, 0.0, 0.0)),
         ("keyword", oklch(0.8, 0.14, 288.0)),
-        ("string", oklch(0.8, 0.14, 131.0)),
         ("property", oklch(0.8, 0.12, 342.0)),
+        ("punctuation", oklch(0.5, 0.0, 0.0)),
+        ("string", oklch(0.8, 0.14, 131.0)),
       ]),
     }
   }
