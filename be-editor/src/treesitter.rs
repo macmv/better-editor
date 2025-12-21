@@ -1,9 +1,11 @@
 use std::{ffi::CString, mem::ManuallyDrop, path::PathBuf};
 
 use be_doc::Document;
-use tree_sitter::{Language, Node, Parser, Query, QueryCursor, StreamingIterator, Tree};
+use tree_sitter::{
+  Language, Node, Parser, Query, QueryCaptures, QueryCursor, StreamingIterator, TextProvider, Tree,
+};
 
-use crate::{Change, EditorState, filetype::FileType};
+use crate::{Change, EditorState, filetype::FileType, highlight::Highlight};
 
 pub struct Highlighter {
   parser:           Parser,
@@ -11,7 +13,7 @@ pub struct Highlighter {
   highlights_query: Query,
 
   // SAFETY: Drop last!
-  language: LoadedLanguage,
+  _language: LoadedLanguage,
 }
 
 #[derive(serde::Deserialize)]
@@ -58,7 +60,7 @@ pub fn load_grammar(ft: &FileType) -> Option<Highlighter> {
   )
   .unwrap();
 
-  Some(Highlighter { parser, tree: None, highlights_query, language })
+  Some(Highlighter { parser, tree: None, highlights_query, _language: language })
 }
 
 impl EditorState {
@@ -101,21 +103,55 @@ impl EditorState {
 }
 
 impl Highlighter {
-  fn highlights(&self, doc: &Document) {
-    let Some(tree) = &self.tree else { return };
+  fn reparse(&mut self, doc: &Document) {
+    self.tree = Some(self.parser.parse(&doc.rope.to_string(), self.tree.as_ref()).unwrap());
+  }
 
-    let names = self.highlights_query.capture_names();
+  fn highlights<'a>(&'a self, doc: &'a Document) -> Option<impl Iterator<Item = Highlight<'a>>> {
+    let Some(tree) = &self.tree else { return None };
 
     let mut cursor = QueryCursor::new();
-    let mut captures = cursor.captures(&self.highlights_query, tree.root_node(), |node: Node| {
-      let slice = doc.rope.byte_slice(node.byte_range());
-      slice.chunks().map(|c| c.as_bytes())
-    });
+    let captures = cursor.captures(&self.highlights_query, tree.root_node(), RopeProvider { doc });
+    let captures = unsafe { std::mem::transmute(captures) };
 
-    while let Some((m, i)) = captures.next() {
-      let capture = m.captures[*i];
-      println!("node: {}", names[capture.index as usize]);
-    }
+    Some(CapturesIter { query: &self.highlights_query, captures, _cursor: cursor })
+  }
+}
+
+struct RopeProvider<'a> {
+  doc: &'a Document,
+}
+
+impl<'a> TextProvider<&'a str> for RopeProvider<'a> {
+  type I = be_doc::crop::iter::Chunks<'a>;
+
+  fn text(&mut self, node: Node) -> Self::I {
+    let slice = self.doc.rope.byte_slice(node.byte_range());
+    slice.chunks()
+  }
+}
+
+struct CapturesIter<'a> {
+  query:    &'a Query,
+  captures: QueryCaptures<'a, 'a, RopeProvider<'a>, &'a str>,
+
+  // SAFETY: Drop last, `captures` borrows into this cursor.
+  _cursor: QueryCursor,
+}
+
+impl<'a> Iterator for CapturesIter<'a> {
+  type Item = Highlight<'a>;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    let Some((m, index)) = self.captures.next() else { return None };
+    let cap = m.captures[*index];
+
+    let start = cap.node.byte_range().start;
+    let end = cap.node.byte_range().end;
+
+    let name = self.query.capture_names().get(cap.index as usize).unwrap();
+
+    Some(Highlight { start, end, key: crate::HighlightKey::TreeSitter(name) })
   }
 }
 
@@ -219,12 +255,28 @@ fn repo(ft: &FileType) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
+  use crate::HighlightKey;
+
   use super::*;
 
   #[test]
   fn it_works() {
-    let highlighter = load_grammar(&FileType::Rust).unwrap();
+    let mut highlighter = load_grammar(&FileType::Rust).unwrap();
 
-    highlighter.highlights(&"fn main() {}".into());
+    let doc = "fn main() {}".into();
+    highlighter.reparse(&doc);
+    let highlights = highlighter.highlights(&doc).unwrap();
+
+    assert_eq!(
+      highlights.collect::<Vec<_>>(),
+      [
+        Highlight { start: 0, end: 2, key: HighlightKey::TreeSitter("keyword") },
+        Highlight { start: 3, end: 7, key: HighlightKey::TreeSitter("function") },
+        Highlight { start: 7, end: 8, key: HighlightKey::TreeSitter("punctuation.bracket") },
+        Highlight { start: 8, end: 9, key: HighlightKey::TreeSitter("punctuation.bracket") },
+        Highlight { start: 10, end: 11, key: HighlightKey::TreeSitter("punctuation.bracket") },
+        Highlight { start: 11, end: 12, key: HighlightKey::TreeSitter("punctuation.bracket") },
+      ]
+    );
   }
 }

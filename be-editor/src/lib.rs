@@ -8,8 +8,11 @@ use crate::{fs::OpenedFile, status::Status};
 
 mod filetype;
 mod fs;
+mod highlight;
 mod status;
 mod treesitter;
+
+pub use highlight::HighlightKey;
 
 #[derive(Default)]
 pub struct EditorState {

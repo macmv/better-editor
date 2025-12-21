@@ -5,6 +5,8 @@ use unicode_width::UnicodeWidthStr;
 
 mod fs;
 
+pub use crop;
+
 #[derive(Default)]
 pub struct Document {
   pub rope: Rope,
