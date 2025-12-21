@@ -1,4 +1,4 @@
-use std::{ops::Range, path::Path};
+use std::{collections::HashSet, ops::Range, path::Path};
 
 use be_doc::{Column, Cursor, Document, Line};
 use be_input::{Action, Edit, Mode, Move};
@@ -26,6 +26,7 @@ pub struct EditorState {
 
   filetype:   Option<filetype::FileType>,
   highligher: Option<treesitter::Highlighter>,
+  damages:    HashSet<Line>,
 }
 
 struct Change {
@@ -56,6 +57,7 @@ impl EditorState {
   pub fn command(&self) -> Option<&CommandState> { self.command.as_ref() }
   pub fn status(&self) -> Option<&Status> { self.status.as_ref() }
   pub fn file_type(&self) -> Option<filetype::FileType> { self.filetype }
+  pub fn take_damages(&mut self) -> impl Iterator<Item = Line> { self.damages.drain() }
 
   fn on_open_file(&mut self) {
     let Some(_) = self.file.as_ref() else { return };
@@ -214,6 +216,10 @@ impl EditorState {
   fn change(&mut self, change: Change) {
     let start_pos = self.offset_to_ts_point(change.range.start);
     let end_pos = self.offset_to_ts_point(change.range.end);
+
+    for line in start_pos.row..=end_pos.row {
+      self.damages.insert(Line(line));
+    }
 
     self.doc.replace_range(change.range.clone(), &change.text);
 

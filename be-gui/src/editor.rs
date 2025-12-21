@@ -243,6 +243,10 @@ impl EditorView {
       self.cached_scale = render.scale();
     }
 
+    for line in self.editor.take_damages() {
+      self.cached_layouts.remove(&line.as_usize());
+    }
+
     render.fill(
       &Rect::new(0.0, 0.0, render.size().width, render.size().height),
       render.theme().background,

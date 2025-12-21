@@ -20,15 +20,15 @@ pub struct Cursor {
 }
 
 /// A logical line, ie, lines from the start of the file.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Line(pub usize);
 
 /// A logical column, ie, graphemes from the start of the line.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Column(pub usize);
 
 /// A visual column, ie, counted in unicode-width from the start of the line.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VisualColumn(pub usize);
 
 impl From<&str> for Document {
