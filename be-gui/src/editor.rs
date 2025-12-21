@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use be_editor::EditorState;
 use be_input::{Action, Key, KeyStroke, Mode};
-use kurbo::{Axis, Point, Rect};
+use kurbo::{Axis, Point, Rect, Vec2};
 
 use crate::{CursorMode, Distance, Render, TextLayout, file_tree::FileTree};
 
@@ -260,9 +260,9 @@ impl EditorView {
 
     let mut y = 0.0;
     loop {
-      let Some(layout) = self.layout_line(render, i, index) else { break };
-      layout.set_pos(Point::new(20.0, y));
-
+      if self.layout_line(render, i, index).is_none() {
+        break;
+      };
       let layout = self.cached_layouts.get(&i).unwrap();
 
       if self.focused && self.editor.cursor().line == i {
@@ -274,12 +274,12 @@ impl EditorView {
         };
 
         if let Some(mode) = mode {
-          let cursor = layout.cursor(self.editor.cursor_column_byte(), mode);
+          let cursor = layout.cursor(self.editor.cursor_column_byte(), mode) + Vec2::new(20.0, y);
           render.fill(&cursor, render.theme().text);
         }
       }
 
-      render.draw_text(&layout);
+      render.draw_text(&layout, Point::new(20.0, y));
 
       y += line_height;
       i += 1;
@@ -300,13 +300,8 @@ impl EditorView {
         render.theme().background_raised,
       );
 
-      let layout = render.layout_text(
-        &command.text,
-        (20.0, render.size().height - line_height),
-        render.theme().text,
-      );
-
-      render.draw_text(&layout);
+      let layout = render.layout_text(&command.text, render.theme().text);
+      render.draw_text(&layout, (20.0, render.size().height - line_height));
 
       let cursor = layout.cursor(command.cursor as usize, CursorMode::Line);
       render.fill(&cursor, render.theme().text);
@@ -321,21 +316,13 @@ impl EditorView {
         render.theme().background_raised,
       );
 
-      let layout = render.layout_text(
-        &status.message,
-        (20.0, render.size().height - line_height),
-        render.theme().text,
-      );
-      render.draw_text(&layout);
+      let layout = render.layout_text(&status.message, render.theme().text);
+      render.draw_text(&layout, (20.0, render.size().height - line_height));
     }
 
     if let Some(ft) = self.editor.file_type() {
-      let layout = render.layout_text(
-        &format!("{ft}"),
-        (render.size().width - 50.0, render.size().height - line_height),
-        render.theme().text,
-      );
-      render.draw_text(&layout);
+      let layout = render.layout_text(&format!("{ft}"), render.theme().text);
+      render.draw_text(&layout, (render.size().width - 50.0, render.size().height - line_height));
     }
   }
 
@@ -375,7 +362,7 @@ impl EditorView {
     }
 
     let layout = layout.build(&line_string);
-    let layout = render.build_layout(layout, Point::new(20.0, 0.0));
+    let layout = render.build_layout(layout);
 
     Some(entry.insert(layout))
   }

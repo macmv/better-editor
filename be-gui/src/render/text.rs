@@ -1,6 +1,6 @@
 use std::{ops::Range, sync::Arc};
 
-use kurbo::{Affine, Point, Rect, Vec2};
+use kurbo::{Affine, Point, Rect, Size, Vec2};
 use peniko::{
   Blob, Fill, ImageBrush, ImageData,
   color::{AlphaColor, Srgb},
@@ -10,7 +10,6 @@ use skrifa::{
   GlyphId, MetadataProvider,
   bitmap::{self, BitmapFormat},
   color::ColorGlyph,
-  prelude::*,
   raw::TableProvider,
 };
 
@@ -31,7 +30,6 @@ pub struct FontMetrics {
 pub struct TextLayout {
   metrics: FontMetrics,
 
-  origin: Point,
   layout: parley::Layout<peniko::Brush>,
   scale:  f64,
 }
@@ -95,36 +93,27 @@ impl TextStore {
 }
 
 impl Render<'_> {
-  pub fn build_layout(
-    &mut self,
-    mut layout: parley::Layout<peniko::Brush>,
-    pos: impl Into<Point>,
-  ) -> TextLayout {
+  pub fn build_layout(&mut self, mut layout: parley::Layout<peniko::Brush>) -> TextLayout {
     layout.break_all_lines(None);
     layout.align(None, parley::Alignment::Start, parley::AlignmentOptions::default());
 
-    TextLayout {
-      metrics: self.store.text.font_metrics.clone(),
-      origin: pos.into(),
-      layout,
-      scale: self.scale,
-    }
+    TextLayout { metrics: self.store.text.font_metrics.clone(), layout, scale: self.scale }
   }
 
-  pub fn layout_text(&mut self, text: &str, pos: impl Into<Point>, color: Color) -> TextLayout {
+  pub fn layout_text(&mut self, text: &str, color: Color) -> TextLayout {
     let builder = self.store.text.layout_builder(text, color, self.scale);
 
     let built = builder.build(text);
-    self.build_layout(built, pos)
+    self.build_layout(built)
   }
 
-  pub fn draw_text(&mut self, text: &TextLayout) {
+  pub fn draw_text(&mut self, text: &TextLayout, pos: impl Into<Point>) {
     let mut rect =
       Rect::new(0.0, 0.0, f64::from(text.layout.full_width()), f64::from(text.layout.height()));
 
     let offset = self.offset();
 
-    let transform = Affine::translate((text.origin.to_vec2() + offset) * self.scale);
+    let transform = Affine::translate((pos.into().to_vec2() + offset) * self.scale);
 
     for line in text.layout.lines() {
       for item in line.items() {
@@ -199,7 +188,7 @@ impl Render<'_> {
         if let Some(color) = color_collection.get(glyph_id) {
           Some((EmojiLikeGlyph::Colr(color), glyph))
         } else {
-          let bitmap = bitmaps.glyph_for_size(Size::new(font_size), glyph_id)?;
+          let bitmap = bitmaps.glyph_for_size(skrifa::instance::Size::new(font_size), glyph_id)?;
           Some((EmojiLikeGlyph::Bitmap(bitmap), glyph))
         }
       }) else {
@@ -379,8 +368,6 @@ enum EmojiLikeGlyph<'a> {
 const CURSOR_WIDTH: f64 = 2.0;
 
 impl TextLayout {
-  pub fn set_pos(&mut self, pos: Point) { self.origin = pos; }
-
   pub fn cursor(&self, index: usize, mode: CursorMode) -> Rect {
     let cursor = parley::Cursor::from_byte_index(&self.layout, index, parley::Affinity::Downstream);
     let rect = match cursor.visual_clusters(&self.layout) {
@@ -440,12 +427,13 @@ impl TextLayout {
       ),
     };
 
-    rect.scale_from_origin(1.0 / self.scale) + self.origin.to_vec2()
+    rect.scale_from_origin(1.0 / self.scale)
   }
 
-  pub fn bounds(&self) -> Rect {
-    let rect =
-      Rect::new(0.0, 0.0, f64::from(self.layout.full_width()), f64::from(self.layout.height()));
-    rect.scale_from_origin(1.0 / self.scale) + self.origin.to_vec2()
+  pub fn size(&self) -> Size {
+    Size::new(
+      f64::from(self.layout.full_width()) / self.scale,
+      f64::from(self.layout.height()) / self.scale,
+    )
   }
 }

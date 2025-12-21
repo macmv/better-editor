@@ -66,22 +66,22 @@ impl State {
 
     let mut x = 10.0;
     for (i, tab) in self.tabs.iter().enumerate() {
-      let layout = render.layout_text(&tab.title, (x, 0.0), render.theme().text);
+      let layout = render.layout_text(&tab.title, render.theme().text);
 
       if i == self.active {
         render.fill(
           &Rect::new(
-            layout.bounds().x0 - 5.0,
+            x - 5.0,
             render.size().height - 20.0,
-            layout.bounds().x1 + 5.0,
+            x + layout.size().width + 5.0,
             render.size().height,
           ),
           render.theme().background,
         );
       }
 
-      x += layout.bounds().width();
-      render.draw_text(&layout);
+      render.draw_text(&layout, (x, 0.0));
+      x += layout.size().width;
 
       x += 5.0;
       render.stroke(

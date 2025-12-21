@@ -163,12 +163,8 @@ impl TreeDraw {
       );
     }
 
-    let text = render.layout_text(
-      &format!(" {}", dir.name()),
-      self.pos() + Vec2::new(20.0, 0.0),
-      render.theme().text,
-    );
-    render.draw_text(&text);
+    let text = render.layout_text(&format!(" {}", dir.name()), render.theme().text);
+    render.draw_text(&text, self.pos() + Vec2::new(20.0, 0.0));
 
     if dir.expanded
       && let Some(items) = &dir.items
@@ -193,8 +189,7 @@ impl TreeDraw {
       );
     }
 
-    let text =
-      render.layout_text(&file.name, self.pos() + Vec2::new(20.0, 0.0), render.theme().text);
-    render.draw_text(&text);
+    let text = render.layout_text(&file.name, render.theme().text);
+    render.draw_text(&text, self.pos() + Vec2::new(20.0, 0.0));
   }
 }
