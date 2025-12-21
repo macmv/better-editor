@@ -146,7 +146,7 @@ impl Content {
   fn perform_action(&mut self, action: Action) {
     match self {
       Content::Editor(editor) => editor.editor.perform_action(action),
-      Content::FileTree(_) => {}
+      Content::FileTree(file_tree) => file_tree.perform_action(action),
     }
   }
 

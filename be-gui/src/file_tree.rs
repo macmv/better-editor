@@ -3,6 +3,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
+use be_input::{Action, Move};
 use kurbo::{Point, Rect, Vec2};
 
 use crate::Render;
@@ -67,12 +68,34 @@ impl FileTree {
 
     FileTree { tree, focused: false, active: 0 }
   }
+
+  pub fn perform_action(&mut self, action: Action) {
+    match action {
+      Action::Move { count: _, m } => match m {
+        Move::Up => self.active = self.active.saturating_sub(1),
+        Move::Down => {
+          self.active = self.active.saturating_add(1).min(self.tree.len_visible().saturating_sub(1))
+        }
+        _ => (),
+      },
+
+      _ => {}
+    }
+  }
 }
 
 impl Directory {
   fn new(path: PathBuf) -> Directory { Directory { path, items: None, expanded: false } }
 
   fn name(&self) -> Cow<'_, str> { self.path.file_name().unwrap().to_string_lossy() }
+
+  fn len_visible(&self) -> usize {
+    if self.expanded {
+      self.items.as_ref().map(|i| i.iter().map(|i| i.visible_len()).sum::<usize>()).unwrap_or(0) + 1
+    } else {
+      1
+    }
+  }
 
   fn expand(&mut self) {
     self.expanded = true;
@@ -98,6 +121,15 @@ impl Directory {
     items.sort_unstable();
 
     self.items = Some(items);
+  }
+}
+
+impl Item {
+  fn visible_len(&self) -> usize {
+    match self {
+      Item::Directory(d) => d.len_visible(),
+      Item::File(_) => 1,
+    }
   }
 }
 
