@@ -1,4 +1,4 @@
-use std::{ffi::CString, mem::ManuallyDrop, path::PathBuf};
+use std::{ffi::CString, mem::ManuallyDrop, ops::Range, path::PathBuf};
 
 use be_doc::Document;
 use tree_sitter::{
@@ -110,10 +110,15 @@ impl Highlighter {
     self.tree = Some(self.parser.parse(&doc.rope.to_string(), self.tree.as_ref()).unwrap());
   }
 
-  pub(crate) fn highlights<'a>(&'a self, doc: &'a Document) -> Option<CapturesIter<'a>> {
+  pub(crate) fn highlights<'a>(
+    &'a self,
+    doc: &'a Document,
+    range: Range<usize>,
+  ) -> Option<CapturesIter<'a>> {
     let Some(tree) = &self.tree else { return None };
 
     let mut cursor = QueryCursor::new();
+    cursor.set_byte_range(range);
     let captures = cursor.captures(&self.highlights_query, tree.root_node(), RopeProvider { doc });
     let captures = unsafe { std::mem::transmute(captures) };
 
@@ -268,7 +273,7 @@ mod tests {
 
     let doc = "fn main() {}".into();
     highlighter.reparse(&doc);
-    let highlights = highlighter.highlights(&doc).unwrap();
+    let highlights = highlighter.highlights(&doc, 0..doc.rope.byte_len()).unwrap();
 
     assert_eq!(
       highlights.collect::<Vec<_>>(),

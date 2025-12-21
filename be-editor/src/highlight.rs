@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use crate::{EditorState, treesitter::CapturesIter};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -22,11 +24,11 @@ struct MergeIterator<'a> {
 }
 
 impl EditorState {
-  pub fn highlights(&self) -> impl Iterator<Item = Highlight<'_>> {
+  pub fn highlights(&self, range: Range<usize>) -> impl Iterator<Item = Highlight<'_>> {
     let mut iterators = vec![];
 
     if let Some(highlighter) = &self.highligher
-      && let Some(highlights) = highlighter.highlights(&self.doc)
+      && let Some(highlights) = highlighter.highlights(&self.doc, range)
     {
       iterators.push(HighlightIter::TreeSitter(highlights));
     }
