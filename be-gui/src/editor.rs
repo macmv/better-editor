@@ -235,7 +235,7 @@ impl EditorView {
       render.theme().background,
     );
 
-    let line_height = render.font_metrics().line_height;
+    let line_height = render.store.text.font_metrics().line_height;
 
     let min_line = ((self.scroll.y / line_height).floor() as usize)
       .clamp(0, self.editor.doc().rope.lines().len());
@@ -258,11 +258,9 @@ impl EditorView {
       let max_index = index + line.byte_len();
 
       let line_string = line.to_string();
-      // TODO
-      let theme = unsafe {
-        std::mem::transmute::<&crate::theme::Theme, &crate::theme::Theme>(render.theme())
-      };
-      let mut layout = render.layout_builder(&line_string, render.theme().text);
+      let theme = &render.store.theme;
+      let mut layout =
+        render.store.text.layout_builder(&line_string, render.theme().text, render.scale());
 
       let highlights = self.editor.highlights(index..max_index);
       let mut prev = index;

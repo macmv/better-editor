@@ -14,7 +14,13 @@ use skrifa::{
   raw::TableProvider,
 };
 
-use crate::{Color, CursorMode, Render, encode_color, render::RenderStore};
+use crate::{Color, CursorMode, Render, encode_color};
+
+pub struct TextStore {
+  font:         parley::FontContext,
+  layout:       parley::LayoutContext<peniko::Brush>,
+  font_metrics: FontMetrics,
+}
 
 #[derive(Clone, Default)]
 pub struct FontMetrics {
@@ -34,8 +40,23 @@ pub struct LayoutBuilder<'a> {
   builder: parley::RangedBuilder<'a, peniko::Brush>,
 }
 
-impl RenderStore {
-  pub fn update_metrics(&mut self) {
+impl TextStore {
+  pub fn new() -> Self {
+    let mut store = TextStore {
+      font:         parley::FontContext::new(),
+      layout:       parley::LayoutContext::new(),
+      font_metrics: FontMetrics::default(),
+    };
+
+    store.update_metrics();
+    store
+  }
+}
+
+impl TextStore {
+  pub fn font_metrics(&self) -> &FontMetrics { &self.font_metrics }
+
+  fn update_metrics(&mut self) {
     const TEXT: &str = " ";
     let mut builder = self.layout.ranged_builder(&mut self.font, TEXT, 1.0, false);
     builder.push_default(parley::StyleProperty::FontSize(16.0));
@@ -56,19 +77,24 @@ impl RenderStore {
     self.font_metrics.line_height = f64::from(metrics.line_height);
     self.font_metrics.character_width = f64::from(glyph_run.run().advance());
   }
-}
 
-impl Render<'_> {
-  pub fn layout_builder<'a>(&'a mut self, text: &'a str, color: Color) -> LayoutBuilder<'a> {
-    let mut builder = self.store.layout.ranged_builder(&mut self.store.font, text, 1.0, false);
+  pub fn layout_builder<'a>(
+    &'a mut self,
+    text: &'a str,
+    color: Color,
+    scale: f64,
+  ) -> LayoutBuilder<'a> {
+    let mut builder = self.layout.ranged_builder(&mut self.font, text, 1.0, false);
     builder.push_default(parley::StyleProperty::Brush(encode_color(color).into()));
-    builder.push_default(parley::StyleProperty::FontSize(16.0 * self.scale as f32));
+    builder.push_default(parley::StyleProperty::FontSize(16.0 * scale as f32));
     builder
       .push_default(parley::StyleProperty::FontStack(parley::FontStack::Source("Iosevka".into())));
 
     LayoutBuilder { builder }
   }
+}
 
+impl Render<'_> {
   pub fn build_layout(
     &mut self,
     mut layout: parley::Layout<peniko::Brush>,
@@ -78,7 +104,7 @@ impl Render<'_> {
     layout.align(None, parley::Alignment::Start, parley::AlignmentOptions::default());
 
     TextLayout {
-      metrics: self.store.font_metrics.clone(),
+      metrics: self.store.text.font_metrics.clone(),
       origin: pos.into(),
       layout,
       scale: self.scale,
@@ -86,7 +112,7 @@ impl Render<'_> {
   }
 
   pub fn layout_text(&mut self, text: &str, pos: impl Into<Point>, color: Color) -> TextLayout {
-    let builder = self.layout_builder(text, color);
+    let builder = self.store.text.layout_builder(text, color, self.scale);
 
     let built = builder.build(text);
     self.build_layout(built, pos)

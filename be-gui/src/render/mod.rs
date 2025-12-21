@@ -1,7 +1,7 @@
 use kurbo::{Affine, Axis, Point, Rect, Shape, Size, Stroke, Vec2};
 use peniko::color::{AlphaColor, Oklab, Oklch, Srgb};
 
-use crate::{render::text::FontMetrics, theme::Theme};
+use crate::{render::text::TextStore, theme::Theme};
 
 mod blitter;
 mod text;
@@ -9,18 +9,16 @@ mod window;
 
 pub use text::TextLayout;
 
-struct RenderStore {
-  font:         parley::FontContext,
-  layout:       parley::LayoutContext<peniko::Brush>,
-  font_metrics: FontMetrics,
+pub struct RenderStore {
+  pub text:  TextStore,
+  pub theme: Theme,
 
-  theme:  Theme,
   render: vello::Renderer,
 }
 
 pub struct Render<'a> {
-  store: &'a mut RenderStore,
-  scene: vello::Scene,
+  pub store: &'a mut RenderStore,
+  scene:     vello::Scene,
 
   scale: f64,
   size:  Size,
@@ -74,19 +72,15 @@ pub fn run() {
       state: super::State::default(),
 
       store: RenderStore {
-        font:         parley::FontContext::new(),
-        layout:       parley::LayoutContext::new(),
-        render:       vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),
-        font_metrics: FontMetrics::default(),
-        theme:        Theme::default_theme(),
+        text:   TextStore::new(),
+        render: vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),
+        theme:  Theme::default_theme(),
       },
 
       texture,
       texture_view,
       blitter: blitter::TextureBlitterConvert::new(&device, surface.format),
     };
-
-    app.store.update_metrics();
 
     if let Some(path) = std::env::args().nth(1) {
       app.state.open(std::path::Path::new(&path));
@@ -180,14 +174,19 @@ impl Distance {
   }
 }
 
+impl RenderStore {
+  pub fn theme(&self) -> &Theme { &self.theme }
+}
+
 impl<'a> Render<'a> {
   pub fn size(&self) -> Size {
     if let Some(top) = self.stack.last() { top.size() } else { self.size }
   }
 
-  pub fn theme(&self) -> &Theme { &self.store.theme }
+  /// TODO: Don't expose this.
+  pub(crate) fn scale(&self) -> f64 { self.scale }
 
-  pub fn font_metrics(&self) -> &FontMetrics { &self.store.font_metrics }
+  pub fn theme(&self) -> &Theme { &self.store.theme }
 
   pub fn split(
     &mut self,
