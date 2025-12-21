@@ -61,6 +61,7 @@ impl EditorState {
     self.move_to_line(Line(0));
 
     self.detect_filetype();
+    self.on_open_file_highlight();
   }
 
   pub fn move_line_rel(&mut self, dist: i32) { self.move_to_line(self.cursor.line + dist); }

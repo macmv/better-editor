@@ -63,6 +63,12 @@ pub fn load_grammar(ft: &FileType) -> Option<Highlighter> {
 }
 
 impl EditorState {
+  pub(crate) fn on_open_file_highlight(&mut self) {
+    let Some(ft) = &self.filetype else { return };
+
+    self.highligher = load_grammar(ft);
+  }
+
   pub(crate) fn offset_to_ts_point(&mut self, offset: usize) -> tree_sitter::Point {
     let row = self.doc.rope.line_of_byte(offset);
     let column = offset - self.doc.rope.byte_of_line(row);
