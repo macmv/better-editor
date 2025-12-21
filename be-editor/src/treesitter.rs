@@ -107,7 +107,7 @@ impl Highlighter {
     self.tree = Some(self.parser.parse(&doc.rope.to_string(), self.tree.as_ref()).unwrap());
   }
 
-  fn highlights<'a>(&'a self, doc: &'a Document) -> Option<impl Iterator<Item = Highlight<'a>>> {
+  pub(crate) fn highlights<'a>(&'a self, doc: &'a Document) -> Option<CapturesIter<'a>> {
     let Some(tree) = &self.tree else { return None };
 
     let mut cursor = QueryCursor::new();
@@ -131,7 +131,7 @@ impl<'a> TextProvider<&'a str> for RopeProvider<'a> {
   }
 }
 
-struct CapturesIter<'a> {
+pub(crate) struct CapturesIter<'a> {
   query:    &'a Query,
   captures: QueryCaptures<'a, 'a, RopeProvider<'a>, &'a str>,
 
