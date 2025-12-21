@@ -257,37 +257,20 @@ impl EditorView {
       let Some(line) = self.editor.doc().rope.byte_slice(index..).raw_lines().next() else { break };
       let max_index = index + line.byte_len();
 
+      let line_string = line.to_string();
+      // TODO
+      let theme = unsafe {
+        std::mem::transmute::<&crate::theme::Theme, &crate::theme::Theme>(render.theme())
+      };
+      let mut layout = render.layout_builder(&line_string, render.theme().text);
+
       let highlights = self.editor.highlights(index..max_index);
-      let mut x = 20.0;
       let mut prev = index;
       for highlight in highlights {
         let pos = if highlight.pos > max_index { max_index } else { highlight.pos };
 
-        let slice = self.editor.doc().rope.byte_slice(prev..pos);
-        let layout = render.layout_text(
-          &slice.to_string(),
-          (x, y),
-          render.theme().syntax.lookup(&highlight.highlights).unwrap_or(render.theme().text),
-        );
-        x += layout.bounds().width();
-        render.draw_text(&layout);
-
-        if self.focused
-          && self.editor.cursor().line == i
-          && self.editor.cursor_column_byte() + index >= prev
-          && self.editor.cursor_column_byte() + index < pos
-        {
-          let mode = match self.editor.mode() {
-            Mode::Normal | Mode::Visual => Some(CursorMode::Block),
-            Mode::Insert => Some(CursorMode::Line),
-            Mode::Replace => Some(CursorMode::Underline),
-            Mode::Command => None,
-          };
-
-          if let Some(mode) = mode {
-            let cursor = layout.cursor(self.editor.cursor_column_byte() + index - prev, mode);
-            render.fill(&cursor, render.theme().text);
-          }
+        if let Some(color) = theme.syntax.lookup(&highlight.highlights) {
+          layout.color_range(prev - index..pos - index, color);
         }
 
         if highlight.pos > max_index {
@@ -296,6 +279,25 @@ impl EditorView {
 
         prev = highlight.pos;
       }
+
+      let layout = layout.build(&line_string);
+      let layout = render.build_layout(layout, Point::new(20.0, y));
+
+      if self.focused && self.editor.cursor().line == i {
+        let mode = match self.editor.mode() {
+          Mode::Normal | Mode::Visual => Some(CursorMode::Block),
+          Mode::Insert => Some(CursorMode::Line),
+          Mode::Replace => Some(CursorMode::Underline),
+          Mode::Command => None,
+        };
+
+        if let Some(mode) = mode {
+          let cursor = layout.cursor(self.editor.cursor_column_byte(), mode);
+          render.fill(&cursor, render.theme().text);
+        }
+      }
+
+      render.draw_text(&layout);
 
       y += line_height;
       i += 1;

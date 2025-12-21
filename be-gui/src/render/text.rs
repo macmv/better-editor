@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{ops::Range, sync::Arc};
 
 use kurbo::{Affine, Point, Rect, Vec2};
 use peniko::{
@@ -30,6 +30,10 @@ pub struct TextLayout {
   scale:  f64,
 }
 
+pub struct LayoutBuilder<'a> {
+  builder: parley::RangedBuilder<'a, peniko::Brush>,
+}
+
 impl RenderStore {
   pub fn update_metrics(&mut self) {
     const TEXT: &str = " ";
@@ -55,14 +59,21 @@ impl RenderStore {
 }
 
 impl Render<'_> {
-  pub fn layout_text(&mut self, text: &str, pos: impl Into<Point>, color: Color) -> TextLayout {
-    let mut builder = self.store.layout.ranged_builder(&mut self.store.font, &text, 1.0, false);
+  pub fn layout_builder<'a>(&'a mut self, text: &'a str, color: Color) -> LayoutBuilder<'a> {
+    let mut builder = self.store.layout.ranged_builder(&mut self.store.font, text, 1.0, false);
     builder.push_default(parley::StyleProperty::Brush(encode_color(color).into()));
     builder.push_default(parley::StyleProperty::FontSize(16.0 * self.scale as f32));
     builder
       .push_default(parley::StyleProperty::FontStack(parley::FontStack::Source("Iosevka".into())));
-    let mut layout = builder.build(&text);
 
+    LayoutBuilder { builder }
+  }
+
+  pub fn build_layout(
+    &mut self,
+    mut layout: parley::Layout<peniko::Brush>,
+    pos: impl Into<Point>,
+  ) -> TextLayout {
     layout.break_all_lines(None);
     layout.align(None, parley::Alignment::Start, parley::AlignmentOptions::default());
 
@@ -72,6 +83,13 @@ impl Render<'_> {
       layout,
       scale: self.scale,
     }
+  }
+
+  pub fn layout_text(&mut self, text: &str, pos: impl Into<Point>, color: Color) -> TextLayout {
+    let builder = self.layout_builder(text, color);
+
+    let built = builder.build(text);
+    self.build_layout(built, pos)
   }
 
   pub fn draw_text(&mut self, text: &TextLayout) {
@@ -315,6 +333,14 @@ impl Render<'_> {
     }
     */
   }
+}
+
+impl LayoutBuilder<'_> {
+  pub fn color_range(&mut self, range: Range<usize>, color: Color) {
+    self.builder.push(parley::StyleProperty::Brush(encode_color(color).into()), range);
+  }
+
+  pub fn build(self, text: &str) -> parley::Layout<peniko::Brush> { self.builder.build(text) }
 }
 
 enum EmojiLikeGlyph<'a> {
