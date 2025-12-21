@@ -40,6 +40,13 @@ impl State {
     );
   }
 
+  fn open(&mut self, path: &std::path::Path) {
+    match &mut self.tabs[self.active].content {
+      TabContent::Shell(_) => {}
+      TabContent::Editor(editor) => editor.open(path),
+    }
+  }
+
   fn on_key(&mut self, key: KeyStroke) {
     self.keys.push(key);
 

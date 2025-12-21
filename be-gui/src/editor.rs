@@ -175,6 +175,15 @@ impl Editor {
     }
   }
 
+  pub fn open(&mut self, path: &std::path::Path) {
+    match self.root.active_mut() {
+      Content::Editor(editor) => {
+        let _ = editor.editor.open(path);
+      }
+      Content::FileTree(_) => {}
+    }
+  }
+
   pub fn on_key(&mut self, keys: &[KeyStroke]) -> Result<(), be_input::ActionError> {
     if keys.get(0).is_some_and(|k| k.control && k.key == 'w') {
       if keys.len() == 1 {

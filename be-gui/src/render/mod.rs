@@ -88,6 +88,10 @@ pub fn run() {
 
     app.store.update_metrics();
 
+    if let Some(path) = std::env::args().nth(1) {
+      app.state.open(std::path::Path::new(&path));
+    }
+
     app
   });
 }
