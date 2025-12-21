@@ -23,7 +23,6 @@ struct TreeSitterSpec {
 struct GrammarSpec {
   name:       String,
   highlights: Vec<String>,
-  injections: Vec<String>,
 }
 
 struct LoadedLanguage {
