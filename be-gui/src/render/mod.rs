@@ -268,7 +268,7 @@ impl<'a> Render<'a> {
   }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum CursorMode {
   Line,
   Block,
