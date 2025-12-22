@@ -269,7 +269,7 @@ impl EditorView {
     let mut index = start;
     let mut i = min_line;
 
-    let mut y = 0.0;
+    let mut y = -(self.scroll.y % line_height);
     loop {
       if self.layout_line(render, i, index).is_none() {
         break;
