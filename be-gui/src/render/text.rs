@@ -377,7 +377,15 @@ impl TextLayout {
 
         let width = match mode {
           CursorMode::Line => CURSOR_WIDTH,
-          CursorMode::Block | CursorMode::Underline => cluster.advance() as f64,
+          CursorMode::Block | CursorMode::Underline => {
+            // The advance is zero when the cursor is on a newline (ie, it's on the last
+            // character of the line).
+            if cluster.advance() == 0.0 {
+              self.metrics.character_width * self.scale
+            } else {
+              cluster.advance() as f64
+            }
+          }
         };
 
         let x = cluster.visual_offset().unwrap_or_default() as f64;
