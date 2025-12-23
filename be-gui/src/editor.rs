@@ -302,7 +302,8 @@ impl EditorView {
     let mut index = start;
     let mut i = min_line;
 
-    let mut y = -(self.scroll.y % line_height);
+    let start_y = -(self.scroll.y % line_height);
+    let mut y = start_y;
     let mut indent_guides = IndentGuides::new(y);
     loop {
       if self.layout_line(render, i, index).is_none() {
@@ -312,20 +313,6 @@ impl EditorView {
         .visit(self.editor.doc().rope.byte_slice(index..).raw_lines().next().unwrap(), render);
 
       let layout = self.cached_layouts.get(&i).unwrap();
-
-      if self.focused && self.editor.cursor().line == i {
-        let mode = match self.editor.mode() {
-          Mode::Normal | Mode::Visual => Some(CursorMode::Block),
-          Mode::Insert => Some(CursorMode::Line),
-          Mode::Replace => Some(CursorMode::Underline),
-          Mode::Command => None,
-        };
-
-        if let Some(mode) = mode {
-          let cursor = layout.cursor(self.editor.cursor_column_byte(), mode) + Vec2::new(20.0, y);
-          render.fill(&cursor, render.theme().text);
-        }
-      }
 
       render.draw_text(&layout, Point::new(20.0, y));
 
@@ -338,6 +325,24 @@ impl EditorView {
     }
 
     indent_guides.finish(render);
+
+    if self.focused {
+      let mode = match self.editor.mode() {
+        Mode::Normal | Mode::Visual => Some(CursorMode::Block),
+        Mode::Insert => Some(CursorMode::Line),
+        Mode::Replace => Some(CursorMode::Underline),
+        Mode::Command => None,
+      };
+
+      if let Some(mode) = mode {
+        let line = self.editor.cursor().line.as_usize();
+        let layout = &self.cached_layouts[&line];
+
+        let cursor = layout.cursor(self.editor.cursor_column_byte(), mode)
+          + Vec2::new(20.0, start_y + (line - min_line) as f64 * line_height);
+        render.fill(&cursor, render.theme().text);
+      }
+    }
 
     if let Some(command) = self.editor.command() {
       render.fill(
