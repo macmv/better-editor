@@ -244,6 +244,10 @@ impl EditorView {
       self.cached_scale = render.scale();
     }
 
+    if self.editor.take_damage_all() {
+      self.cached_layouts.clear();
+    }
+
     for line in self.editor.take_damages() {
       self.cached_layouts.remove(&line.as_usize());
     }

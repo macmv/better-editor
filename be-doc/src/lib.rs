@@ -106,6 +106,8 @@ impl Document {
     offset..offset + count
   }
 
+  pub fn range(&self, range: Range<usize>) -> RopeSlice<'_> { self.rope.byte_slice(range) }
+
   pub fn replace_range(&mut self, range: Range<usize>, text: &str) {
     self.rope.replace(range, text);
   }

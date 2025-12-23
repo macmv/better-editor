@@ -27,6 +27,7 @@ pub struct EditorState {
   filetype:   Option<filetype::FileType>,
   highligher: Option<treesitter::Highlighter>,
   damages:    HashSet<Line>,
+  damage_all: bool,
 }
 
 struct Change {
@@ -57,6 +58,7 @@ impl EditorState {
   pub fn command(&self) -> Option<&CommandState> { self.command.as_ref() }
   pub fn status(&self) -> Option<&Status> { self.status.as_ref() }
   pub fn file_type(&self) -> Option<filetype::FileType> { self.filetype }
+  pub fn take_damage_all(&mut self) -> bool { std::mem::take(&mut self.damage_all) }
   pub fn take_damages(&mut self) -> impl Iterator<Item = Line> { self.damages.drain() }
 
   fn on_open_file(&mut self) {
@@ -238,6 +240,11 @@ impl EditorState {
 
     for line in start_pos.row..=end_pos.row {
       self.damages.insert(Line(line));
+    }
+
+    if change.text.contains('\n') || self.doc.range(change.range.clone()).chars().any(|c| c == '\n')
+    {
+      self.damage_all = true;
     }
 
     self.doc.replace_range(change.range.clone(), &change.text);
