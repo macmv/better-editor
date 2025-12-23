@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
+use be_doc::crop::RopeSlice;
 use be_editor::EditorState;
 use be_input::{Action, Key, KeyStroke, Mode};
-use kurbo::{Axis, Point, Rect, Vec2};
+use kurbo::{Axis, Line, Point, Rect, Stroke, Vec2};
 
 use crate::{CursorMode, Distance, Render, TextLayout, file_tree::FileTree};
 
@@ -298,10 +299,14 @@ impl EditorView {
     let mut i = min_line;
 
     let mut y = -(self.scroll.y % line_height);
+    let mut indent_guides = IndentGuides::new(y);
     loop {
       if self.layout_line(render, i, index).is_none() {
         break;
       };
+      indent_guides
+        .visit(self.editor.doc().rope.byte_slice(index..).raw_lines().next().unwrap(), render);
+
       let layout = self.cached_layouts.get(&i).unwrap();
 
       if self.focused && self.editor.cursor().line == i {
@@ -327,6 +332,8 @@ impl EditorView {
         break;
       }
     }
+
+    indent_guides.finish(render);
 
     if let Some(command) = self.editor.command() {
       render.fill(
@@ -404,5 +411,61 @@ impl EditorView {
     let layout = render.build_layout(layout);
 
     Some(entry.insert(layout))
+  }
+}
+
+struct IndentGuides {
+  indent_width:  usize,
+  scroll_offset: f64,
+
+  starts:       Vec<usize>,
+  current_line: usize,
+}
+
+impl IndentGuides {
+  pub fn new(scroll_offset: f64) -> Self {
+    const INDENT_WIDTH: usize = 2; // TODO
+    IndentGuides { indent_width: INDENT_WIDTH, scroll_offset, starts: vec![], current_line: 0 }
+  }
+
+  pub fn visit(&mut self, line: RopeSlice, render: &mut Render) {
+    let indent = line.chars().take_while(|c| *c == ' ').count() / self.indent_width;
+
+    while self.starts.len() > indent {
+      let start = self.starts.pop().unwrap();
+      self.draw_line(start, self.current_line, render);
+    }
+
+    while self.starts.len() < indent {
+      self.starts.push(self.current_line);
+    }
+
+    self.current_line += 1;
+  }
+
+  pub fn finish(&mut self, render: &mut Render) {
+    while let Some(start) = self.starts.pop() {
+      self.draw_line(start, self.current_line, render);
+    }
+  }
+
+  fn draw_line(&self, start: usize, end: usize, render: &mut Render) {
+    const INDENT_GUIDE_WIDTH: f64 = 1.0;
+    const INDENT_GUIDE_END_OFFSET: f64 = 2.0;
+
+    let x = self.starts.len() as f64
+      * render.store.text.font_metrics().character_width
+      * self.indent_width as f64
+      + 20.0
+      + INDENT_GUIDE_WIDTH / 2.0;
+    let min_y = (start as f64 + self.scroll_offset) * render.store.text.font_metrics().line_height;
+    let max_y = (end as f64 + self.scroll_offset) * render.store.text.font_metrics().line_height
+      - INDENT_GUIDE_END_OFFSET;
+
+    render.stroke(
+      &Line::new((x, min_y), (x, max_y)),
+      render.theme().background_raised,
+      Stroke::new(INDENT_GUIDE_WIDTH),
+    );
   }
 }
