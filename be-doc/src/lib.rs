@@ -99,6 +99,29 @@ impl Document {
     offset
   }
 
+  pub fn offset_by_graphemes(&self, index: usize, offset: isize) -> usize {
+    if offset > 0 {
+      index
+        + self
+          .rope
+          .byte_slice(index..)
+          .graphemes()
+          .take(offset as usize)
+          .map(|g| g.len())
+          .sum::<usize>()
+    } else {
+      index
+        - self
+          .rope
+          .byte_slice(..index)
+          .graphemes()
+          .rev()
+          .take(-offset as usize)
+          .map(|g| g.len())
+          .sum::<usize>()
+    }
+  }
+
   pub fn grapheme_slice(&self, cursor: Cursor, len: usize) -> Range<usize> {
     let offset = self.cursor_offset(cursor);
     let count =

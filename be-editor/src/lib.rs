@@ -240,8 +240,9 @@ impl EditorState {
       Edit::DeleteRestOfLine => {
         self.change(Change::remove(
           self.doc.cursor_offset(self.cursor)
-            // FIXME: `-1` grapheme!
-            ..self.doc.rope.byte_of_line(self.cursor.line.as_usize() + 1) - 1,
+            ..self
+              .doc
+              .offset_by_graphemes(self.doc.rope.byte_of_line(self.cursor.line.as_usize() + 1), -1),
         ));
         self.clamp_column();
       }
