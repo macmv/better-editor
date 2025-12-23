@@ -429,6 +429,11 @@ impl IndentGuides {
   }
 
   pub fn visit(&mut self, line: RopeSlice, render: &mut Render) {
+    if line.chars().all(|c| c.is_whitespace()) {
+      self.current_line += 1;
+      return;
+    }
+
     let indent = line.chars().take_while(|c| *c == ' ').count() / self.indent_width;
 
     while self.starts.len() > indent {
