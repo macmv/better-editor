@@ -4,6 +4,7 @@ use crate::{KeyStroke, Mode, key::Key};
 
 pub enum Action {
   SetMode { mode: Mode, delta: i32 },
+  Append { after: bool },
   Move { count: Option<NonZero<u32>>, m: Move },
   Edit { count: Option<NonZero<u32>>, e: Edit },
 }
@@ -86,6 +87,8 @@ impl Action {
         // === modes ===
         (Mode::Normal, Key::Char('i')) => Ok(Action::SetMode { mode: Mode::Insert, delta: 0 }),
         (Mode::Normal, Key::Char('a')) => Ok(Action::SetMode { mode: Mode::Insert, delta: 1 }),
+        (Mode::Normal, Key::Char('o')) => Ok(Action::Append { after: true }),
+        (Mode::Normal, Key::Char('O')) => Ok(Action::Append { after: false }),
         (Mode::Normal, Key::Char('v')) => Ok(Action::SetMode { mode: Mode::Visual, delta: 0 }),
         (Mode::Normal, Key::Char('R')) => Ok(Action::SetMode { mode: Mode::Replace, delta: 0 }),
         (Mode::Normal, Key::Char(':')) => Ok(Action::SetMode { mode: Mode::Command, delta: 0 }),

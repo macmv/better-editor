@@ -160,6 +160,20 @@ impl EditorState {
           self.move_col_rel(delta);
         }
       }
+      Action::Append { after } => {
+        self.set_mode(Mode::Insert);
+
+        if after {
+          let target = self.doc.rope.byte_of_line(self.cursor().line.as_usize() + 1);
+          self.change(Change::insert(target, "\n"));
+          self.move_to_line(self.cursor.line + 1);
+        } else {
+          let target = self.doc.rope.byte_of_line(self.cursor().line.as_usize());
+          self.change(Change::insert(target, "\n"));
+        }
+
+        self.move_to_col(Column(0));
+      }
       Action::Move { count: _, m } => self.perform_move(m),
       Action::Edit { count: _, e } => self.perform_edit(e),
     }
