@@ -34,6 +34,8 @@ pub enum Edit {
   Insert(char),
   Replace(char),
   Delete,
+  DeleteLine,
+  DeleteRestOfLine,
   Backspace,
 }
 
@@ -83,6 +85,11 @@ impl Action {
           _ => Err(ActionError::Unrecognized),
         },
         (Mode::Normal, Key::Char('x')) => e!(Delete),
+        (Mode::Normal, Key::Char('d')) => match iter.next().ok_or(ActionError::Incomplete)?.key {
+          Key::Char('d') => e!(DeleteLine),
+          _ => Err(ActionError::Unrecognized),
+        },
+        (Mode::Normal, Key::Char('D')) => e!(DeleteRestOfLine),
 
         // === modes ===
         (Mode::Normal, Key::Char('i')) => Ok(Action::SetMode { mode: Mode::Insert, delta: 0 }),

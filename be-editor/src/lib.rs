@@ -127,6 +127,11 @@ impl EditorState {
     }
   }
 
+  fn clamp_column(&mut self) {
+    self.cursor.column = self.cursor.column.clamp(self.max_column());
+    self.cursor.target_column = self.doc.visual_column(self.cursor);
+  }
+
   fn max_line(&self) -> Line { Line(self.doc.len_lines().saturating_sub(1)) }
 
   fn max_column(&self) -> Column {
@@ -224,6 +229,21 @@ impl EditorState {
       }
       Edit::Delete => {
         self.change(Change::remove(self.doc.grapheme_slice(self.cursor, 1)));
+      }
+      Edit::DeleteLine => {
+        self.change(Change::remove(
+          self.doc.rope.byte_of_line(self.cursor.line.as_usize())
+            ..self.doc.rope.byte_of_line(self.cursor.line.as_usize() + 1),
+        ));
+        self.clamp_column();
+      }
+      Edit::DeleteRestOfLine => {
+        self.change(Change::remove(
+          self.doc.cursor_offset(self.cursor)
+            // FIXME: `-1` grapheme!
+            ..self.doc.rope.byte_of_line(self.cursor.line.as_usize() + 1) - 1,
+        ));
+        self.clamp_column();
       }
       Edit::Backspace => {
         self.move_graphemes(-1);
