@@ -9,7 +9,7 @@ use std::{
 
 mod init;
 
-pub extern crate lsp_types as lsp;
+pub extern crate lsp_types as types;
 
 pub struct LspClient {
   #[allow(dead_code)]

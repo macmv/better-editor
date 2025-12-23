@@ -4,11 +4,12 @@ use be_doc::{Column, Cursor, Document, Line};
 use be_input::{Action, Edit, Mode, Move};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{fs::OpenedFile, status::Status};
+use crate::{fs::OpenedFile, lsp::LspState, status::Status};
 
 mod filetype;
 mod fs;
 mod highlight;
+mod lsp;
 mod status;
 mod treesitter;
 
@@ -28,6 +29,8 @@ pub struct EditorState {
   highligher: Option<treesitter::Highlighter>,
   damages:    HashSet<Line>,
   damage_all: bool,
+
+  lsp: Option<LspState>,
 }
 
 struct Change {
@@ -69,6 +72,7 @@ impl EditorState {
 
     self.detect_filetype();
     self.on_open_file_highlight();
+    self.connect_to_lsp();
   }
 
   pub fn move_line_rel(&mut self, dist: i32) { self.move_to_line(self.cursor.line + dist); }

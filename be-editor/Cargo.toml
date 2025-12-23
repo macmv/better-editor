@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 be-doc = { path = "../be-doc" }
 be-input = { path = "../be-input" }
+be-lsp = { path = "../be-lsp" }
+
 libc = "0.2.178"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
