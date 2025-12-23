@@ -227,6 +227,11 @@ impl EditorState {
         self.change(Change::insert(self.doc.cursor_offset(self.cursor), s));
         self.move_graphemes(1);
       }
+      Edit::Replace(c) => {
+        let mut bytes = [0; 4];
+        let s = c.encode_utf8(&mut bytes);
+        self.change(Change::replace(self.doc.grapheme_slice(self.cursor, 1), s));
+      }
       Edit::Delete => {
         self.change(Change::remove(self.doc.grapheme_slice(self.cursor, 1)));
       }
@@ -250,8 +255,6 @@ impl EditorState {
         self.move_graphemes(-1);
         self.change(Change::remove(self.doc.grapheme_slice(self.cursor, 1)));
       }
-
-      _ => {}
     }
   }
 
@@ -307,6 +310,9 @@ impl EditorState {
 impl Change {
   pub fn insert(at: usize, text: &str) -> Self { Change { range: at..at, text: text.to_string() } }
   pub fn remove(range: Range<usize>) -> Self { Change { range, text: String::new() } }
+  pub fn replace(range: Range<usize>, text: &str) -> Self {
+    Change { range, text: text.to_string() }
+  }
 }
 
 impl CommandState {
