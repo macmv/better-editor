@@ -463,8 +463,8 @@ impl IndentGuides {
       * self.indent_width as f64
       + 20.0
       + INDENT_GUIDE_WIDTH / 2.0;
-    let min_y = (start as f64 + self.scroll_offset) * render.store.text.font_metrics().line_height;
-    let max_y = (end as f64 + self.scroll_offset) * render.store.text.font_metrics().line_height
+    let min_y = start as f64 * render.store.text.font_metrics().line_height + self.scroll_offset;
+    let max_y = end as f64 * render.store.text.font_metrics().line_height + self.scroll_offset
       - INDENT_GUIDE_END_OFFSET;
 
     render.stroke(
