@@ -99,6 +99,8 @@ impl LspClient {
 
     write!(self.tx.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content).unwrap();
   }
+
+  pub fn shutdown(&mut self) { self.notify::<lsp_types::notification::Exit>(()); }
 }
 
 impl Sender {

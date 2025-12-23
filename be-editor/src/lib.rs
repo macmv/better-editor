@@ -289,6 +289,10 @@ impl EditorState {
       "w" => {
         self.save().map(|()| format!("{}: written", self.file.as_ref().unwrap().path().display()))
       }
+      "q" => {
+        self.lsp = None; // drop the language server
+        std::process::exit(0);
+      }
       "e" => self
         .open(Path::new(args))
         .map(|()| format!("{}: opened", self.file.as_ref().unwrap().path().display())),

@@ -17,6 +17,10 @@ impl EditorState {
   }
 }
 
+impl Drop for LspState {
+  fn drop(&mut self) { self.client.shutdown(); }
+}
+
 fn lsp_for_ft(ft: &FileType) -> Option<&'static str> {
   match ft {
     FileType::Rust => Some("rust-analyzer"),

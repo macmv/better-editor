@@ -92,17 +92,6 @@ impl winit::application::ApplicationHandler for App {
     event: WindowEvent,
   ) {
     match event {
-      WindowEvent::KeyboardInput {
-        event:
-          winit::event::KeyEvent {
-            logical_key: winit::keyboard::Key::Character(c),
-            state: winit::event::ElementState::Pressed,
-            ..
-          },
-        ..
-      } if c == "q" => {
-        event_loop.exit();
-      }
       WindowEvent::CloseRequested => {
         event_loop.exit();
       }
