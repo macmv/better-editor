@@ -108,6 +108,8 @@ impl EditorState {
     lsp.completions.task = Some(task);
   }
 
+  pub fn completions(&mut self) -> Option<Vec<String>> { Some(vec!["baz".into(), "foobar".into()]) }
+
   fn cursor_to_lsp(&self) -> types::Position {
     types::Position {
       line:      self.cursor.line.as_usize() as u32,

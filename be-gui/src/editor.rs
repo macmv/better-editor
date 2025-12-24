@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use be_doc::crop::RopeSlice;
 use be_editor::EditorState;
 use be_input::{Action, Key, KeyStroke, Mode};
-use kurbo::{Axis, Line, Point, Rect, Stroke, Vec2};
+use kurbo::{Axis, Line, Point, Rect, RoundedRect, Stroke, Vec2};
 
 use crate::{CursorMode, Distance, Render, TextLayout, file_tree::FileTree};
 
@@ -342,6 +342,44 @@ impl EditorView {
           .cursor(self.editor.doc().cursor_column_offset(self.editor.cursor()), mode)
           + Vec2::new(20.0, start_y + (line - min_line) as f64 * line_height);
         render.fill(&cursor, render.theme().text);
+
+        if let Some(completions) = self.editor.completions() {
+          let layouts = completions
+            .iter()
+            .take(20)
+            .map(|completion| render.layout_text(&completion, render.theme().text))
+            .collect::<Vec<_>>();
+
+          let inner_width = layouts
+            .iter()
+            .map(|layout| layout.size().width)
+            .max_by(|a, b| a.total_cmp(b))
+            .unwrap_or(0.0);
+          let inner_height = layouts.len() as f64 * line_height;
+
+          const MARGIN_X: f64 = 10.0;
+          const MARGIN_Y: f64 = 5.0;
+
+          let start_x = cursor.x0;
+          let start_y = cursor.y1;
+          let mut y = start_y;
+
+          render.fill(
+            &RoundedRect::new(
+              start_x - MARGIN_X,
+              start_y,
+              start_x + inner_width + MARGIN_X,
+              start_y + inner_height + MARGIN_Y * 2.0,
+              MARGIN_Y,
+            ),
+            render.theme().background_raised,
+          );
+
+          for layout in layouts {
+            render.draw_text(&layout, (start_x, y + MARGIN_Y));
+            y += line_height;
+          }
+        }
       }
     }
 
