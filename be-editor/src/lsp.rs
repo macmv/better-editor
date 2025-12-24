@@ -158,7 +158,11 @@ impl EditorState {
 }
 
 impl Drop for LspState {
-  fn drop(&mut self) { self.client.shutdown(); }
+  fn drop(&mut self) {
+    unsafe {
+      self.client.shutdown_mut();
+    }
+  }
 }
 
 fn lsp_for_ft(ft: &FileType) -> Option<&'static str> {

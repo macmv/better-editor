@@ -17,7 +17,7 @@ mod init;
 pub extern crate lsp_types as types;
 
 pub struct LspClient {
-  child:         Child,
+  _child:        Child,
   worker_thread: ManuallyDrop<std::thread::JoinHandle<()>>,
   next_id:       u64,
 
@@ -91,7 +91,7 @@ impl LspClient {
     let worker_thread = std::thread::spawn(move || worker.run());
 
     let mut client = LspClient {
-      child,
+      _child: child,
       worker_thread: ManuallyDrop::new(worker_thread),
       next_id: 1,
       poller,
@@ -160,12 +160,20 @@ impl LspClient {
     self.poller.notify().unwrap();
   }
 
-  pub fn shutdown(&mut self) {
+  pub fn shutdown(mut self) {
+    unsafe {
+      self.shutdown_mut();
+    }
+  }
+
+  /// # Safety
+  ///
+  /// Must only be called once.
+  pub unsafe fn shutdown_mut(&mut self) {
     self.notify::<lsp_types::notification::Exit>(());
     unsafe {
       ManuallyDrop::drop(&mut self.tx);
     }
-    self.child.wait().unwrap();
 
     let thread = unsafe { ManuallyDrop::take(&mut self.worker_thread) };
     thread.join().unwrap();
