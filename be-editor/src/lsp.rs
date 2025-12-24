@@ -57,6 +57,11 @@ impl EditorState {
   }
 
   pub(crate) fn lsp_notify_change(&mut self, change: crate::Change) {
+    let range = types::Range {
+      start: self.offset_to_lsp(change.range.start),
+      end:   self.offset_to_lsp(change.range.end),
+    };
+
     let Some(lsp) = &mut self.lsp else { return };
     let Some(doc) = &lsp.text_document else { return };
 
@@ -69,7 +74,7 @@ impl EditorState {
           version: lsp.document_version,
         },
         content_changes: vec![types::TextDocumentContentChangeEvent {
-          range:        None,
+          range:        Some(range),
           range_length: None,
           text:         change.text,
         }],
