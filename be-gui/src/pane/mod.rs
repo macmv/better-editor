@@ -3,11 +3,12 @@ use kurbo::Axis;
 
 use crate::{
   Distance, Render,
-  pane::{editor::EditorView, file_tree::FileTree},
+  pane::{editor::EditorView, file_tree::FileTree, shell::Shell},
 };
 
 mod editor;
 mod file_tree;
+mod shell;
 
 pub enum Pane {
   Content(Content),
@@ -17,6 +18,7 @@ pub enum Pane {
 pub enum Content {
   Editor(EditorView),
   FileTree(FileTree),
+  Shell(Shell),
 }
 
 pub struct Split {
@@ -44,7 +46,7 @@ impl Pane {
     })
   }
 
-  pub fn new_shell() -> Self { Pane::Content(Content::Editor(EditorView::new())) }
+  pub fn new_shell() -> Self { Pane::Content(Content::Shell(Shell::new())) }
 
   pub fn open(&mut self, path: &std::path::Path) {
     match self.active_mut() {
@@ -52,6 +54,7 @@ impl Pane {
         let _ = editor.editor.open(path);
       }
       Content::FileTree(_) => {}
+      Content::Shell(_) => {}
     }
   }
 
@@ -158,6 +161,7 @@ impl Content {
     match self {
       Content::Editor(editor) => editor.draw(render),
       Content::FileTree(file_tree) => file_tree.draw(render),
+      Content::Shell(shell) => shell.draw(render),
     }
   }
 
@@ -165,6 +169,7 @@ impl Content {
     match self {
       Content::Editor(editor) => editor.editor.mode(),
       Content::FileTree(_) => Mode::Normal,
+      Content::Shell(_) => Mode::Insert,
     }
   }
 
@@ -172,6 +177,7 @@ impl Content {
     match self {
       Content::Editor(editor) => editor.editor.perform_action(action),
       Content::FileTree(file_tree) => file_tree.perform_action(action),
+      Content::Shell(_) => {}
     }
   }
 
@@ -179,6 +185,7 @@ impl Content {
     match self {
       Content::Editor(editor) => editor.on_focus(focus),
       Content::FileTree(file_tree) => file_tree.on_focus(focus),
+      Content::Shell(_) => {}
     }
   }
 }

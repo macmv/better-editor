@@ -7,7 +7,6 @@ pub use render::*;
 use crate::pane::Pane;
 
 mod pane;
-mod shell;
 mod theme;
 
 struct State {
