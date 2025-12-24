@@ -1,7 +1,8 @@
+use be_task::Task;
 use serde::de;
 use serde_json::value::RawValue;
 use std::{
-  collections::VecDeque,
+  collections::{HashMap, VecDeque},
   fmt,
   io::{Read, Write},
   process::{Child, ChildStdin, ChildStdout, Stdio},
@@ -15,15 +16,43 @@ pub struct LspClient {
   #[allow(dead_code)]
   child: Child,
 
-  tx: Sender,
-  rx: Receiver,
+  tx: crossbeam_channel::Sender<LspRequest>,
+  rx: crossbeam_channel::Receiver<Message>,
 }
 
-struct Sender {
+enum LspRequest {
+  Request(Request, Completer),
+  Notification(Notification),
+}
+
+struct Request {
+  id:     u64,
+  method: &'static str,
+  params: Box<RawValue>,
+}
+
+struct Notification {
+  method: &'static str,
+  params: Box<RawValue>,
+}
+
+struct LspWorker {
+  rx: crossbeam_channel::Receiver<LspRequest>,
+  tx: crossbeam_channel::Sender<Message>,
+
+  writer: Writer,
+  reader: Reader,
+
+  pending: HashMap<u64, Completer>,
+}
+
+type Completer = Box<dyn FnOnce(&RawValue) + Send>;
+
+struct Writer {
   writer: ChildStdin,
 }
 
-struct Receiver {
+struct Reader {
   reader: ChildStdout,
   read:   VecDeque<u8>,
 }
@@ -36,7 +65,19 @@ impl LspClient {
     let stdin = child.stdin.take().unwrap();
     let stdout = child.stdout.take().unwrap();
 
-    let mut client = LspClient { child, tx: Sender::new(stdin), rx: Receiver::new(stdout) };
+    let (send_tx, send_rx) = crossbeam_channel::unbounded();
+    let (recv_tx, recv_rx) = crossbeam_channel::unbounded();
+
+    let worker = LspWorker {
+      rx:      send_rx,
+      tx:      recv_tx,
+      writer:  Writer::new(stdin),
+      reader:  Reader::new(stdout),
+      pending: HashMap::new(),
+    };
+    std::thread::spawn(move || worker.run());
+
+    let mut client = LspClient { child, tx: send_tx, rx: recv_rx };
 
     let init = lsp_types::InitializeParams {
       process_id: Some(std::process::id()),
@@ -44,67 +85,115 @@ impl LspClient {
       ..Default::default()
     };
 
-    client.send::<lsp_types::request::Initialize>(init);
+    let task = client.send::<lsp_types::request::Initialize>(init);
 
-    let msg = loop {
-      match client.rx.recv() {
+    let result = loop {
+      match task.completed() {
         Some(msg) => break msg,
-        None => {}
+        None => {
+          std::thread::sleep(std::time::Duration::from_millis(1));
+        }
       }
     };
-
-    let result = match msg {
-      Message::Response { result, .. } => result,
-      _ => panic!(),
-    };
-
-    let result: lsp_types::InitializeResult = serde_json::from_str(&result.get()).unwrap();
 
     client.notify::<lsp_types::notification::Initialized>(lsp_types::InitializedParams {});
 
     (client, result.capabilities)
   }
 
-  fn send<T: lsp_types::request::Request>(&mut self, req: T::Params) {
-    #[derive(serde::Serialize)]
-    struct Request<P> {
-      jsonrpc: &'static str,
-      id:      u64,
-      method:  &'static str,
-      params:  P,
-    }
+  pub fn send<T: lsp_types::request::Request>(&mut self, req: T::Params) -> Task<T::Result> {
+    let task = Task::new();
 
-    let content = serde_json::to_string(&Request {
-      jsonrpc: "2.0",
-      id:      1,
-      method:  T::METHOD,
-      params:  req,
-    })
-    .unwrap();
+    let completer = task.completer();
+    self
+      .tx
+      .send(LspRequest::Request(
+        Request {
+          id:     1,
+          method: T::METHOD,
+          params: RawValue::from_string(serde_json::to_string(&req).unwrap()).unwrap(),
+        },
+        Box::new(move |value| {
+          let result = serde_json::from_str(&value.get()).unwrap();
+          match completer.complete(result) {
+            Ok(()) => {}
+            Err(_) => {} // already completed. this is probably an error
+          }
+        }),
+      ))
+      .unwrap();
 
-    write!(self.tx.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content).unwrap();
+    task
   }
 
-  fn notify<T: lsp_types::notification::Notification>(&mut self, req: T::Params) {
-    #[derive(serde::Serialize)]
-    struct Notification<P> {
-      jsonrpc: &'static str,
-      method:  &'static str,
-      params:  P,
-    }
-
-    let content =
-      serde_json::to_string(&Notification { jsonrpc: "2.0", method: T::METHOD, params: req })
-        .unwrap();
-
-    write!(self.tx.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content).unwrap();
+  pub fn notify<T: lsp_types::notification::Notification>(&mut self, req: T::Params) {
+    self
+      .tx
+      .send(LspRequest::Notification(Notification {
+        method: T::METHOD,
+        params: RawValue::from_string(serde_json::to_string(&req).unwrap()).unwrap(),
+      }))
+      .unwrap();
   }
 
   pub fn shutdown(&mut self) { self.notify::<lsp_types::notification::Exit>(()); }
 }
 
-impl Sender {
-  fn new(stdin: ChildStdin) -> Sender { Sender { writer: stdin } }
+impl LspWorker {
+  pub fn run(mut self) {
+    loop {
+      match self.rx.recv() {
+        Ok(LspRequest::Request(req, completer)) => {
+          self.pending.insert(req.id, completer);
+          self.writer.request(req);
+        }
+        Ok(LspRequest::Notification(req)) => self.writer.notify(req),
+        Err(_) => break,
+      }
+    }
+  }
+}
+
+impl Writer {
+  fn new(stdin: ChildStdin) -> Writer { Writer { writer: stdin } }
+
+  fn request(&mut self, request: Request) {
+    #[derive(serde::Serialize)]
+    struct Request {
+      jsonrpc: &'static str,
+      id:      u64,
+      method:  &'static str,
+      params:  Box<RawValue>,
+    }
+
+    let content = serde_json::to_string(&Request {
+      jsonrpc: "2.0",
+      id:      request.id,
+      method:  request.method,
+      params:  request.params,
+    })
+    .unwrap();
+
+    write!(self.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content).unwrap();
+  }
+
+  fn notify(&mut self, req: Notification) {
+    #[derive(serde::Serialize)]
+    struct Notification {
+      jsonrpc: &'static str,
+      method:  &'static str,
+      params:  Box<RawValue>,
+    }
+
+    let content = serde_json::to_string(&Notification {
+      jsonrpc: "2.0",
+      method:  req.method,
+      params:  req.params,
+    })
+    .unwrap();
+
+    write!(self.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content).unwrap();
+  }
 }
 
 pub enum Message {
@@ -114,8 +203,8 @@ pub enum Message {
   Notification { method: String, params: Option<Box<RawValue>> },
 }
 
-impl Receiver {
-  fn new(stdout: ChildStdout) -> Receiver { Receiver { reader: stdout, read: VecDeque::new() } }
+impl Reader {
+  fn new(stdout: ChildStdout) -> Reader { Reader { reader: stdout, read: VecDeque::new() } }
 
   fn recv(&mut self) -> Option<Message> {
     if let Some(msg) = self.decode() {
@@ -309,12 +398,37 @@ impl<'de> de::Deserialize<'de> for Message {
 
 #[cfg(test)]
 mod tests {
+  use std::str::FromStr;
+
+  use types::Uri;
+
   use super::*;
 
   #[test]
   fn spawn_client() {
     let (mut client, _) = LspClient::spawn("rust-analyzer");
 
-    while client.rx.recv().is_none() {}
+    let path = std::path::Path::new("./src/lib.rs").canonicalize().unwrap();
+    let uri = Uri::from_str(&format!("file://{}", path.to_str().unwrap())).unwrap();
+
+    let task = client.send::<lsp_types::request::GotoDefinition>(lsp_types::GotoDefinitionParams {
+      work_done_progress_params:     Default::default(),
+      text_document_position_params: lsp_types::TextDocumentPositionParams {
+        text_document: lsp_types::TextDocumentIdentifier { uri },
+        position:      lsp_types::Position { line: 0, character: 0 },
+      },
+      partial_result_params:         Default::default(),
+    });
+
+    loop {
+      let res = task.completed();
+      match res {
+        Some(res) => {
+          println!("res: {:#?}", res);
+          break;
+        }
+        None => std::thread::sleep(std::time::Duration::from_millis(100)),
+      }
+    }
   }
 }
