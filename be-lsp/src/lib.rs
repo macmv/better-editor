@@ -177,8 +177,16 @@ impl LspWorker {
     let poller = Poller::new().unwrap();
     // SAFETY: These are removed down below.
     unsafe {
-      poller.add(&self.reader.reader, polling::Event::readable(READ)).unwrap();
-      poller.add(&self.writer.writer, polling::Event::writable(WRITE)).unwrap();
+      poller
+        .add_with_mode(&self.reader.reader, polling::Event::readable(READ), polling::PollMode::Edge)
+        .unwrap();
+      poller
+        .add_with_mode(
+          &self.writer.writer,
+          polling::Event::writable(WRITE),
+          polling::PollMode::Edge,
+        )
+        .unwrap();
     }
 
     'outer: loop {
@@ -494,13 +502,25 @@ mod tests {
     let path = std::path::Path::new("./src/lib.rs").canonicalize().unwrap();
     let uri = Uri::from_str(&format!("file://{}", path.to_str().unwrap())).unwrap();
 
-    let task = client.send::<lsp_types::request::GotoDefinition>(lsp_types::GotoDefinitionParams {
-      work_done_progress_params:     Default::default(),
-      text_document_position_params: lsp_types::TextDocumentPositionParams {
+    client.notify::<lsp_types::notification::DidOpenTextDocument>(
+      lsp_types::DidOpenTextDocumentParams {
+        text_document: lsp_types::TextDocumentItem {
+          uri:         uri.clone(),
+          text:        std::fs::read_to_string(&path).unwrap(),
+          version:     1,
+          language_id: "rust".into(),
+        },
+      },
+    );
+
+    let task = client.send::<lsp_types::request::Completion>(lsp_types::CompletionParams {
+      work_done_progress_params: Default::default(),
+      text_document_position:    lsp_types::TextDocumentPositionParams {
         text_document: lsp_types::TextDocumentIdentifier { uri },
         position:      lsp_types::Position { line: 0, character: 0 },
       },
-      partial_result_params:         Default::default(),
+      context:                   None,
+      partial_result_params:     Default::default(),
     });
 
     loop {
