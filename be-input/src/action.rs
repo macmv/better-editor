@@ -7,7 +7,17 @@ pub enum Action {
   Append { after: bool },
   Move { count: Option<NonZero<u32>>, m: Move },
   Edit { count: Option<NonZero<u32>>, e: Edit },
+  Navigate { nav: Navigation },
   Autocomplete,
+}
+
+pub enum Navigation {
+  Left,
+  Right,
+  Up,
+  Down,
+
+  Tab(u8),
 }
 
 pub enum Move {
@@ -64,6 +74,16 @@ impl Action {
 
     while let Some(key) = iter.next() {
       return match (mode, key.key) {
+        (_, Key::Char('w')) if key.control => match iter.next().ok_or(ActionError::Incomplete)?.key
+        {
+          Key::Char('h') => Ok(Action::Navigate { nav: Navigation::Left }),
+          Key::Char('j') => Ok(Action::Navigate { nav: Navigation::Down }),
+          Key::Char('k') => Ok(Action::Navigate { nav: Navigation::Up }),
+          Key::Char('l') => Ok(Action::Navigate { nav: Navigation::Right }),
+          Key::Char(c @ '0'..='9') => Ok(Action::Navigate { nav: Navigation::Tab(c as u8 - b'0') }),
+          _ => Err(ActionError::Unrecognized),
+        },
+
         (Mode::Insert, Key::Char(' ')) if key.control => Ok(Action::Autocomplete),
 
         (Mode::Insert | Mode::Command, Key::Char(c)) => e!(Insert(c)),

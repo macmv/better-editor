@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use be_doc::crop::RopeSlice;
 use be_editor::EditorState;
-use be_input::{Action, Key, KeyStroke, Mode};
+use be_input::{Action, KeyStroke, Mode, Navigation};
 use kurbo::{Axis, Line, Point, Rect, RoundedRect, Stroke, Vec2};
 
 use crate::{CursorMode, Distance, Render, TextLayout, file_tree::FileTree};
@@ -72,6 +72,24 @@ impl Pane {
       Pane::Content(_) => false,
       Pane::Split(split) => split.focus(direction),
     }
+  }
+
+  fn perform_navigate(&mut self, nav: Navigation) {
+    match nav {
+      Navigation::Left => {
+        self.focus(Direction::Left);
+      }
+      Navigation::Down => {
+        self.focus(Direction::Down);
+      }
+      Navigation::Up => {
+        self.focus(Direction::Up);
+      }
+      Navigation::Right => {
+        self.focus(Direction::Right);
+      }
+      _ => {}
+    };
   }
 }
 
@@ -194,32 +212,11 @@ impl Editor {
   }
 
   pub fn on_key(&mut self, keys: &[KeyStroke]) -> Result<(), be_input::ActionError> {
-    if keys.get(0).is_some_and(|k| k.control && k.key == 'w') {
-      if keys.len() == 1 {
-        return Err(be_input::ActionError::Incomplete);
-      }
-
-      match keys[1].key {
-        Key::Char('h') => {
-          self.root.focus(Direction::Left);
-        }
-        Key::Char('j') => {
-          self.root.focus(Direction::Down);
-        }
-        Key::Char('k') => {
-          self.root.focus(Direction::Up);
-        }
-        Key::Char('l') => {
-          self.root.focus(Direction::Right);
-        }
-        _ => {}
-      }
-
-      return Ok(());
-    }
-
     let action = Action::from_input(self.root.active().mode(), keys)?;
-    self.root.active_mut().perform_action(action);
+    match action {
+      Action::Navigate { nav } => self.root.perform_navigate(nav),
+      _ => self.root.active_mut().perform_action(action),
+    }
 
     Ok(())
   }

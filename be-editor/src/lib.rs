@@ -188,6 +188,7 @@ impl EditorState {
       Action::Move { count: _, m } => self.perform_move(m),
       Action::Edit { count: _, e } => self.perform_edit(e),
       Action::Autocomplete => self.perform_autocomplete(),
+      Action::Navigate { .. } => unreachable!(),
     }
   }
 
