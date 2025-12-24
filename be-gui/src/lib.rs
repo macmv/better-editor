@@ -4,7 +4,7 @@ use be_input::{Action, KeyStroke, Navigation};
 use kurbo::{Axis, Cap, Line, Point, Rect, Stroke};
 pub use render::*;
 
-use crate::{pane::Pane, shell::Shell};
+use crate::pane::Pane;
 
 mod pane;
 mod shell;
@@ -18,12 +18,7 @@ struct State {
 
 struct Tab {
   title:   String,
-  content: TabContent,
-}
-
-enum TabContent {
-  Shell(Shell),
-  Editor(Pane),
+  content: Pane,
 }
 
 impl State {
@@ -32,25 +27,17 @@ impl State {
       self,
       Axis::Horizontal,
       Distance::Pixels(-20.0),
-      |state, render| match &mut state.tabs[state.active].content {
-        TabContent::Shell(shell) => shell.draw(render),
-        TabContent::Editor(editor) => editor.draw(render),
-      },
+      |state, render| state.tabs[state.active].content.draw(render),
       |state, render| state.draw_tabs(render),
     );
   }
 
-  fn open(&mut self, path: &std::path::Path) {
-    match &mut self.tabs[self.active].content {
-      TabContent::Shell(_) => {}
-      TabContent::Editor(editor) => editor.open(path),
-    }
-  }
+  fn open(&mut self, path: &std::path::Path) { self.tabs[self.active].content.open(path) }
 
   fn on_key(&mut self, key: KeyStroke) {
     self.keys.push(key);
 
-    match Action::from_input(self.active_tab().content.mode(), &self.keys) {
+    match Action::from_input(self.active_tab().content.active().mode(), &self.keys) {
       Ok(action) => {
         self.perform_action(action);
         self.keys.clear();
@@ -106,31 +93,15 @@ impl State {
   }
 }
 
-impl TabContent {
-  fn mode(&self) -> be_input::Mode {
-    match self {
-      TabContent::Shell(_) => be_input::Mode::Insert,
-      TabContent::Editor(editor) => editor.active().mode(),
-    }
-  }
-
-  fn perform_action(&mut self, action: Action) {
-    match self {
-      TabContent::Shell(_) => {}
-      TabContent::Editor(editor) => editor.perform_action(action),
-    }
-  }
-}
-
 impl Default for State {
   fn default() -> Self {
     Self {
       keys:   vec![],
       active: 1,
       tabs:   vec![
-        Tab { title: "zsh".into(), content: TabContent::Shell(Shell::new()) },
-        Tab { title: "editor".into(), content: TabContent::Editor(Pane::new()) },
-        Tab { title: "zsh".into(), content: TabContent::Shell(Shell::new()) },
+        Tab { title: "zsh".into(), content: Pane::new_shell() },
+        Tab { title: "editor".into(), content: Pane::new_editor() },
+        Tab { title: "zsh".into(), content: Pane::new_shell() },
       ],
     }
   }

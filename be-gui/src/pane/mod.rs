@@ -34,7 +34,7 @@ enum Side {
 }
 
 impl Pane {
-  pub fn new() -> Self {
+  pub fn new_editor() -> Self {
     Pane::Split(Split {
       axis:    Axis::Vertical,
       percent: 0.2,
@@ -43,6 +43,8 @@ impl Pane {
       right:   Box::new(Pane::Content(Content::Editor(EditorView::new()))),
     })
   }
+
+  pub fn new_shell() -> Self { Pane::Content(Content::Editor(EditorView::new())) }
 
   pub fn open(&mut self, path: &std::path::Path) {
     match self.active_mut() {
