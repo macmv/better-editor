@@ -86,6 +86,10 @@ impl EditorState {
     let cursor = self.cursor_to_lsp();
 
     let Some(lsp) = &mut self.lsp else { return };
+    if lsp.server_caps.completion_provider.is_none() {
+      return;
+    }
+
     let Some(doc) = &lsp.text_document else { return };
 
     let task = lsp.client.request::<types::request::Completion>(types::CompletionParams {
