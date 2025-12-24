@@ -16,7 +16,8 @@ pub extern crate lsp_types as types;
 
 pub struct LspClient {
   #[allow(dead_code)]
-  child: Child,
+  child:   Child,
+  next_id: u64,
 
   poller: Arc<Poller>,
   tx:     crossbeam_channel::Sender<LspRequest>,
@@ -83,7 +84,7 @@ impl LspClient {
     let poller = worker.poller.clone();
     std::thread::spawn(move || worker.run());
 
-    let mut client = LspClient { child, poller, tx: send_tx, rx: recv_rx };
+    let mut client = LspClient { child, next_id: 1, poller, tx: send_tx, rx: recv_rx };
 
     let init = lsp_types::InitializeParams {
       process_id: Some(std::process::id()),
@@ -115,7 +116,7 @@ impl LspClient {
       .tx
       .send(LspRequest::Request(
         Request {
-          id:     1,
+          id:     self.next_id,
           method: T::METHOD,
           params: RawValue::from_string(serde_json::to_string(&req).unwrap()).unwrap(),
         },
@@ -129,6 +130,8 @@ impl LspClient {
       ))
       .unwrap();
     self.poller.notify().unwrap();
+
+    self.next_id += 1;
 
     task
   }
@@ -174,13 +177,14 @@ impl LspWorker {
     set_nonblocking(&self.reader.reader).unwrap();
     set_nonblocking(&self.writer.writer).unwrap();
 
-    let poller = Poller::new().unwrap();
     // SAFETY: These are removed down below.
     unsafe {
-      poller
+      self
+        .poller
         .add_with_mode(&self.reader.reader, polling::Event::readable(READ), polling::PollMode::Edge)
         .unwrap();
-      poller
+      self
+        .poller
         .add_with_mode(
           &self.writer.writer,
           polling::Event::writable(WRITE),
@@ -192,7 +196,7 @@ impl LspWorker {
     'outer: loop {
       let mut events = Events::new();
 
-      poller.wait(&mut events, None).unwrap();
+      self.poller.wait(&mut events, Some(std::time::Duration::from_millis(10000))).unwrap();
       for ev in events.iter() {
         match ev.key {
           READ => {
@@ -234,8 +238,8 @@ impl LspWorker {
       }
     }
 
-    poller.delete(&self.reader.reader).unwrap();
-    poller.delete(&self.writer.writer).unwrap();
+    self.poller.delete(&self.reader.reader).unwrap();
+    self.poller.delete(&self.writer.writer).unwrap();
   }
 }
 
