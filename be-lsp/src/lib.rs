@@ -95,7 +95,7 @@ impl LspClient {
       ..Default::default()
     };
 
-    let task = client.send::<lsp_types::request::Initialize>(init);
+    let task = client.request::<lsp_types::request::Initialize>(init);
 
     let result = loop {
       match task.completed() {
@@ -111,7 +111,7 @@ impl LspClient {
     (client, result.capabilities)
   }
 
-  pub fn send<T: lsp_types::request::Request>(&mut self, req: T::Params) -> Task<T::Result> {
+  pub fn request<T: lsp_types::request::Request>(&mut self, req: T::Params) -> Task<T::Result> {
     let task = Task::new();
 
     let completer = task.completer();
@@ -529,7 +529,7 @@ mod tests {
       },
     );
 
-    let task = client.send::<lsp_types::request::Completion>(lsp_types::CompletionParams {
+    let task = client.request::<lsp_types::request::Completion>(lsp_types::CompletionParams {
       work_done_progress_params: Default::default(),
       text_document_position:    lsp_types::TextDocumentPositionParams {
         text_document: lsp_types::TextDocumentIdentifier { uri },
