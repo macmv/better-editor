@@ -5,7 +5,7 @@ use be_editor::EditorState;
 use be_input::{Action, Key, KeyStroke, Mode};
 use kurbo::{Axis, Line, Point, Rect, RoundedRect, Stroke, Vec2};
 
-use crate::{Color, CursorMode, Distance, Render, TextLayout, file_tree::FileTree};
+use crate::{CursorMode, Distance, Render, TextLayout, file_tree::FileTree};
 
 pub struct Editor {
   root: Pane,
@@ -399,7 +399,13 @@ impl EditorView {
             );
           }
 
-          render.drop_shadow(rect, MARGIN_Y, 2.0, Color::BLACK.with_alpha(0.1));
+          render.drop_shadow(
+            rect,
+            MARGIN_Y,
+            2.0,
+            // keep the chroma and hue so they blend nicely.
+            render.theme().background.map(|_, c, h, _| [0.0, c, h, 0.2]),
+          );
           render.fill(&RoundedRect::from_rect(rect, MARGIN_Y), render.theme().background_raised);
 
           for layout in layouts {
