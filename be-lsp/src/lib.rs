@@ -22,7 +22,6 @@ pub struct LspClient {
 
   poller: Arc<Poller>,
   tx:     ManuallyDrop<crossbeam_channel::Sender<LspRequest>>,
-  rx:     crossbeam_channel::Receiver<Message>,
 }
 
 enum LspRequest {
@@ -43,7 +42,6 @@ struct Notification {
 
 struct LspWorker {
   rx: crossbeam_channel::Receiver<LspRequest>,
-  tx: crossbeam_channel::Sender<Message>,
 
   poller: Arc<Poller>,
   writer: Writer,
@@ -72,11 +70,9 @@ impl LspClient {
     let stdout = child.stdout.take().unwrap();
 
     let (send_tx, send_rx) = crossbeam_channel::unbounded();
-    let (recv_tx, recv_rx) = crossbeam_channel::unbounded();
 
     let worker = LspWorker {
       rx:      send_rx,
-      tx:      recv_tx,
       poller:  Arc::new(Poller::new().unwrap()),
       writer:  Writer::new(stdin),
       reader:  Reader::new(stdout),
@@ -91,7 +87,6 @@ impl LspClient {
       next_id: 1,
       poller,
       tx: ManuallyDrop::new(send_tx),
-      rx: recv_rx,
     };
 
     let init = lsp_types::InitializeParams {
