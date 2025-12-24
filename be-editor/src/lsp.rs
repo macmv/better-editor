@@ -1,9 +1,7 @@
 use std::str::FromStr;
 
-use be_lsp::{
-  LspClient,
-  types::{self, Uri},
-};
+use be_lsp::{LspClient, types, types::Uri};
+use be_task::Task;
 
 use crate::{EditorState, filetype::FileType};
 
@@ -13,6 +11,14 @@ pub struct LspState {
 
   text_document:    Option<types::TextDocumentIdentifier>,
   document_version: i32,
+  pub completions:  CompletionsState,
+}
+
+#[derive(Default)]
+pub struct CompletionsState {
+  task:        Option<Task<Option<types::CompletionResponse>>>,
+  completions: Option<types::CompletionList>,
+  show:        bool,
 }
 
 impl EditorState {
@@ -21,7 +27,13 @@ impl EditorState {
     let Some(lsp) = lsp_for_ft(ft) else { return };
 
     let (client, server_caps) = LspClient::spawn(lsp);
-    self.lsp = Some(LspState { client, server_caps, text_document: None, document_version: 0 });
+    self.lsp = Some(LspState {
+      client,
+      server_caps,
+      text_document: None,
+      document_version: 0,
+      completions: Default::default(),
+    });
 
     let Some(lsp) = &mut self.lsp else { return };
     lsp.text_document = Some(types::TextDocumentIdentifier {
@@ -71,7 +83,7 @@ impl EditorState {
     let Some(lsp) = &mut self.lsp else { return };
     let Some(doc) = &lsp.text_document else { return };
 
-    lsp.client.request::<types::request::Completion>(types::CompletionParams {
+    let task = lsp.client.request::<types::request::Completion>(types::CompletionParams {
       text_document_position:    types::TextDocumentPositionParams {
         text_document: doc.clone(),
         position:      cursor,
@@ -83,6 +95,8 @@ impl EditorState {
       work_done_progress_params: types::WorkDoneProgressParams::default(),
       partial_result_params:     types::PartialResultParams::default(),
     });
+
+    lsp.completions.task = Some(task);
   }
 
   fn cursor_to_lsp(&self) -> types::Position {

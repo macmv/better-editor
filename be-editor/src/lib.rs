@@ -187,6 +187,7 @@ impl EditorState {
       }
       Action::Move { count: _, m } => self.perform_move(m),
       Action::Edit { count: _, e } => self.perform_edit(e),
+      Action::Autocomplete => self.perform_autocomplete(),
     }
   }
 
@@ -261,6 +262,8 @@ impl EditorState {
       }
     }
   }
+
+  fn perform_autocomplete(&mut self) { self.lsp_request_completions(); }
 
   fn change(&mut self, change: Change) {
     let start_pos = self.offset_to_ts_point(change.range.start);

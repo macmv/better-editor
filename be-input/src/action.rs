@@ -7,6 +7,7 @@ pub enum Action {
   Append { after: bool },
   Move { count: Option<NonZero<u32>>, m: Move },
   Edit { count: Option<NonZero<u32>>, e: Edit },
+  Autocomplete,
 }
 
 pub enum Move {
@@ -63,6 +64,8 @@ impl Action {
 
     while let Some(key) = iter.next() {
       return match (mode, key.key) {
+        (Mode::Insert, Key::Char(' ')) if key.control => Ok(Action::Autocomplete),
+
         (Mode::Insert | Mode::Command, Key::Char(c)) => e!(Insert(c)),
         (Mode::Insert | Mode::Command, Key::Backspace) => e!(Backspace),
         (Mode::Insert | Mode::Command, Key::Escape) => {

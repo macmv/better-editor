@@ -149,6 +149,7 @@ dependencies = [
  "be-doc",
  "be-input",
  "be-lsp",
+ "be-task",
  "libc",
  "serde",
  "serde_json",
