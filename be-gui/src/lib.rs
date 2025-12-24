@@ -1,10 +1,10 @@
 mod render;
 
-use be_input::KeyStroke;
+use be_input::{Action, KeyStroke, Navigation};
 use kurbo::{Axis, Cap, Line, Point, Rect, Stroke};
 pub use render::*;
 
-use crate::{editor::Editor, shell::Shell};
+use crate::{editor::Pane, shell::Shell};
 
 mod editor;
 mod file_tree;
@@ -24,7 +24,7 @@ struct Tab {
 
 enum TabContent {
   Shell(Shell),
-  Editor(Editor),
+  Editor(Pane),
 }
 
 impl State {
@@ -51,12 +51,25 @@ impl State {
   fn on_key(&mut self, key: KeyStroke) {
     self.keys.push(key);
 
-    match &mut self.tabs[self.active].content {
-      TabContent::Shell(_) => {}
-      TabContent::Editor(editor) => match editor.on_key(&self.keys) {
-        Ok(()) | Err(be_input::ActionError::Unrecognized) => self.keys.clear(),
-        Err(be_input::ActionError::Incomplete) => {}
-      },
+    match Action::from_input(self.active_tab().content.mode(), &self.keys) {
+      Ok(action) => {
+        self.perform_action(action);
+        self.keys.clear();
+      }
+      Err(be_input::ActionError::Unrecognized) => self.keys.clear(),
+      Err(be_input::ActionError::Incomplete) => {}
+    }
+  }
+
+  fn active_tab(&self) -> &Tab { &self.tabs[self.active] }
+  fn active_tab_mut(&mut self) -> &mut Tab { &mut self.tabs[self.active] }
+
+  fn perform_action(&mut self, action: Action) {
+    match action {
+      Action::Navigate { nav: Navigation::Tab(i) } => {
+        self.active = (i as usize).clamp(0, self.tabs.len() - 1)
+      }
+      _ => self.active_tab_mut().content.perform_action(action),
     }
   }
 
@@ -94,6 +107,22 @@ impl State {
   }
 }
 
+impl TabContent {
+  fn mode(&self) -> be_input::Mode {
+    match self {
+      TabContent::Shell(_) => be_input::Mode::Insert,
+      TabContent::Editor(editor) => editor.active().mode(),
+    }
+  }
+
+  fn perform_action(&mut self, action: Action) {
+    match self {
+      TabContent::Shell(_) => {}
+      TabContent::Editor(editor) => editor.perform_action(action),
+    }
+  }
+}
+
 impl Default for State {
   fn default() -> Self {
     Self {
@@ -101,7 +130,7 @@ impl Default for State {
       active: 1,
       tabs:   vec![
         Tab { title: "zsh".into(), content: TabContent::Shell(Shell::new()) },
-        Tab { title: "editor".into(), content: TabContent::Editor(Editor::new()) },
+        Tab { title: "editor".into(), content: TabContent::Editor(Pane::new()) },
         Tab { title: "zsh".into(), content: TabContent::Shell(Shell::new()) },
       ],
     }

@@ -2,26 +2,22 @@ use std::collections::HashMap;
 
 use be_doc::crop::RopeSlice;
 use be_editor::EditorState;
-use be_input::{Action, Direction, KeyStroke, Mode, Navigation};
+use be_input::{Action, Direction, Mode, Navigation};
 use kurbo::{Axis, Line, Point, Rect, RoundedRect, Stroke, Vec2};
 
 use crate::{CursorMode, Distance, Render, TextLayout, file_tree::FileTree};
 
-pub struct Editor {
-  root: Pane,
-}
-
-enum Pane {
+pub enum Pane {
   Content(Content),
   Split(Split),
 }
 
-enum Content {
+pub enum Content {
   Editor(EditorView),
   FileTree(FileTree),
 }
 
-struct EditorView {
+pub struct EditorView {
   editor: EditorState,
 
   scroll:  Point,
@@ -31,7 +27,7 @@ struct EditorView {
   cached_scale:   f64,
 }
 
-struct Split {
+pub struct Split {
   axis:    Axis,
   percent: f64,
   active:  Side,
@@ -46,14 +42,39 @@ enum Side {
 }
 
 impl Pane {
-  fn draw(&mut self, render: &mut Render) {
+  pub fn new() -> Self {
+    Pane::Split(Split {
+      axis:    Axis::Vertical,
+      percent: 0.2,
+      active:  Side::Right,
+      left:    Box::new(Pane::Content(Content::FileTree(FileTree::current_directory()))),
+      right:   Box::new(Pane::Content(Content::Editor(EditorView {
+        editor:         EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n"),
+        scroll:         Point::ZERO,
+        focused:        true,
+        cached_layouts: HashMap::new(),
+        cached_scale:   0.0,
+      }))),
+    })
+  }
+
+  pub fn open(&mut self, path: &std::path::Path) {
+    match self.active_mut() {
+      Content::Editor(editor) => {
+        let _ = editor.editor.open(path);
+      }
+      Content::FileTree(_) => {}
+    }
+  }
+
+  pub fn draw(&mut self, render: &mut Render) {
     match self {
       Pane::Content(content) => content.draw(render),
       Pane::Split(split) => split.draw(render),
     }
   }
 
-  fn active(&self) -> &Content {
+  pub fn active(&self) -> &Content {
     match self {
       Pane::Content(content) => content,
       Pane::Split(split) => split.active(),
@@ -74,14 +95,13 @@ impl Pane {
     }
   }
 
-  fn perform_navigate(&mut self, nav: Navigation) {
-    match nav {
-      Navigation::Direction(dir) => {
+  pub fn perform_action(&mut self, action: Action) {
+    match action {
+      Action::Navigate { nav: Navigation::Direction(dir) } => {
         self.focus(dir);
       }
-
-      _ => {}
-    };
+      _ => self.active_mut().perform_action(action),
+    }
   }
 }
 
@@ -153,7 +173,7 @@ impl Content {
     }
   }
 
-  fn mode(&self) -> Mode {
+  pub fn mode(&self) -> Mode {
     match self {
       Content::Editor(editor) => editor.editor.mode(),
       Content::FileTree(_) => Mode::Normal,
@@ -173,47 +193,6 @@ impl Content {
       Content::FileTree(file_tree) => file_tree.on_focus(focus),
     }
   }
-}
-
-impl Editor {
-  pub fn new() -> Self {
-    Editor {
-      root: Pane::Split(Split {
-        axis:    Axis::Vertical,
-        percent: 0.2,
-        active:  Side::Right,
-        left:    Box::new(Pane::Content(Content::FileTree(FileTree::current_directory()))),
-        right:   Box::new(Pane::Content(Content::Editor(EditorView {
-          editor:         EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n"),
-          scroll:         Point::ZERO,
-          focused:        true,
-          cached_layouts: HashMap::new(),
-          cached_scale:   0.0,
-        }))),
-      }),
-    }
-  }
-
-  pub fn open(&mut self, path: &std::path::Path) {
-    match self.root.active_mut() {
-      Content::Editor(editor) => {
-        let _ = editor.editor.open(path);
-      }
-      Content::FileTree(_) => {}
-    }
-  }
-
-  pub fn on_key(&mut self, keys: &[KeyStroke]) -> Result<(), be_input::ActionError> {
-    let action = Action::from_input(self.root.active().mode(), keys)?;
-    match action {
-      Action::Navigate { nav } => self.root.perform_navigate(nav),
-      _ => self.root.active_mut().perform_action(action),
-    }
-
-    Ok(())
-  }
-
-  pub fn draw(&mut self, render: &mut Render) { self.root.draw(render); }
 }
 
 impl EditorView {
