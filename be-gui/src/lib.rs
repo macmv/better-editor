@@ -96,7 +96,7 @@ impl Default for State {
   fn default() -> Self {
     Self {
       keys:   vec![],
-      active: 1,
+      active: 0,
       tabs:   vec![
         Tab { title: "zsh".into(), content: Pane::new_shell() },
         Tab { title: "editor".into(), content: Pane::new_editor() },
