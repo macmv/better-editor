@@ -1,7 +1,7 @@
 use std::{collections::HashSet, ops::Range, path::Path};
 
 use be_doc::{Column, Cursor, Document, Line};
-use be_input::{Action, Edit, Mode, Move};
+use be_input::{Action, Direction, Edit, Mode, Move};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{fs::OpenedFile, lsp::LspState, status::Status};
@@ -199,10 +199,10 @@ impl EditorState {
     }
 
     match m {
-      Move::Left => self.move_col_rel(-1),
-      Move::Right => self.move_col_rel(1),
-      Move::Up => self.move_line_rel(-1),
-      Move::Down => self.move_line_rel(1),
+      Move::Single(Direction::Left) => self.move_col_rel(-1),
+      Move::Single(Direction::Right) => self.move_col_rel(1),
+      Move::Single(Direction::Up) => self.move_line_rel(-1),
+      Move::Single(Direction::Down) => self.move_line_rel(1),
 
       Move::LineEnd => self.move_to_col(Column::MAX),
       Move::LineStart => self.move_to_col(Column(0)),
@@ -327,8 +327,8 @@ impl Change {
 impl CommandState {
   fn perform_move(&mut self, m: Move) {
     match m {
-      Move::Left => self.move_cursor(-1),
-      Move::Right => self.move_cursor(1),
+      Move::Single(Direction::Left) => self.move_cursor(-1),
+      Move::Single(Direction::Right) => self.move_cursor(1),
 
       _ => {}
     }

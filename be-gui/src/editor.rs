@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use be_doc::crop::RopeSlice;
 use be_editor::EditorState;
-use be_input::{Action, KeyStroke, Mode, Navigation};
+use be_input::{Action, Direction, KeyStroke, Mode, Navigation};
 use kurbo::{Axis, Line, Point, Rect, RoundedRect, Stroke, Vec2};
 
 use crate::{CursorMode, Distance, Render, TextLayout, file_tree::FileTree};
@@ -76,18 +76,10 @@ impl Pane {
 
   fn perform_navigate(&mut self, nav: Navigation) {
     match nav {
-      Navigation::Left => {
-        self.focus(Direction::Left);
+      Navigation::Direction(dir) => {
+        self.focus(dir);
       }
-      Navigation::Down => {
-        self.focus(Direction::Down);
-      }
-      Navigation::Up => {
-        self.focus(Direction::Up);
-      }
-      Navigation::Right => {
-        self.focus(Direction::Right);
-      }
+
       _ => {}
     };
   }
@@ -222,14 +214,6 @@ impl Editor {
   }
 
   pub fn draw(&mut self, render: &mut Render) { self.root.draw(render); }
-}
-
-#[derive(Copy, Clone)]
-enum Direction {
-  Up,
-  Down,
-  Left,
-  Right,
 }
 
 impl EditorView {

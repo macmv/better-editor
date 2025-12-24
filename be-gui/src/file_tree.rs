@@ -3,7 +3,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use be_input::{Action, Move};
+use be_input::{Action, Direction, Move};
 use kurbo::{Point, Rect, Vec2};
 
 use crate::Render;
@@ -72,8 +72,8 @@ impl FileTree {
   pub fn perform_action(&mut self, action: Action) {
     match action {
       Action::Move { count: _, m } => match m {
-        Move::Up => self.active = self.active.saturating_sub(1),
-        Move::Down => {
+        Move::Single(Direction::Up) => self.active = self.active.saturating_sub(1),
+        Move::Single(Direction::Down) => {
           self.active = self.active.saturating_add(1).min(self.tree.len_visible().saturating_sub(1))
         }
         _ => (),

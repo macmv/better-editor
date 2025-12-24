@@ -12,19 +12,12 @@ pub enum Action {
 }
 
 pub enum Navigation {
-  Left,
-  Right,
-  Up,
-  Down,
-
+  Direction(Direction),
   Tab(u8),
 }
 
 pub enum Move {
-  Left,
-  Right,
-  Up,
-  Down,
+  Single(Direction),
 
   NextWord,
   EndWord,
@@ -55,6 +48,14 @@ pub enum ActionError {
   Incomplete,
 }
 
+#[derive(Copy, Clone)]
+pub enum Direction {
+  Up,
+  Down,
+  Left,
+  Right,
+}
+
 impl Action {
   pub fn from_input(mode: Mode, input: &[KeyStroke]) -> Result<Action, ActionError> {
     let mut count = 0;
@@ -76,10 +77,10 @@ impl Action {
       return match (mode, key.key) {
         (_, Key::Char('w')) if key.control => match iter.next().ok_or(ActionError::Incomplete)?.key
         {
-          Key::Char('h') => Ok(Action::Navigate { nav: Navigation::Left }),
-          Key::Char('j') => Ok(Action::Navigate { nav: Navigation::Down }),
-          Key::Char('k') => Ok(Action::Navigate { nav: Navigation::Up }),
-          Key::Char('l') => Ok(Action::Navigate { nav: Navigation::Right }),
+          Key::Char('h') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Left) }),
+          Key::Char('j') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Down) }),
+          Key::Char('k') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Up) }),
+          Key::Char('l') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Right) }),
           Key::Char(c @ '0'..='9') => Ok(Action::Navigate { nav: Navigation::Tab(c as u8 - b'0') }),
           _ => Err(ActionError::Unrecognized),
         },
@@ -91,10 +92,10 @@ impl Action {
         (Mode::Insert | Mode::Command, Key::Escape) => {
           Ok(Action::SetMode { mode: Mode::Normal, delta: -1 })
         }
-        (Mode::Insert | Mode::Command, Key::ArrowUp) => m!(Up),
-        (Mode::Insert | Mode::Command, Key::ArrowDown) => m!(Down),
-        (Mode::Insert | Mode::Command, Key::ArrowLeft) => m!(Left),
-        (Mode::Insert | Mode::Command, Key::ArrowRight) => m!(Right),
+        (Mode::Insert | Mode::Command, Key::ArrowUp) => m!(Single(Direction::Up)),
+        (Mode::Insert | Mode::Command, Key::ArrowDown) => m!(Single(Direction::Down)),
+        (Mode::Insert | Mode::Command, Key::ArrowLeft) => m!(Single(Direction::Left)),
+        (Mode::Insert | Mode::Command, Key::ArrowRight) => m!(Single(Direction::Right)),
 
         (Mode::Normal, Key::Char(c @ '1'..='9')) => {
           count += u32::from(c) - u32::from('0');
@@ -142,10 +143,10 @@ fn parse_move(
   use Move::*;
 
   Ok(match key.key {
-    Key::Char('h') | Key::ArrowLeft => Left,
-    Key::Char('j') | Key::ArrowDown => Down,
-    Key::Char('k') | Key::ArrowUp => Up,
-    Key::Char('l') | Key::ArrowRight => Right,
+    Key::Char('h') | Key::ArrowLeft | Key::Backspace => Single(Direction::Left),
+    Key::Char('j') | Key::ArrowDown => Single(Direction::Down),
+    Key::Char('k') | Key::ArrowUp => Single(Direction::Up),
+    Key::Char('l') | Key::ArrowRight => Single(Direction::Right),
     Key::Char('w') => NextWord,
     Key::Char('e') => EndWord,
     Key::Char('b') => PrevWord,
@@ -166,7 +167,6 @@ fn parse_move(
       Key::Char(c) => Backward(c),
       _ => return Err(ActionError::Unrecognized),
     },
-    Key::Backspace => Left,
 
     _ => return Err(ActionError::Unrecognized),
   })
