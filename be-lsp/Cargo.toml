@@ -8,5 +8,6 @@ be-task = { path = "../be-task" }
 crossbeam-channel = "0.5.15"
 
 lsp-types = "0.97.0"
+polling = "3.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.145", features = ["raw_value"] }

@@ -1,4 +1,5 @@
 use be_task::Task;
+use polling::{Events, Poller};
 use serde::de;
 use serde_json::value::RawValue;
 use std::{
@@ -6,6 +7,7 @@ use std::{
   fmt,
   io::{Read, Write},
   process::{Child, ChildStdin, ChildStdout, Stdio},
+  sync::Arc,
 };
 
 mod init;
@@ -16,8 +18,9 @@ pub struct LspClient {
   #[allow(dead_code)]
   child: Child,
 
-  tx: crossbeam_channel::Sender<LspRequest>,
-  rx: crossbeam_channel::Receiver<Message>,
+  poller: Arc<Poller>,
+  tx:     crossbeam_channel::Sender<LspRequest>,
+  rx:     crossbeam_channel::Receiver<Message>,
 }
 
 enum LspRequest {
@@ -40,6 +43,7 @@ struct LspWorker {
   rx: crossbeam_channel::Receiver<LspRequest>,
   tx: crossbeam_channel::Sender<Message>,
 
+  poller: Arc<Poller>,
   writer: Writer,
   reader: Reader,
 
@@ -71,13 +75,15 @@ impl LspClient {
     let worker = LspWorker {
       rx:      send_rx,
       tx:      recv_tx,
+      poller:  Arc::new(Poller::new().unwrap()),
       writer:  Writer::new(stdin),
       reader:  Reader::new(stdout),
       pending: HashMap::new(),
     };
+    let poller = worker.poller.clone();
     std::thread::spawn(move || worker.run());
 
-    let mut client = LspClient { child, tx: send_tx, rx: recv_rx };
+    let mut client = LspClient { child, poller, tx: send_tx, rx: recv_rx };
 
     let init = lsp_types::InitializeParams {
       process_id: Some(std::process::id()),
@@ -122,6 +128,7 @@ impl LspClient {
         }),
       ))
       .unwrap();
+    self.poller.notify().unwrap();
 
     task
   }
@@ -134,6 +141,7 @@ impl LspClient {
         params: RawValue::from_string(serde_json::to_string(&req).unwrap()).unwrap(),
       }))
       .unwrap();
+    self.poller.notify().unwrap();
   }
 
   pub fn shutdown(&mut self) { self.notify::<lsp_types::notification::Exit>(()); }
@@ -141,16 +149,63 @@ impl LspClient {
 
 impl LspWorker {
   pub fn run(mut self) {
-    loop {
-      match self.rx.recv() {
-        Ok(LspRequest::Request(req, completer)) => {
-          self.pending.insert(req.id, completer);
-          self.writer.request(req);
+    const READ: usize = 0;
+    const WRITE: usize = 1;
+
+    let poller = Poller::new().unwrap();
+    // SAFETY: These are removed down below.
+    unsafe {
+      poller.add(&self.reader.reader, polling::Event::readable(READ)).unwrap();
+      poller.add(&self.writer.writer, polling::Event::writable(WRITE)).unwrap();
+    }
+
+    'outer: loop {
+      let mut events = Events::new();
+
+      poller.wait(&mut events, None).unwrap();
+      for ev in events.iter() {
+        match ev.key {
+          READ => {
+            while let Some(msg) = self.reader.recv() {
+              match msg {
+                Message::Request { method, .. } => println!("request: {}", method),
+                Message::Notification { method, .. } => println!("notification: {}", method),
+                Message::Response { id, result, .. } => {
+                  if let Some(completer) = self.pending.remove(&id) {
+                    completer(&result);
+                  }
+                }
+                Message::Error { id, .. } => {
+                  if let Some(_) = self.pending.remove(&id) {
+                    println!("error: {id}");
+                  }
+                }
+              }
+            }
+          }
+          WRITE => {
+            println!("writable");
+          }
+
+          _ => panic!("unexpected event"),
         }
-        Ok(LspRequest::Notification(req)) => self.writer.notify(req),
-        Err(_) => break,
+      }
+
+      loop {
+        match self.rx.try_recv() {
+          Ok(LspRequest::Request(req, completer)) => {
+            self.pending.insert(req.id, completer);
+            self.writer.request(req);
+          }
+          Ok(LspRequest::Notification(req)) => self.writer.notify(req),
+          Err(crossbeam_channel::TryRecvError::Empty) => break,
+          Err(crossbeam_channel::TryRecvError::Disconnected) => break 'outer,
+        }
       }
     }
+
+    poller.delete(&self.reader.reader).unwrap();
+    poller.delete(&self.writer.writer).unwrap();
   }
 }
 

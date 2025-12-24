@@ -186,6 +186,7 @@ dependencies = [
  "be-task",
  "crossbeam-channel",
  "lsp-types",
+ "polling",
  "serde",
  "serde_json",
 ]
