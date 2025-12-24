@@ -1,11 +1,11 @@
 use be_task::Task;
-use polling::{Events, Poller};
+use polling::{AsRawSource, Events, Poller};
 use serde::de;
 use serde_json::value::RawValue;
 use std::{
   collections::{HashMap, VecDeque},
   fmt,
-  io::{Read, Write},
+  io::{self, Read, Write},
   process::{Child, ChildStdin, ChildStdout, Stdio},
   sync::Arc,
 };
@@ -147,10 +147,32 @@ impl LspClient {
   pub fn shutdown(&mut self) { self.notify::<lsp_types::notification::Exit>(()); }
 }
 
+fn set_nonblocking(source: impl AsRawSource) -> io::Result<()> {
+  unsafe {
+    let flags = libc::fcntl(source.raw(), libc::F_GETFL);
+    if flags < 0 {
+      return Err(io::Error::last_os_error());
+    }
+
+    if flags & libc::O_NONBLOCK != 0 {
+      return Ok(());
+    }
+
+    if libc::fcntl(source.raw(), libc::F_SETFL, flags | libc::O_NONBLOCK) < 0 {
+      return Err(io::Error::last_os_error());
+    }
+
+    Ok(())
+  }
+}
+
 impl LspWorker {
   pub fn run(mut self) {
     const READ: usize = 0;
     const WRITE: usize = 1;
+
+    set_nonblocking(&self.reader.reader).unwrap();
+    set_nonblocking(&self.writer.writer).unwrap();
 
     let poller = Poller::new().unwrap();
     // SAFETY: These are removed down below.
@@ -266,9 +288,15 @@ impl Reader {
       return Some(msg);
     }
 
-    let mut buf = [0u8; 1024];
-    let read = self.reader.read(&mut buf).unwrap();
-    self.read.extend(&buf[..read]);
+    loop {
+      let mut buf = [0u8; 1024];
+      match self.reader.read(&mut buf) {
+        Ok(0) => panic!("EOF"),
+        Ok(n) => self.read.extend(&buf[..n]),
+        Err(e) if e.kind() == io::ErrorKind::WouldBlock => break,
+        Err(e) => panic!("{}", e),
+      }
+    }
 
     self.decode()
   }

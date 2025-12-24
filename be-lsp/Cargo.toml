@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 be-task = { path = "../be-task" }
 crossbeam-channel = "0.5.15"
+libc = "0.2.178"
 
 lsp-types = "0.97.0"
 polling = "3.11.0"

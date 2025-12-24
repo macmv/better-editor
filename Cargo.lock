@@ -185,6 +185,7 @@ version = "0.1.0"
 dependencies = [
  "be-task",
  "crossbeam-channel",
+ "libc",
  "lsp-types",
  "polling",
  "serde",
