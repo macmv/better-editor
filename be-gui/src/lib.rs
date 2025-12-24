@@ -4,10 +4,9 @@ use be_input::{Action, KeyStroke, Navigation};
 use kurbo::{Axis, Cap, Line, Point, Rect, Stroke};
 pub use render::*;
 
-use crate::{editor::Pane, shell::Shell};
+use crate::{pane::Pane, shell::Shell};
 
-mod editor;
-mod file_tree;
+mod pane;
 mod shell;
 mod theme;
 
