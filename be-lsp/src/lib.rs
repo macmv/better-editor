@@ -6,6 +6,7 @@ use std::{
   collections::{HashMap, VecDeque},
   fmt,
   io::{self, Read, Write},
+  mem::ManuallyDrop,
   process::{Child, ChildStdin, ChildStdout, Stdio},
   sync::Arc,
 };
@@ -15,12 +16,12 @@ mod init;
 pub extern crate lsp_types as types;
 
 pub struct LspClient {
-  #[allow(dead_code)]
-  child:   Child,
-  next_id: u64,
+  child:         Child,
+  worker_thread: ManuallyDrop<std::thread::JoinHandle<()>>,
+  next_id:       u64,
 
   poller: Arc<Poller>,
-  tx:     crossbeam_channel::Sender<LspRequest>,
+  tx:     ManuallyDrop<crossbeam_channel::Sender<LspRequest>>,
   rx:     crossbeam_channel::Receiver<Message>,
 }
 
@@ -82,9 +83,16 @@ impl LspClient {
       pending: HashMap::new(),
     };
     let poller = worker.poller.clone();
-    std::thread::spawn(move || worker.run());
+    let worker_thread = std::thread::spawn(move || worker.run());
 
-    let mut client = LspClient { child, next_id: 1, poller, tx: send_tx, rx: recv_rx };
+    let mut client = LspClient {
+      child,
+      worker_thread: ManuallyDrop::new(worker_thread),
+      next_id: 1,
+      poller,
+      tx: ManuallyDrop::new(send_tx),
+      rx: recv_rx,
+    };
 
     let init = lsp_types::InitializeParams {
       process_id: Some(std::process::id()),
@@ -147,7 +155,16 @@ impl LspClient {
     self.poller.notify().unwrap();
   }
 
-  pub fn shutdown(&mut self) { self.notify::<lsp_types::notification::Exit>(()); }
+  pub fn shutdown(&mut self) {
+    self.notify::<lsp_types::notification::Exit>(());
+    unsafe {
+      ManuallyDrop::drop(&mut self.tx);
+    }
+    self.child.wait().unwrap();
+
+    let thread = unsafe { ManuallyDrop::take(&mut self.worker_thread) };
+    thread.join().unwrap();
+  }
 }
 
 fn set_nonblocking(source: impl AsRawSource) -> io::Result<()> {
@@ -537,5 +554,7 @@ mod tests {
         None => std::thread::sleep(std::time::Duration::from_millis(100)),
       }
     }
+
+    client.shutdown();
   }
 }
