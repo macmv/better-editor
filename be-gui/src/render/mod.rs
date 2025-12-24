@@ -266,6 +266,16 @@ impl<'a> Render<'a> {
       shape,
     );
   }
+
+  pub fn drop_shadow(&mut self, rect: Rect, radius: f64, std_dev: f64, color: Color) {
+    self.scene.draw_blurred_rounded_rect(
+      self.transform(),
+      rect,
+      encode_color(color),
+      radius * self.scale,
+      std_dev * self.scale,
+    );
+  }
 }
 
 #[derive(Debug, Copy, Clone)]

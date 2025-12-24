@@ -108,7 +108,36 @@ impl EditorState {
     lsp.completions.task = Some(task);
   }
 
-  pub fn completions(&mut self) -> Option<Vec<String>> { Some(vec!["baz".into(), "foobar".into()]) }
+  pub fn completions(&mut self) -> Option<Vec<String>> {
+    let Some(lsp) = &mut self.lsp else { return None };
+
+    if let Some(completed) = lsp.completions.task.as_mut().and_then(|task| task.completed()) {
+      lsp.completions.task = None;
+      lsp.completions.completions = completed.map(|res| match res {
+        types::CompletionResponse::List(list) => list,
+        types::CompletionResponse::Array(completions) => {
+          types::CompletionList { is_incomplete: false, items: completions }
+        }
+      });
+      lsp.completions.show = true;
+    }
+
+    if lsp.completions.show {
+      Some(
+        lsp
+          .completions
+          .completions
+          .as_ref()
+          .unwrap()
+          .items
+          .iter()
+          .map(|i| i.label.clone())
+          .collect(),
+      )
+    } else {
+      None
+    }
+  }
 
   fn cursor_to_lsp(&self) -> types::Position {
     types::Position {
