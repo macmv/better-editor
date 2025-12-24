@@ -92,11 +92,12 @@ impl Document {
   }
 
   pub fn cursor_offset(&self, cursor: Cursor) -> usize {
-    let mut offset = self.rope.byte_of_line(cursor.line.0);
-    for g in self.rope.line(cursor.line.0).graphemes().take(cursor.column.0) {
-      offset += g.len();
-    }
-    offset
+    self.rope.byte_of_line(cursor.line.0) + self.cursor_column_offset(cursor)
+  }
+
+  pub fn cursor_column_offset(&self, cursor: Cursor) -> usize {
+    let line = self.line(cursor.line);
+    line.graphemes().take(cursor.column.0).map(|g| g.len()).sum()
   }
 
   pub fn offset_by_graphemes(&self, index: usize, offset: isize) -> usize {

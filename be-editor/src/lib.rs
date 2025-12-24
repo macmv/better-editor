@@ -56,7 +56,7 @@ impl EditorState {
   pub fn new() -> EditorState { EditorState::default() }
 
   pub fn doc(&self) -> &Document { &self.doc }
-  pub fn cursor(&self) -> &Cursor { &self.cursor }
+  pub fn cursor(&self) -> Cursor { self.cursor }
   pub fn mode(&self) -> Mode { self.mode }
   pub fn command(&self) -> Option<&CommandState> { self.command.as_ref() }
   pub fn status(&self) -> Option<&Status> { self.status.as_ref() }
@@ -309,11 +309,6 @@ impl EditorState {
       Ok(m) => self.status = Some(Status::for_success(m)),
       Err(e) => self.status = Some(Status::for_error(e)),
     }
-  }
-
-  pub fn cursor_column_byte(&self) -> usize {
-    let line = self.doc.line(self.cursor.line);
-    line.graphemes().take(self.cursor.column.0).map(|g| g.len()).sum()
   }
 }
 

@@ -338,7 +338,8 @@ impl EditorView {
         let line = self.editor.cursor().line.as_usize();
         let layout = &self.cached_layouts[&line];
 
-        let cursor = layout.cursor(self.editor.cursor_column_byte(), mode)
+        let cursor = layout
+          .cursor(self.editor.doc().cursor_column_offset(self.editor.cursor()), mode)
           + Vec2::new(20.0, start_y + (line - min_line) as f64 * line_height);
         render.fill(&cursor, render.theme().text);
       }
