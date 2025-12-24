@@ -278,6 +278,8 @@ impl EditorState {
     self.doc.replace_range(change.range.clone(), &change.text);
 
     self.on_change_highlight(&change, start_pos, end_pos);
+
+    self.lsp_notify_change(change);
   }
 
   fn run_command(&mut self) {
