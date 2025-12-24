@@ -64,6 +64,39 @@ impl EditorState {
       },
     );
   }
+
+  pub(crate) fn lsp_request_completions(&mut self) {
+    let cursor = self.cursor_to_lsp();
+
+    let Some(lsp) = &mut self.lsp else { return };
+    let Some(doc) = &lsp.text_document else { return };
+
+    lsp.client.request::<types::request::Completion>(types::CompletionParams {
+      text_document_position:    types::TextDocumentPositionParams {
+        text_document: doc.clone(),
+        position:      cursor,
+      },
+      context:                   Some(types::CompletionContext {
+        trigger_kind:      types::CompletionTriggerKind::INVOKED,
+        trigger_character: None,
+      }),
+      work_done_progress_params: types::WorkDoneProgressParams::default(),
+      partial_result_params:     types::PartialResultParams::default(),
+    });
+  }
+
+  fn cursor_to_lsp(&self) -> types::Position {
+    types::Position {
+      line:      self.cursor.line.as_usize() as u32,
+      character: self.doc.cursor_column_offset(self.cursor) as u32,
+    }
+  }
+
+  fn offset_to_lsp(&self, offset: usize) -> types::Position {
+    let line = self.doc.rope.line_of_byte(offset);
+    let column = offset - self.doc.rope.byte_of_line(line);
+    types::Position { line: line as u32, character: column as u32 }
+  }
 }
 
 impl Drop for LspState {
