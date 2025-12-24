@@ -188,6 +188,7 @@ dependencies = [
  "crossbeam-channel",
  "libc",
  "lsp-types",
+ "parking_lot",
  "polling",
  "serde",
  "serde_json",

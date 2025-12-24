@@ -30,7 +30,7 @@ pub struct EditorState {
   damages:    HashSet<Line>,
   damage_all: bool,
 
-  lsp: Option<LspState>,
+  pub lsp: Option<LspState>,
 }
 
 struct Change {

@@ -1,4 +1,5 @@
 use be_task::Task;
+use parking_lot::Mutex;
 use polling::{AsRawSource, Events, Poller};
 use serde::de;
 use serde_json::value::RawValue;
@@ -22,6 +23,8 @@ pub struct LspClient {
 
   poller: Arc<Poller>,
   tx:     ManuallyDrop<crossbeam_channel::Sender<LspRequest>>,
+
+  on_message: Arc<Mutex<Box<dyn Fn() + Send>>>,
 }
 
 enum LspRequest {
@@ -48,6 +51,8 @@ struct LspWorker {
   reader: Reader,
 
   pending: HashMap<u64, Completer>,
+
+  on_message: Arc<Mutex<Box<dyn Fn() + Send>>>,
 }
 
 type Completer = Box<dyn FnOnce(&RawValue) + Send>;
@@ -71,12 +76,16 @@ impl LspClient {
 
     let (send_tx, send_rx) = crossbeam_channel::unbounded();
 
+    let on_message: Arc<Mutex<Box<dyn Fn() + Send>>> = Arc::new(Mutex::new(Box::new(|| {})));
+
     let worker = LspWorker {
       rx:      send_rx,
       poller:  Arc::new(Poller::new().unwrap()),
       writer:  Writer::new(stdin),
       reader:  Reader::new(stdout),
       pending: HashMap::new(),
+
+      on_message: on_message.clone(),
     };
     let poller = worker.poller.clone();
     let worker_thread = std::thread::spawn(move || worker.run());
@@ -87,6 +96,7 @@ impl LspClient {
       next_id: 1,
       poller,
       tx: ManuallyDrop::new(send_tx),
+      on_message,
     };
 
     let init = lsp_types::InitializeParams {
@@ -160,6 +170,10 @@ impl LspClient {
     let thread = unsafe { ManuallyDrop::take(&mut self.worker_thread) };
     thread.join().unwrap();
   }
+
+  pub fn set_on_message(&self, wake: impl Fn() + Send + 'static) {
+    *self.on_message.lock() = Box::new(wake);
+  }
 }
 
 fn set_nonblocking(source: impl AsRawSource) -> io::Result<()> {
@@ -227,6 +241,8 @@ impl LspWorker {
                   }
                 }
               }
+
+              self.on_message.lock()();
             }
           }
           WRITE => {

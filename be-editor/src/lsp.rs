@@ -6,12 +6,15 @@ use be_task::Task;
 use crate::{EditorState, filetype::FileType};
 
 pub struct LspState {
-  client:      LspClient,
+  pub client:  LspClient,
   server_caps: types::ServerCapabilities,
 
   text_document:    Option<types::TextDocumentIdentifier>,
   document_version: i32,
   pub completions:  CompletionsState,
+
+  // FIXME: ew.
+  pub set_waker: bool,
 }
 
 #[derive(Default)]
@@ -33,6 +36,7 @@ impl EditorState {
       text_document: None,
       document_version: 0,
       completions: Default::default(),
+      set_waker: false,
     });
 
     let Some(lsp) = &mut self.lsp else { return };

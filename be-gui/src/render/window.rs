@@ -5,11 +5,13 @@ use winit::{
   keyboard::NamedKey,
 };
 
-type AppBuilder = fn(&wgpu::Device, &wgpu::SurfaceConfiguration) -> super::App;
+type AppBuilder =
+  fn(&wgpu::Device, &wgpu::SurfaceConfiguration, event_loop::EventLoopProxy<()>) -> super::App;
 
 struct App {
   builder: AppBuilder,
   init:    Option<Init>,
+  proxy:   event_loop::EventLoopProxy<()>,
 }
 
 struct Init {
@@ -74,7 +76,7 @@ impl winit::application::ApplicationHandler for App {
     surface.configure(&device, &config);
 
     self.init = Some(Init {
-      app: (self.builder)(&device, &config),
+      app: (self.builder)(&device, &config, self.proxy.clone()),
       keys: Default::default(),
       surface,
       device,
@@ -83,6 +85,16 @@ impl winit::application::ApplicationHandler for App {
       scale: window.scale_factor(),
       window,
     });
+  }
+
+  fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
+    if let Some(init) = &mut self.init {
+      let texture = init.surface.get_current_texture().unwrap();
+
+      init.app.render(&texture, &init.device, &init.queue, init.scale);
+
+      texture.present();
+    }
   }
 
   fn window_event(
@@ -175,7 +187,7 @@ pub fn run(builder: AppBuilder) {
   let event_loop = winit::event_loop::EventLoop::new().unwrap();
   event_loop.set_control_flow(event_loop::ControlFlow::Wait);
 
-  let mut app = App { builder, init: None };
+  let mut app = App { builder, proxy: event_loop.create_proxy(), init: None };
   event_loop.run_app(&mut app).unwrap();
 }
 

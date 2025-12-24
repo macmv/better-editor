@@ -10,10 +10,16 @@ mod window;
 pub use text::TextLayout;
 
 pub struct RenderStore {
+  proxy: winit::event_loop::EventLoopProxy<()>,
+
   pub text:  TextStore,
   pub theme: Theme,
 
   render: vello::Renderer,
+}
+
+pub struct Waker {
+  proxy: winit::event_loop::EventLoopProxy<()>,
 }
 
 pub struct Render<'a> {
@@ -51,7 +57,7 @@ pub fn encode_color(color: Color) -> AlphaColor<Srgb> {
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 pub fn run() {
-  window::run(|device, surface| {
+  window::run(|device, surface, proxy| {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
       label:           None,
       size:            wgpu::Extent3d {
@@ -72,9 +78,10 @@ pub fn run() {
       state: super::State::default(),
 
       store: RenderStore {
-        text:   TextStore::new(),
+        proxy,
+        text: TextStore::new(),
         render: vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),
-        theme:  Theme::default_theme(),
+        theme: Theme::default_theme(),
       },
 
       texture,
@@ -188,6 +195,8 @@ impl<'a> Render<'a> {
 
   pub fn theme(&self) -> &Theme { &self.store.theme }
 
+  pub fn waker(&self) -> Waker { Waker { proxy: self.store.proxy.clone() } }
+
   pub fn split<S>(
     &mut self,
     state: &mut S,
@@ -276,6 +285,10 @@ impl<'a> Render<'a> {
       std_dev * self.scale,
     );
   }
+}
+
+impl Waker {
+  pub fn wake(&self) { self.proxy.send_event(()).unwrap(); }
 }
 
 #[derive(Debug, Copy, Clone)]
