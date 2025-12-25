@@ -52,7 +52,13 @@ impl Perform for TerminalState {
         self.cursor.col = 0;
       }
       (b'H', []) => unhandled!("set horizontal tab stop"),
-      (b'M', []) => unhandled!("reverse index"),
+      (b'M', []) => {
+        if self.cursor.row == self.scroll_start {
+          self.grid.scroll_down(self.scroll_start..self.scroll_end);
+        } else {
+          self.cursor.row = self.cursor.row.saturating_sub(1);
+        }
+      }
       (b'Z', []) => unhandled!("identify terminal"),
       (b'c', []) => unhandled!("reset state"),
       (b'0', &[index]) => self.set_charset(index, Charset::LineDrawing),
