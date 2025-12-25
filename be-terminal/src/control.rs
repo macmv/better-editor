@@ -136,7 +136,7 @@ impl Perform for TerminalState {
       (b'h', []) => unhandled!("set mode"),
       (b'h', [b'?']) => {
         for param in params_iter.map(|param| param[0]) {
-          self.set_private_mode(param)
+          self.set_private_mode(param, true)
         }
       }
       (b'I', []) => unhandled!("move forward tabs"),
@@ -159,7 +159,11 @@ impl Perform for TerminalState {
       (b'k', [b' ']) => unhandled!("set scp"),
       (b'L', []) => unhandled!("insert blank lines"),
       (b'l', []) => unhandled!("reset mode"),
-      (b'l', [b'?']) => unhandled!("reset private mode"),
+      (b'l', [b'?']) => {
+        for param in params_iter.map(|param| param[0]) {
+          self.set_private_mode(param, false)
+        }
+      }
       (b'M', []) => unhandled!("delete lines"),
       (b'm', []) => self.set_graphics_mode(params),
       (b'm', [b'>']) => unhandled!("set keyboard mode"),
@@ -232,7 +236,7 @@ impl TerminalState {
     }
   }
 
-  fn set_private_mode(&mut self, mode: u16) {
+  fn set_private_mode(&mut self, mode: u16, set: bool) {
     macro_rules! unhandled {
       ($mode:literal) => {
         eprintln!("[unhandled private mode] {mode}")
@@ -245,7 +249,7 @@ impl TerminalState {
       6 => unhandled!("origin"),
       7 => unhandled!("line wrap"),
       12 => unhandled!("blinking cursor"),
-      25 => unhandled!("show cursor"),
+      25 => self.cursor_visible = !set,
       1000 => unhandled!("report mouse clicks"),
       1002 => unhandled!("report cell mouse motion"),
       1003 => unhandled!("report all mouse motion"),

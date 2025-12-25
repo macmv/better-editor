@@ -19,13 +19,15 @@ pub struct Terminal {
   parser: Parser,
 }
 
-struct TerminalState {
-  grid:   Grid,
-  cursor: Cursor,
+pub struct TerminalState {
+  grid:       Grid,
+  pub cursor: Cursor,
 
   scrollback: Vec<OwnedLine>,
   size:       Size,
   style:      Style,
+
+  pub cursor_visible: bool,
 }
 
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
@@ -93,6 +95,8 @@ impl Terminal {
     }
   }
 
+  pub fn state(&self) -> &TerminalState { &self.state }
+
   /// # Safety
   ///
   /// The `Poller` must not outlive the `Terminal`.
@@ -137,8 +141,6 @@ impl Terminal {
       }
     }
   }
-
-  pub fn cursor(&self) -> Cursor { self.state.cursor }
 }
 
 impl Poller {
@@ -160,6 +162,7 @@ impl TerminalState {
       scrollback: vec![],
       size,
       style: Style::default(),
+      cursor_visible: true,
     }
   }
 
