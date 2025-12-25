@@ -116,6 +116,10 @@ impl Terminal {
   pub fn perform_input(&mut self, c: char) { self.pty.input(c); }
   pub fn perform_backspace(&mut self) { self.pty.input(control::C0::BS.into()); }
   pub fn perform_delete(&mut self) { self.pty.input(control::C0::DEL.into()); }
+  pub fn perform_up(&mut self) { self.pty.input_str("\x1b[A"); }
+  pub fn perform_down(&mut self) { self.pty.input_str("\x1b[B"); }
+  pub fn perform_left(&mut self) { self.pty.input_str("\x1b[D"); }
+  pub fn perform_right(&mut self) { self.pty.input_str("\x1b[C"); }
 
   pub fn line(&self, index: usize) -> Option<Line<'_>> { self.state.grid.line(index) }
 

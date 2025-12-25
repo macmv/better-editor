@@ -82,4 +82,5 @@ impl Pty {
   pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> { self.pty.read(buf) }
 
   pub fn input(&mut self, c: char) { write!(self.pty, "{c}").unwrap(); }
+  pub fn input_str(&mut self, s: &str) { write!(self.pty, "{s}").unwrap(); }
 }

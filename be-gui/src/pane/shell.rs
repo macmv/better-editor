@@ -1,4 +1,4 @@
-use be_input::{Action, Edit};
+use be_input::{Action, Direction, Edit, Move};
 use be_terminal::{Terminal, TerminalColor};
 use kurbo::Rect;
 
@@ -24,6 +24,10 @@ impl Shell {
 
   pub fn perform_action(&mut self, action: Action) {
     match action {
+      Action::Move { count: _, m: Move::Single(Direction::Up) } => self.terminal.perform_up(),
+      Action::Move { count: _, m: Move::Single(Direction::Down) } => self.terminal.perform_down(),
+      Action::Move { count: _, m: Move::Single(Direction::Left) } => self.terminal.perform_left(),
+      Action::Move { count: _, m: Move::Single(Direction::Right) } => self.terminal.perform_right(),
       Action::Edit { count: _, e: Edit::Insert(c) } => self.terminal.perform_input(c),
       Action::Edit { count: _, e: Edit::Backspace } => self.terminal.perform_backspace(),
       Action::Edit { count: _, e: Edit::Delete } => self.terminal.perform_delete(),
