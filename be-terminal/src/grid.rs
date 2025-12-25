@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use crate::{Position, Size, Style};
 
 pub struct Grid {
@@ -74,9 +76,13 @@ impl Grid {
     }
   }
 
-  pub fn linefeed(&mut self, size: Size) -> OwnedLine {
-    let cells = self.lines.remove(0);
-    self.lines.push(vec![Cell::default(); size.cols]);
+  pub fn linefeed(&mut self, size: Size, range: Range<usize>) -> OwnedLine {
+    let cells = self.lines.remove(range.start);
+    if range.end < self.lines.len() {
+      self.lines.insert(range.end, vec![Cell::default(); size.cols]);
+    } else {
+      self.lines.push(vec![Cell::default(); size.cols]);
+    }
     OwnedLine { cells }
   }
 }

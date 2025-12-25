@@ -213,7 +213,16 @@ impl Perform for TerminalState {
       (b'p', [b'$']) => unhandled!("report mode"),
       (b'p', [b'?', b'$']) => unhandled!("report private mode"),
       (b'q', [b' ']) => unhandled!("set cursor style"),
-      (b'r', []) => unhandled!("set scrolling region"),
+      (b'r', []) => {
+        let scroll_start = (next_param_or(1) as usize - 1).clamp(0, self.size.rows - 1);
+        let scroll_end = (next_param_or(self.size.rows as u16) as usize).clamp(0, self.size.rows);
+        if scroll_start < scroll_end {
+          self.scroll_start = scroll_start;
+          self.scroll_end = scroll_end;
+        }
+        self.cursor.row = 0;
+        self.cursor.col = 0;
+      }
       (b'S', []) => unhandled!("scroll up"),
       (b's', []) => unhandled!("save cursor position"),
       (b'T', []) => unhandled!("scroll down"),
@@ -268,12 +277,12 @@ impl TerminalState {
   }
 
   fn linefeed(&mut self) {
-    if self.cursor.row == self.size.rows - 1 {
-      let line = self.grid.linefeed(self.size);
+    if self.cursor.row == self.scroll_end - 1 {
+      let line = self.grid.linefeed(self.size, self.scroll_start..self.scroll_end);
       if !self.alt_screen {
         self.scrollback.push(line);
       }
-    } else {
+    } else if self.cursor.row < self.size.rows - 1 {
       self.cursor.row += 1;
     }
   }

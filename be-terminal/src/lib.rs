@@ -40,8 +40,10 @@ pub struct TerminalState {
   grid:       Grid,
   pub cursor: Cursor,
 
-  scrollback: Vec<OwnedLine>,
-  size:       Size,
+  scrollback:   Vec<OwnedLine>,
+  size:         Size,
+  scroll_start: usize,
+  scroll_end:   usize,
 
   alt_grid:   Grid,
   alt_screen: bool,
@@ -265,6 +267,8 @@ impl TerminalState {
       grid: Grid::new(size),
       cursor: Cursor::default(),
       scrollback: vec![],
+      scroll_start: 0,
+      scroll_end: size.rows,
       size,
 
       alt_grid: Grid::new(size),
@@ -284,6 +288,9 @@ impl TerminalState {
     self.size = size;
     self.grid.resize(size);
     self.alt_grid.resize(size);
+    if self.scroll_end == size.rows {
+      self.scroll_end = size.rows;
+    }
     self.cursor.row = self.cursor.row.clamp(0, size.rows - 1);
     self.cursor.col = self.cursor.col.clamp(0, size.cols - 1);
   }
