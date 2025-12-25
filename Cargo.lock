@@ -164,6 +164,7 @@ dependencies = [
  "be-doc",
  "be-editor",
  "be-input",
+ "be-terminal",
  "bytemuck",
  "kurbo",
  "parley",

@@ -13,6 +13,8 @@ impl Terminal {
 
   pub fn perform_input(&mut self, c: char) { self.pty.input(c); }
 
+  pub fn line(&self, index: usize) -> Option<&str> { self.grid.line(index) }
+
   pub fn update(&mut self) {
     loop {
       let mut buf = [0u8; 1024];
