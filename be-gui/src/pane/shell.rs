@@ -124,6 +124,9 @@ impl Shell {
       if style.flags.contains(StyleFlags::BOLD) {
         layout.apply(prev..i, parley::StyleProperty::FontWeight(FontWeight::BLACK));
       }
+      if style.flags.contains(StyleFlags::UNDERLINE) {
+        layout.apply(prev..i, parley::StyleProperty::Underline(true));
+      }
       prev = i;
     }
 
