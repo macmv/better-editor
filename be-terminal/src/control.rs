@@ -1,4 +1,4 @@
-use anstyle_parse::{Params, ParamsIter, Perform};
+use anstyle_parse::{Params, Perform};
 
 use crate::{BuiltinColor, Charset, Style, StyleFlags, TerminalColor, TerminalState};
 
@@ -358,7 +358,12 @@ impl TerminalState {
         [36] => style.foreground = Some(builtin!(Cyan, false)),
         [37] => style.foreground = Some(builtin!(White, false)),
         [38] => {
-          if let Some(color) = parse_color(&mut iter) {
+          if let Some(color) = parse_color((&mut iter).map(|param| param[0])) {
+            style.foreground = Some(color);
+          }
+        }
+        [38, params @ ..] => {
+          if let Some(color) = parse_color(params.iter().copied()) {
             style.foreground = Some(color);
           }
         }
@@ -373,7 +378,12 @@ impl TerminalState {
         [46] => style.background = Some(builtin!(Cyan, false)),
         [47] => style.background = Some(builtin!(White, false)),
         [48] => {
-          if let Some(color) = parse_color(&mut iter) {
+          if let Some(color) = parse_color((&mut iter).map(|param| param[0])) {
+            style.background = Some(color);
+          }
+        }
+        [48, params @ ..] => {
+          if let Some(color) = parse_color(params.iter().copied()) {
             style.background = Some(color);
           }
         }
@@ -405,8 +415,7 @@ impl TerminalState {
   }
 }
 
-fn parse_color(iter: &mut ParamsIter<'_>) -> Option<TerminalColor> {
-  let mut iter = iter.map(|param| param[0]);
+fn parse_color(mut iter: impl Iterator<Item = u16>) -> Option<TerminalColor> {
   match iter.next() {
     Some(2) => Some(TerminalColor::Rgb {
       r: iter.next()? as u8,
