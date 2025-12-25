@@ -330,7 +330,7 @@ impl TerminalState {
         [46] => self.style.background = Some(builtin!(Cyan, false)),
         [47] => self.style.background = Some(builtin!(White, false)),
         [48, 2, r, g, b] => {
-          self.style.foreground = Some(TerminalColor::Rgb { r: *r as u8, g: *g as u8, b: *b as u8 })
+          self.style.background = Some(TerminalColor::Rgb { r: *r as u8, g: *g as u8, b: *b as u8 })
         }
         [49] => self.style.background = None,
 
