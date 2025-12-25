@@ -139,8 +139,11 @@ impl Perform for TerminalState {
       (b'J', []) => match next_param_or(0) {
         0 => self.clear_screen_down(),
         1 => self.clear_screen_up(),
-        2 => self.clear_screen(),
-        3 => self.clear_screen_saved(),
+        2 => self.grid.clear(self.style),
+        3 => {
+          self.grid.clear(self.style);
+          self.scrollback.clear();
+        }
         param => unhandled!("clear screen with {}", param),
       },
       (b'K', []) => match next_param_or(0) {
@@ -199,13 +202,6 @@ impl TerminalState {
     for line in 0..=self.cursor.row {
       self.grid.line_mut(line).clear(self.style);
     }
-  }
-
-  fn clear_screen(&mut self) { self.grid.clear(self.style); }
-
-  fn clear_screen_saved(&mut self) {
-    self.grid.clear(self.style);
-    self.scrollback.clear();
   }
 
   fn clear_line_right(&mut self) {
