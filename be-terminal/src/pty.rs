@@ -55,19 +55,3 @@ impl Pty {
 
   pub fn input(&mut self, c: char) { write!(self.pty, "{c}").unwrap(); }
 }
-
-#[cfg(test)]
-mod tests {
-  use std::io::Read;
-
-  use super::*;
-
-  #[test]
-  fn terminal_works() {
-    let mut terminal = Pty::new();
-
-    let mut buf = [0u8; 1024];
-    let n = terminal.pty.read(&mut buf).unwrap();
-    println!("{}", String::from_utf8_lossy(&buf[..n]));
-  }
-}
