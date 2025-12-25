@@ -47,8 +47,9 @@ impl Shell {
       .fill(&Rect::new(0.0, 0.0, render.size().width, render.size().height), oklch(0.3, 0.0, 0.0));
 
     let line_height = render.store.text.font_metrics().line_height;
+    let height = (render.size().height / line_height).floor() as usize;
 
-    for line in 0..10 {
+    for line in 0..height {
       let Some(layout) = self.layout_line(render, line) else { break };
 
       render.draw_text(&layout, (20.0, (line + 1) as f64 * line_height));
