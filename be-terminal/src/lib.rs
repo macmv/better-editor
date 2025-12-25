@@ -10,6 +10,7 @@ pub struct Terminal {
   pty:   Pty,
   state: TerminalState,
 
+  size:   Size,
   parser: Parser,
 }
 
@@ -18,13 +19,13 @@ struct TerminalState {
   cursor: Cursor,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Cursor {
   pub row: usize,
   pub col: usize,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Size {
   pub rows: usize,
   pub cols: usize,
@@ -33,13 +34,21 @@ pub struct Size {
 impl Terminal {
   pub fn new(size: Size) -> Self {
     Terminal {
-      pty:    Pty::new(size),
-      state:  TerminalState::new(size),
+      pty: Pty::new(size),
+      state: TerminalState::new(size),
+      size,
       parser: Parser::<Utf8Parser>::new(),
     }
   }
 
-  pub fn set_size(&mut self, size: Size) { self.state.resize(size); }
+  pub fn set_size(&mut self, size: Size) {
+    if size != self.size {
+      self.size = size;
+
+      self.state.resize(size);
+      self.pty.resize(size);
+    }
+  }
 
   pub fn perform_input(&mut self, c: char) { self.pty.input(c); }
 
