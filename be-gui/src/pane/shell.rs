@@ -147,11 +147,11 @@ fn terminal_color(theme: &Theme, color: Option<TerminalColor>) -> Color {
   use be_terminal::BuiltinColor::*;
 
   match color {
-    Some(TerminalColor::Builtin { color: Black, bright: _ }) => oklch(0.0, 0.0, 0.0),
+    Some(TerminalColor::Builtin { color: Black, bright: _ }) => oklch(0.6, 0.0, 0.0),
     Some(TerminalColor::Builtin { color: Red, bright: _ }) => oklch(0.75, 0.13, 25.0),
-    Some(TerminalColor::Builtin { color: Green, bright: _ }) => oklch(0.8, 0.14, 130.0),
-    Some(TerminalColor::Builtin { color: Yellow, bright: _ }) => oklch(0.9, 0.13, 85.0),
-    Some(TerminalColor::Builtin { color: Blue, bright: _ }) => oklch(0.7, 0.13, 240.0),
+    Some(TerminalColor::Builtin { color: Green, bright: _ }) => oklch(0.8, 0.14, 140.0),
+    Some(TerminalColor::Builtin { color: Yellow, bright: _ }) => oklch(0.95, 0.12, 85.0),
+    Some(TerminalColor::Builtin { color: Blue, bright: _ }) => oklch(0.8, 0.12, 240.0),
     Some(TerminalColor::Builtin { color: Magenta, bright: _ }) => oklch(0.8, 0.13, 350.0),
     Some(TerminalColor::Builtin { color: Cyan, bright: _ }) => oklch(0.85, 0.1, 200.0),
     Some(TerminalColor::Builtin { color: White, bright: _ }) => oklch(1.0, 0.0, 0.0),
