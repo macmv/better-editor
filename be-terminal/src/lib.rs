@@ -1,7 +1,8 @@
-use anstyle_parse::{Parser, Perform, Utf8Parser};
+use anstyle_parse::{Parser, Utf8Parser};
 
 use crate::{grid::Grid, pty::Pty};
 
+mod control;
 mod grid;
 mod pty;
 
@@ -56,39 +57,6 @@ impl Terminal {
 
 impl TerminalState {
   fn new() -> Self { TerminalState { grid: Grid::new(), cursor: Cursor { row: 0, col: 0 } } }
-}
-
-impl Perform for TerminalState {
-  fn print(&mut self, c: char) {
-    self.grid.put(self.cursor, c);
-    self.cursor.col += 1;
-  }
-
-  fn execute(&mut self, b: u8) {
-    match b {
-      b'\n' => self.cursor.row += 1,
-      b'\r' => self.cursor.col = 0,
-      _ => (),
-    }
-  }
-
-  fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _byte: u8) {
-    println!("unhandled ESC: {}", _byte);
-  }
-
-  fn osc_dispatch(&mut self, _params: &[&[u8]], _bell_terminated: bool) {
-    println!("unhandled OSC: {:?}", _params);
-  }
-
-  fn csi_dispatch(
-    &mut self,
-    _params: &anstyle_parse::Params,
-    _intermediates: &[u8],
-    _ignore: bool,
-    _action: u8,
-  ) {
-    println!("unhandled CSI: {}", _action);
-  }
 }
 
 #[cfg(test)]
