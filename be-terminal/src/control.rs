@@ -110,15 +110,21 @@ impl Perform for TerminalState {
 
     match (action, intermediates) {
       (b'@', []) => unhandled!("insert blank"),
-      (b'A', []) => unhandled!("move up"),
-      (b'B', []) | (b'e', []) => unhandled!("move down"),
+      (b'A', []) => self.move_up(next_param_or(1)),
+      (b'B', []) | (b'e', []) => self.move_down(next_param_or(1)),
       (b'b', []) => unhandled!("repeat the preceding char"),
-      (b'C', []) | (b'a', []) => unhandled!("move forward"),
+      (b'C', []) | (b'a', []) => self.move_right(next_param_or(1)),
       (b'c', intermediates) if next_param_or(0) == 0 => unhandled!("identify terminal"),
-      (b'D', []) => unhandled!("move left"),
+      (b'D', []) => self.move_left(next_param_or(1)),
       (b'd', []) => unhandled!("goto line"),
-      (b'E', []) => unhandled!("move down and clear line"),
-      (b'F', []) => unhandled!("move up and clear line"),
+      (b'E', []) => {
+        self.move_down(next_param_or(1));
+        unhandled!("clear line")
+      }
+      (b'F', []) => {
+        self.move_up(next_param_or(1));
+        unhandled!("clear line")
+      }
       (b'G', []) | (b'`', []) => unhandled!("goto column"),
       (b'W', [b'?']) if next_param_or(0) == 5 => unhandled!("set tabs to 8"),
       (b'g', []) => unhandled!("clear tabs"),
@@ -159,6 +165,15 @@ impl Perform for TerminalState {
 }
 
 impl TerminalState {
+  fn move_up(&mut self, n: u16) { self.cursor.row = self.cursor.row.saturating_sub(n as usize); }
+  fn move_down(&mut self, n: u16) {
+    self.cursor.row = (self.cursor.row + n as usize).clamp(0, self.size.rows - 1);
+  }
+  fn move_left(&mut self, n: u16) { self.cursor.col = self.cursor.col.saturating_sub(n as usize); }
+  fn move_right(&mut self, n: u16) {
+    self.cursor.col = (self.cursor.col + n as usize).clamp(0, self.size.cols - 1);
+  }
+
   fn linefeed(&mut self) {
     if self.cursor.row == self.size.rows - 1 {
       let line = self.grid.linefeed(self.size);
