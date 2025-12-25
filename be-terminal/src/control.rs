@@ -13,7 +13,8 @@ impl Perform for TerminalState {
       C0::BS => self.cursor.col = self.cursor.col.saturating_sub(1),
       C0::CR => self.cursor.col = 0,
       C0::LF | C0::VT | C0::FF => self.linefeed(),
-      _ => eprintln!("unhandled C0: {b}"),
+      C0::BEL => {} // Ignore bell.
+      _ => eprintln!("[unhandled C0] {b}"),
     }
   }
 
