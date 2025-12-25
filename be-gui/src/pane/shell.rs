@@ -29,12 +29,19 @@ impl Shell {
   }
 
   pub fn draw(&mut self, render: &mut Render) {
+    let line_height = render.store.text.font_metrics().line_height;
+    let character_width = render.store.text.font_metrics().character_width;
+    let height = (render.size().height / line_height).floor() as usize;
+    let width = (render.size().width / character_width).floor() as usize;
+
+    self.terminal.set_size(be_terminal::Size { rows: height, cols: width });
+
+    self.terminal.update();
+
     if self.cached_scale != render.scale() {
       self.cached_layouts.clear();
       self.cached_scale = render.scale();
     }
-
-    self.terminal.update();
 
     // TODO
     /*
@@ -49,13 +56,6 @@ impl Shell {
 
     render
       .fill(&Rect::new(0.0, 0.0, render.size().width, render.size().height), oklch(0.3, 0.0, 0.0));
-
-    let line_height = render.store.text.font_metrics().line_height;
-    let character_width = render.store.text.font_metrics().character_width;
-    let height = (render.size().height / line_height).floor() as usize;
-    let width = (render.size().width / character_width).floor() as usize;
-
-    self.terminal.set_size(be_terminal::Size { rows: height, cols: width });
 
     for line in 0..height {
       let Some(layout) = self.layout_line(render, line) else { break };
