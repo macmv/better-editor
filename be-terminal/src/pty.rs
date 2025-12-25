@@ -5,14 +5,24 @@ use std::{
   process::Command,
 };
 
+use crate::Size;
+
 pub struct Pty {
   _child: std::process::Child,
   pty:    File,
 }
 
 impl Pty {
-  pub fn new() -> Self {
-    let pty = rustix_openpty::openpty(None, None).unwrap();
+  pub fn new(size: Size) -> Self {
+    let pty = rustix_openpty::openpty(
+      None,
+      Some(&rustix::termios::Winsize {
+        ws_row: size.rows as u16,
+        ws_col: size.cols as u16,
+        ..unsafe { std::mem::zeroed() }
+      }),
+    )
+    .unwrap();
 
     let mut cmd = Command::new("/bin/zsh");
 

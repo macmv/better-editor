@@ -33,7 +33,7 @@ pub struct Size {
 impl Terminal {
   pub fn new(size: Size) -> Self {
     Terminal {
-      pty:    Pty::new(),
+      pty:    Pty::new(size),
       state:  TerminalState::new(size),
       parser: Parser::<Utf8Parser>::new(),
     }
@@ -81,7 +81,7 @@ mod tests {
 
   #[test]
   fn terminal_works() {
-    let mut terminal = Terminal::new();
+    let mut terminal = Terminal::new(Size { rows: 40, cols: 80 });
 
     std::thread::sleep(std::time::Duration::from_millis(100));
 
