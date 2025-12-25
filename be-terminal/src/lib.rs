@@ -12,6 +12,9 @@ mod control;
 mod grid;
 mod pty;
 
+#[macro_use]
+extern crate log;
+
 pub struct Terminal {
   pty:   Pty,
   state: TerminalState,

@@ -14,18 +14,18 @@ impl Perform for TerminalState {
       C0::CR => self.cursor.col = 0,
       C0::LF | C0::VT | C0::FF => self.linefeed(),
       C0::BEL => {} // Ignore bell.
-      _ => eprintln!("[unhandled C0] {b}"),
+      _ => debug!("[unhandled C0] {b}"),
     }
   }
 
   fn esc_dispatch(&mut self, intermediates: &[u8], _ignore: bool, byte: u8) {
     macro_rules! unhandled {
       () => {{
-        eprintln!("[unhandled ESC] byte={byte:?} intermediates={intermediates:?}");
+        debug!("[unhandled ESC] byte={byte:?} intermediates={intermediates:?}");
       }};
 
       ($msg:literal) => {{
-        eprintln!("[unhandled ESC] {} (byte={byte:?} intermediates={intermediates:?})", $msg);
+        debug!("[unhandled ESC] {} (byte={byte:?} intermediates={intermediates:?})", $msg);
       }};
     }
 
@@ -55,11 +55,11 @@ impl Perform for TerminalState {
   fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
     macro_rules! unhandled {
       () => {{
-        eprintln!("[unhandled OSC] params={params:?}");
+        debug!("[unhandled OSC] params={params:?}");
       }};
 
       ($msg:literal) => {{
-        eprintln!("[unhandled OSC] {} (params={params:?})", $msg);
+        debug!("[unhandled OSC] {} (params={params:?})", $msg);
       }};
     }
 
@@ -89,13 +89,13 @@ impl Perform for TerminalState {
   ) {
     macro_rules! unhandled {
       () => {{
-        eprintln!(
+        debug!(
           "[unhandled CSI] action={action:?}, params={params:?}, intermediates={intermediates:?}",
         );
       }};
 
       ($($msg:tt)*) => {{
-        eprintln!(
+        debug!(
           "[unhandled CSI] {} (action={action:?}, params={params:?}, intermediates={intermediates:?})",
           format_args!($($msg)*)
         );
@@ -255,7 +255,7 @@ impl TerminalState {
   fn set_private_mode(&mut self, mode: u16, set: bool) {
     macro_rules! unhandled {
       ($mode:literal) => {
-        eprintln!("[unhandled private mode] {mode}")
+        debug!("[unhandled private mode] {mode}")
       };
     }
 
@@ -353,7 +353,7 @@ impl TerminalState {
         [107] => self.style.background = Some(builtin!(White, true)),
 
         _ => {
-          eprintln!("unhandle graphics mode: {args:?}");
+          debug!("unhandle graphics mode: {args:?}");
         }
       }
     }
