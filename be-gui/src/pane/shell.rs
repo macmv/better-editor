@@ -54,8 +54,10 @@ impl Shell {
     }
     */
 
-    render
-      .fill(&Rect::new(0.0, 0.0, render.size().width, render.size().height), oklch(0.3, 0.0, 0.0));
+    render.fill(
+      &Rect::new(0.0, 0.0, render.size().width, render.size().height),
+      render.theme().background,
+    );
 
     for line in 0..height {
       let Some(layout) = self.layout_line(render, line) else { break };
