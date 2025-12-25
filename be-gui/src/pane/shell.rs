@@ -80,8 +80,17 @@ impl Shell {
     for line in 0..height {
       let Some(layout) = self.layout_line(render, line) else { break };
 
-      render.draw_text(&layout, (20.0, (line + 1) as f64 * line_height));
+      render.draw_text(&layout, (0.0, line as f64 * line_height));
     }
+
+    let cursor = self.terminal.cursor();
+    render.fill(
+      &Rect::from_origin_size(
+        ((cursor.col as f64 * character_width).round(), (cursor.row as f64 * line_height).round()),
+        (character_width.ceil(), line_height.ceil()),
+      ),
+      render.theme().text,
+    );
   }
 
   fn layout_line(&mut self, render: &mut Render, i: usize) -> Option<&mut TextLayout> {

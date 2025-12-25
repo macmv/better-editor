@@ -133,6 +133,8 @@ impl Terminal {
       }
     }
   }
+
+  pub fn cursor(&self) -> Cursor { self.state.cursor }
 }
 
 impl Poller {
