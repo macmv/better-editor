@@ -143,7 +143,11 @@ impl Perform for TerminalState {
         self.cursor.row = (next_param_or(1) as usize - 1).clamp(0, self.size.rows - 1);
         self.cursor.col = (next_param_or(1) as usize - 1).clamp(0, self.size.cols - 1);
       }
-      (b'h', []) => unhandled!("set mode"),
+      (b'h', []) => {
+        for param in params_iter.map(|param| param[0]) {
+          self.set_mode(param, true);
+        }
+      }
       (b'h', [b'?']) => {
         for param in params_iter.map(|param| param[0]) {
           self.set_private_mode(param, true)
@@ -168,7 +172,11 @@ impl Perform for TerminalState {
       },
       (b'k', [b' ']) => unhandled!("set scp"),
       (b'L', []) => unhandled!("insert blank lines"),
-      (b'l', []) => unhandled!("reset mode"),
+      (b'l', []) => {
+        for param in params_iter.map(|param| param[0]) {
+          self.set_mode(param, false);
+        }
+      }
       (b'l', [b'?']) => {
         for param in params_iter.map(|param| param[0]) {
           self.set_private_mode(param, false)
@@ -273,6 +281,19 @@ impl TerminalState {
 
   fn set_active_charset(&mut self, index: usize) { self.cursor.active_charset = index; }
 
+  fn set_mode(&mut self, mode: u16, set: bool) {
+    macro_rules! unhandled {
+      ($mode:literal) => {
+        debug!("[unhandled mode] {mode}")
+      };
+    }
+
+    match mode {
+      34 => self.cursor.blink = set,
+      _ => unhandled!("set mode"),
+    }
+  }
+
   fn set_private_mode(&mut self, mode: u16, set: bool) {
     macro_rules! unhandled {
       ($mode:literal) => {
@@ -285,7 +306,7 @@ impl TerminalState {
       3 => unhandled!("column mode"),
       6 => unhandled!("origin"),
       7 => unhandled!("line wrap"),
-      12 => unhandled!("blinking cursor"),
+      12 => self.cursor.blink = set,
       25 => self.cursor.visible = !set,
       1000 => self.report_mouse = set,
       1002 => unhandled!("report cell mouse motion"),

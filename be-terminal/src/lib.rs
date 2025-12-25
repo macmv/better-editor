@@ -29,6 +29,7 @@ pub struct Terminal {
 pub struct Cursor {
   pub pos:            Position,
   pub visible:        bool,
+  pub blink:          bool,
   pub style:          Style,
   pub active_charset: usize,
 }
