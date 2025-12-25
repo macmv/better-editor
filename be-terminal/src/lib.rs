@@ -71,6 +71,24 @@ impl Perform for TerminalState {
       _ => (),
     }
   }
+
+  fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _byte: u8) {
+    println!("unhandled ESC: {}", _byte);
+  }
+
+  fn osc_dispatch(&mut self, _params: &[&[u8]], _bell_terminated: bool) {
+    println!("unhandled OSC: {:?}", _params);
+  }
+
+  fn csi_dispatch(
+    &mut self,
+    _params: &anstyle_parse::Params,
+    _intermediates: &[u8],
+    _ignore: bool,
+    _action: u8,
+  ) {
+    println!("unhandled CSI: {}", _action);
+  }
 }
 
 #[cfg(test)]
