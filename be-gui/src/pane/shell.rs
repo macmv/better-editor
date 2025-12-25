@@ -69,7 +69,7 @@ impl Shell {
       return Some(&mut self.cached_layouts[i]);
     }
 
-    let line = self.terminal.line(i)?;
+    let line = self.terminal.line(i)?.to_string();
 
     let layout = render.store.text.layout_builder(&line, render.theme().text, render.scale());
 

@@ -1,6 +1,9 @@
 use anstyle_parse::{Parser, Utf8Parser};
 
-use crate::{grid::Grid, pty::Pty};
+use crate::{
+  grid::{Grid, Line},
+  pty::Pty,
+};
 
 mod control;
 mod grid;
@@ -21,7 +24,7 @@ struct TerminalState {
   style: Style,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Clone, Copy, Debug)]
 struct Style {
   flags:      StyleFlags,
   foreground: Option<TerminalColor>,
@@ -29,7 +32,7 @@ struct Style {
 }
 
 bitflags::bitflags! {
-  #[derive(Default, Debug)]
+  #[derive(Default, Clone, Copy, Debug)]
   struct StyleFlags: u8 {
     const BOLD          = 1 << 0;
     const DIM           = 1 << 1;
@@ -42,13 +45,13 @@ bitflags::bitflags! {
   }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 enum TerminalColor {
   Builtin { color: BuiltinColor, bright: bool },
   Rgb { r: u8, g: u8, b: u8 },
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 enum BuiltinColor {
   Black,
   Red,
@@ -93,7 +96,7 @@ impl Terminal {
 
   pub fn perform_input(&mut self, c: char) { self.pty.input(c); }
 
-  pub fn line(&self, index: usize) -> Option<&str> { self.state.grid.line(index) }
+  pub fn line(&self, index: usize) -> Option<Line<'_>> { self.state.grid.line(index) }
 
   pub fn update(&mut self) {
     loop {
@@ -141,9 +144,11 @@ mod tests {
 
     terminal.update();
     println!("===");
+    /*
     for line in terminal.state.grid.lines() {
       println!("{}", line);
     }
+    */
     println!("===");
 
     panic!();

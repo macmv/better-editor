@@ -1,40 +1,55 @@
-use crate::{Cursor, Size};
+use crate::{Cursor, Size, Style};
 use unicode_width::UnicodeWidthChar;
 
 pub struct Grid {
-  lines: Vec<String>,
+  lines: Vec<Vec<Cell>>,
+}
+
+#[derive(Default, Clone, Copy)]
+struct Cell {
+  c:     char,
+  style: Style,
+}
+
+pub struct Line<'a> {
+  line: &'a [Cell],
 }
 
 impl Grid {
-  pub fn new(size: Size) -> Self { Grid { lines: vec![" ".repeat(size.cols); size.rows] } }
+  pub fn new(size: Size) -> Self {
+    Grid { lines: vec![vec![Cell::default(); size.cols]; size.rows] }
+  }
 
   pub fn put(&mut self, pos: Cursor, c: char) {
     if pos.row >= self.lines.len() {
       return;
     }
 
-    let line = &mut self.lines[pos.row];
-    let range = column_offset(line, pos.col);
-
-    let mut s = [0; 4];
-    let s = c.encode_utf8(&mut s);
-    line.replace_range(range, s);
+    self.lines[pos.row][pos.col].c = c;
   }
 
-  #[cfg(test)]
-  pub fn lines(&self) -> impl Iterator<Item = &str> { self.lines.iter().map(|s| s.as_str()) }
-  pub fn line(&self, index: usize) -> Option<&str> { self.lines.get(index).map(|s| s.as_str()) }
+  pub fn line(&self, index: usize) -> Option<Line<'_>> {
+    self.lines.get(index).map(|line| Line { line })
+  }
 
   pub fn resize(&mut self, size: Size) {
-    self.lines.resize(size.rows, " ".repeat(size.cols));
+    self.lines.resize(size.rows, vec![]);
 
     for line in &mut self.lines {
-      if line.len() < size.cols {
-        line.push_str(&" ".repeat(size.cols - line.len()));
-      } else {
-        line.truncate(size.cols);
+      line.resize(size.cols, Cell::default());
+    }
+  }
+}
+
+impl Line<'_> {
+  pub fn to_string(&self) -> String {
+    let mut line = String::new();
+    for c in self.line {
+      if c.c != '\0' {
+        line.push(c.c);
       }
     }
+    line
   }
 }
 
