@@ -89,11 +89,7 @@ impl winit::application::ApplicationHandler for App {
 
   fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
     if let Some(init) = &mut self.init {
-      let texture = init.surface.get_current_texture().unwrap();
-
-      init.app.render(&texture, &init.device, &init.queue, init.scale);
-
-      texture.present();
+      init.window.request_redraw();
     }
   }
 
