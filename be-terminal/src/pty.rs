@@ -44,6 +44,9 @@ impl Pty {
           return Err(io::Error::other("Failed to set session id"));
         }
 
+        // Needed for control signals to work.
+        libc::ioctl(user, libc::TIOCSCTTY);
+
         // No longer need user/controller fds.
         libc::close(user);
         libc::close(controller);
