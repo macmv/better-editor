@@ -17,6 +17,47 @@ pub struct Terminal {
 struct TerminalState {
   grid:   Grid,
   cursor: Cursor,
+
+  style: Style,
+}
+
+#[derive(Default, Debug)]
+struct Style {
+  flags:      StyleFlags,
+  foreground: Option<TerminalColor>,
+  background: Option<TerminalColor>,
+}
+
+bitflags::bitflags! {
+  #[derive(Default, Debug)]
+  struct StyleFlags: u8 {
+    const BOLD          = 1 << 0;
+    const DIM           = 1 << 1;
+    const ITALIC        = 1 << 2;
+    const UNDERLINE     = 1 << 3;
+    const BLINK         = 1 << 4;
+    const INVERSE       = 1 << 5;
+    const HIDDEN        = 1 << 6;
+    const STRIKETHROUGH = 1 << 7;
+  }
+}
+
+#[derive(Debug)]
+enum TerminalColor {
+  Builtin { color: BuiltinColor, bright: bool },
+  Rgb { r: u8, g: u8, b: u8 },
+}
+
+#[derive(Debug)]
+enum BuiltinColor {
+  Black,
+  Red,
+  Green,
+  Yellow,
+  Blue,
+  Magenta,
+  Cyan,
+  White,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -74,7 +115,11 @@ impl Terminal {
 
 impl TerminalState {
   fn new(size: Size) -> Self {
-    TerminalState { grid: Grid::new(size), cursor: Cursor { row: 0, col: 0 } }
+    TerminalState {
+      grid:   Grid::new(size),
+      cursor: Cursor { row: 0, col: 0 },
+      style:  Style::default(),
+    }
   }
 
   fn resize(&mut self, size: Size) {

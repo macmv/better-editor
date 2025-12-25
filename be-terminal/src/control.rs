@@ -1,6 +1,6 @@
-use anstyle_parse::Perform;
+use anstyle_parse::{Params, Perform};
 
-use crate::TerminalState;
+use crate::{BuiltinColor, Style, StyleFlags, TerminalColor, TerminalState};
 
 impl Perform for TerminalState {
   fn print(&mut self, c: char) {
@@ -130,7 +130,7 @@ impl Perform for TerminalState {
       (b'l', []) => unhandled!("reset mode"),
       (b'l', [b'?']) => unhandled!("reset private mode"),
       (b'M', []) => unhandled!("delete lines"),
-      (b'm', []) => unhandled!("set graphics mode"),
+      (b'm', []) => self.set_graphics_mode(params),
       (b'm', [b'>']) => unhandled!("set keyboard mode"),
       (b'm', [b'?']) => unhandled!("report graphics mode"),
       (b'n', []) => unhandled!("device status"),
@@ -151,6 +151,86 @@ impl Perform for TerminalState {
       (b'X', []) => unhandled!("erase chars"),
       (b'Z', []) => unhandled!("move backward tabs"),
       _ => unhandled!(),
+    }
+  }
+}
+
+impl TerminalState {
+  fn set_graphics_mode(&mut self, params: &Params) {
+    macro_rules! builtin {
+      ($name:ident, $bright:expr) => {
+        TerminalColor::Builtin { color: BuiltinColor::$name, bright: $bright }
+      };
+    }
+
+    for args in params.iter() {
+      match args {
+        [0] => self.style = Style::default(),
+        [1] => self.style.flags.set(StyleFlags::BOLD, true),
+        [2] => self.style.flags.set(StyleFlags::DIM, true),
+        [3] => self.style.flags.set(StyleFlags::ITALIC, true),
+        [4] => self.style.flags.set(StyleFlags::UNDERLINE, true),
+        [5] => self.style.flags.set(StyleFlags::BLINK, true),
+        [7] => self.style.flags.set(StyleFlags::INVERSE, true),
+        [8] => self.style.flags.set(StyleFlags::HIDDEN, true),
+        [9] => self.style.flags.set(StyleFlags::STRIKETHROUGH, true),
+
+        [22] => self.style.flags.set(StyleFlags::BOLD | StyleFlags::DIM, false),
+        [23] => self.style.flags.set(StyleFlags::ITALIC, false),
+        [24] => self.style.flags.set(StyleFlags::UNDERLINE, false),
+        [25] => self.style.flags.set(StyleFlags::BLINK, false),
+        [27] => self.style.flags.set(StyleFlags::INVERSE, false),
+        [28] => self.style.flags.set(StyleFlags::HIDDEN, false),
+        [29] => self.style.flags.set(StyleFlags::STRIKETHROUGH, false),
+
+        [30] => self.style.foreground = Some(builtin!(Black, false)),
+        [31] => self.style.foreground = Some(builtin!(Red, false)),
+        [32] => self.style.foreground = Some(builtin!(Green, false)),
+        [33] => self.style.foreground = Some(builtin!(Yellow, false)),
+        [34] => self.style.foreground = Some(builtin!(Blue, false)),
+        [35] => self.style.foreground = Some(builtin!(Magenta, false)),
+        [36] => self.style.foreground = Some(builtin!(Cyan, false)),
+        [37] => self.style.foreground = Some(builtin!(White, false)),
+        [38, 2, r, g, b] => {
+          self.style.foreground = Some(TerminalColor::Rgb { r: *r as u8, g: *g as u8, b: *b as u8 })
+        }
+        [39] => self.style.foreground = None,
+
+        [40] => self.style.background = Some(builtin!(Black, false)),
+        [41] => self.style.background = Some(builtin!(Red, false)),
+        [42] => self.style.background = Some(builtin!(Green, false)),
+        [43] => self.style.background = Some(builtin!(Yellow, false)),
+        [44] => self.style.background = Some(builtin!(Blue, false)),
+        [45] => self.style.background = Some(builtin!(Magenta, false)),
+        [46] => self.style.background = Some(builtin!(Cyan, false)),
+        [47] => self.style.background = Some(builtin!(White, false)),
+        [48, 2, r, g, b] => {
+          self.style.foreground = Some(TerminalColor::Rgb { r: *r as u8, g: *g as u8, b: *b as u8 })
+        }
+        [49] => self.style.background = None,
+
+        [90] => self.style.foreground = Some(builtin!(Black, true)),
+        [91] => self.style.foreground = Some(builtin!(Red, true)),
+        [92] => self.style.foreground = Some(builtin!(Green, true)),
+        [93] => self.style.foreground = Some(builtin!(Yellow, true)),
+        [94] => self.style.foreground = Some(builtin!(Blue, true)),
+        [95] => self.style.foreground = Some(builtin!(Magenta, true)),
+        [96] => self.style.foreground = Some(builtin!(Cyan, true)),
+        [97] => self.style.foreground = Some(builtin!(White, true)),
+
+        [100] => self.style.background = Some(builtin!(Black, true)),
+        [101] => self.style.background = Some(builtin!(Red, true)),
+        [102] => self.style.background = Some(builtin!(Green, true)),
+        [103] => self.style.background = Some(builtin!(Yellow, true)),
+        [104] => self.style.background = Some(builtin!(Blue, true)),
+        [105] => self.style.background = Some(builtin!(Magenta, true)),
+        [106] => self.style.background = Some(builtin!(Cyan, true)),
+        [107] => self.style.background = Some(builtin!(White, true)),
+
+        _ => {
+          eprintln!("unhandle graphics mode: {args:?}");
+        }
+      }
     }
   }
 }
