@@ -7,5 +7,6 @@ members = [
   "be-doc",
   "be-editor",
   "be-lsp",
+  "be-terminal",
   "be-gui",
 ]
