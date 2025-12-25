@@ -1,3 +1,4 @@
+use be_input::{Action, Edit};
 use be_terminal::Terminal;
 use kurbo::Rect;
 
@@ -13,6 +14,14 @@ pub struct Shell {
 impl Shell {
   pub fn new() -> Self {
     Shell { terminal: Terminal::new(), cached_layouts: vec![], cached_scale: 0.0 }
+  }
+
+  pub fn perform_action(&mut self, action: Action) {
+    match action {
+      Action::Edit { count: _, e: Edit::Insert(c) } => self.terminal.perform_input(c),
+
+      _ => {}
+    }
   }
 
   pub fn draw(&mut self, render: &mut Render) {

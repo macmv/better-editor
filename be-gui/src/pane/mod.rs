@@ -177,7 +177,7 @@ impl Content {
     match self {
       Content::Editor(editor) => editor.editor.perform_action(action),
       Content::FileTree(file_tree) => file_tree.perform_action(action),
-      Content::Shell(_) => {}
+      Content::Shell(shell) => shell.perform_action(action),
     }
   }
 
