@@ -25,6 +25,8 @@ impl Shell {
   pub fn perform_action(&mut self, action: Action) {
     match action {
       Action::Edit { count: _, e: Edit::Insert(c) } => self.terminal.perform_input(c),
+      Action::Edit { count: _, e: Edit::Backspace } => self.terminal.perform_backspace(),
+      Action::Edit { count: _, e: Edit::Delete } => self.terminal.perform_delete(),
 
       _ => {}
     }

@@ -114,6 +114,8 @@ impl Terminal {
   }
 
   pub fn perform_input(&mut self, c: char) { self.pty.input(c); }
+  pub fn perform_backspace(&mut self) { self.pty.input(control::C0::BS.into()); }
+  pub fn perform_delete(&mut self) { self.pty.input(control::C0::DEL.into()); }
 
   pub fn line(&self, index: usize) -> Option<Line<'_>> { self.state.grid.line(index) }
 
