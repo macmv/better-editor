@@ -223,9 +223,17 @@ impl Perform for TerminalState {
         self.cursor.row = 0;
         self.cursor.col = 0;
       }
-      (b'S', []) => unhandled!("scroll up"),
+      (b'S', []) => {
+        for _ in 0..next_param_or(1) {
+          self.grid.scroll_up(self.scroll_start..self.scroll_end);
+        }
+      }
       (b's', []) => unhandled!("save cursor position"),
-      (b'T', []) => unhandled!("scroll down"),
+      (b'T', []) => {
+        for _ in 0..next_param_or(1) {
+          self.grid.scroll_down(self.scroll_start..self.scroll_end);
+        }
+      }
       (b't', []) => unhandled!("push title/text area"),
       (b'u', [b'?']) => unhandled!("report keyboard mode"),
       (b'u', [b'=']) => unhandled!("set keyboard mode"),

@@ -79,6 +79,11 @@ impl Grid {
     }
   }
 
+  pub fn scroll_down(&mut self, range: Range<usize>) {
+    self.lines.insert(range.start, vec![Cell::default(); self.size.cols]);
+    self.lines.remove(range.end - 1);
+  }
+
   pub fn scroll_up(&mut self, range: Range<usize>) -> OwnedLine {
     let cells = self.lines.remove(range.start);
     if range.end < self.lines.len() {
