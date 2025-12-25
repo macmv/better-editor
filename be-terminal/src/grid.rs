@@ -11,6 +11,8 @@ struct Cell {
 }
 
 pub struct OwnedLine {
+  // TODO: Scrollback!
+  #[allow(unused)]
   cells: Vec<Cell>,
 }
 
