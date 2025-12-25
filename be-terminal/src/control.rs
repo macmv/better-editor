@@ -284,20 +284,22 @@ impl TerminalState {
   fn set_mode(&mut self, mode: u16, set: bool) {
     macro_rules! unhandled {
       ($mode:literal) => {
-        debug!("[unhandled mode] {mode}")
+        debug!("[unhandled mode] {mode} ({})", $mode)
       };
     }
 
     match mode {
+      4 => self.cursor.insert = set,
+      20 => self.cursor.line_feed = set,
       34 => self.cursor.blink = set,
-      _ => unhandled!("set mode"),
+      _ => unhandled!("unknown"),
     }
   }
 
   fn set_private_mode(&mut self, mode: u16, set: bool) {
     macro_rules! unhandled {
       ($mode:literal) => {
-        debug!("[unhandled private mode] {mode}")
+        debug!("[unhandled private mode] {mode} ({})", $mode)
       };
     }
 
@@ -319,7 +321,7 @@ impl TerminalState {
       1049 => self.set_alt_screen(set),
       2004 => self.bracketed_paste = set,
       2026 => unhandled!("sync update"),
-      _ => {}
+      _ => unhandled!("unknown"),
     }
   }
 

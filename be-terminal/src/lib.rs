@@ -29,6 +29,8 @@ pub struct Terminal {
 pub struct Cursor {
   pub pos:            Position,
   pub visible:        bool,
+  pub insert:         bool,
+  pub line_feed:      bool,
   pub blink:          bool,
   pub style:          Style,
   pub active_charset: usize,
@@ -290,9 +292,13 @@ impl TerminalState {
 impl Default for Cursor {
   fn default() -> Self {
     Cursor {
-      pos:            Position::default(),
-      visible:        true,
-      style:          Default::default(),
+      pos:       Position::default(),
+      visible:   true,
+      insert:    true,
+      line_feed: true,
+      blink:     false,
+      style:     Default::default(),
+
       active_charset: 0,
     }
   }
