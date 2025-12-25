@@ -46,6 +46,8 @@ impl Pty {
     }
     let child = cmd.spawn().unwrap();
 
+    be_async::set_nonblocking(&pty.controller).unwrap();
+
     Pty { _child: child, pty: File::from(pty.controller) }
   }
 

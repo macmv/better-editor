@@ -1,6 +1,6 @@
 use be_task::Task;
 use parking_lot::Mutex;
-use polling::{AsRawSource, Events, Poller};
+use polling::{Events, Poller};
 use serde::de;
 use serde_json::value::RawValue;
 use std::{
@@ -184,32 +184,13 @@ impl LspClient {
   }
 }
 
-fn set_nonblocking(source: impl AsRawSource) -> io::Result<()> {
-  unsafe {
-    let flags = libc::fcntl(source.raw(), libc::F_GETFL);
-    if flags < 0 {
-      return Err(io::Error::last_os_error());
-    }
-
-    if flags & libc::O_NONBLOCK != 0 {
-      return Ok(());
-    }
-
-    if libc::fcntl(source.raw(), libc::F_SETFL, flags | libc::O_NONBLOCK) < 0 {
-      return Err(io::Error::last_os_error());
-    }
-
-    Ok(())
-  }
-}
-
 impl LspWorker {
   pub fn run(mut self) {
     const READ: usize = 0;
     const WRITE: usize = 1;
 
-    set_nonblocking(&self.reader.reader).unwrap();
-    set_nonblocking(&self.writer.writer).unwrap();
+    be_async::set_nonblocking(&self.reader.reader).unwrap();
+    be_async::set_nonblocking(&self.writer.writer).unwrap();
 
     // SAFETY: These are removed down below.
     unsafe {
