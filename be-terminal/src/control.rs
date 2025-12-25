@@ -133,7 +133,13 @@ impl Perform for TerminalState {
       (b'h', []) => unhandled!("set mode"),
       (b'h', [b'?']) => unhandled!("set private mode"),
       (b'I', []) => unhandled!("move forward tabs"),
-      (b'J', []) => unhandled!("clear screen (0: below, 1: above, 2: all, 3: saved)"),
+      (b'J', []) => match next_param_or(0) {
+        0 => self.clear_screen_down(),
+        1 => self.clear_screen_up(),
+        2 => self.clear_screen(),
+        3 => self.clear_screen_saved(),
+        param => unhandled!("clear screen with {}", param),
+      },
       (b'K', []) => match next_param_or(0) {
         0 => self.clear_line_right(),
         1 => self.clear_line_left(),
@@ -178,6 +184,25 @@ impl TerminalState {
   fn move_left(&mut self, n: u16) { self.cursor.col = self.cursor.col.saturating_sub(n as usize); }
   fn move_right(&mut self, n: u16) {
     self.cursor.col = (self.cursor.col + n as usize).clamp(0, self.size.cols - 1);
+  }
+
+  fn clear_screen_down(&mut self) {
+    for line in self.cursor.row..=self.size.rows - 1 {
+      self.grid.line_mut(line).clear();
+    }
+  }
+
+  fn clear_screen_up(&mut self) {
+    for line in 0..=self.cursor.row {
+      self.grid.line_mut(line).clear();
+    }
+  }
+
+  fn clear_screen(&mut self) { self.grid.clear(); }
+
+  fn clear_screen_saved(&mut self) {
+    self.grid.clear();
+    self.scrollback.clear();
   }
 
   fn clear_line_right(&mut self) {

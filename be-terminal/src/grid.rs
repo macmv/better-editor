@@ -65,6 +65,12 @@ impl Grid {
     }
   }
 
+  pub fn clear(&mut self) {
+    for line in &mut self.lines {
+      LineMut { line }.clear();
+    }
+  }
+
   pub fn linefeed(&mut self, size: Size) -> OwnedLine {
     let cells = self.lines.remove(0);
     self.lines.push(vec![Cell::default(); size.cols]);
@@ -73,6 +79,8 @@ impl Grid {
 }
 
 impl<'a> LineMut<'a> {
+  pub fn clear(&mut self) { self.line.fill(Cell::default()); }
+
   pub fn clear_range(&mut self, range: std::ops::RangeInclusive<usize>) {
     for i in range {
       self.line[i].c = ' ';
