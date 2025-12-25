@@ -94,10 +94,10 @@ impl Perform for TerminalState {
         );
       }};
 
-      ($msg:literal) => {{
+      ($($msg:tt)*) => {{
         eprintln!(
           "[unhandled CSI] {} (action={action:?}, params={params:?}, intermediates={intermediates:?})",
-          $msg
+          format_args!($($msg)*)
         );
       }};
     }
@@ -134,7 +134,12 @@ impl Perform for TerminalState {
       (b'h', [b'?']) => unhandled!("set private mode"),
       (b'I', []) => unhandled!("move forward tabs"),
       (b'J', []) => unhandled!("clear screen (0: below, 1: above, 2: all, 3: saved)"),
-      (b'K', []) => unhandled!("clear line (0: right, 1: left, 2: all)"),
+      (b'K', []) => match next_param_or(0) {
+        0 => self.clear_line_right(),
+        1 => self.clear_line_left(),
+        2 => self.clear_line(),
+        param => unhandled!("clear line with {}", param),
+      },
       (b'k', [b' ']) => unhandled!("set scp"),
       (b'L', []) => unhandled!("insert blank lines"),
       (b'l', []) => unhandled!("reset mode"),
@@ -173,6 +178,18 @@ impl TerminalState {
   fn move_left(&mut self, n: u16) { self.cursor.col = self.cursor.col.saturating_sub(n as usize); }
   fn move_right(&mut self, n: u16) {
     self.cursor.col = (self.cursor.col + n as usize).clamp(0, self.size.cols - 1);
+  }
+
+  fn clear_line_right(&mut self) {
+    self.grid.line_mut(self.cursor.row).clear_range(self.cursor.col..=self.size.cols - 1);
+  }
+
+  fn clear_line_left(&mut self) {
+    self.grid.line_mut(self.cursor.row).clear_range(0..=self.cursor.col);
+  }
+
+  fn clear_line(&mut self) {
+    self.grid.line_mut(self.cursor.row).clear_range(0..=self.size.cols - 1);
   }
 
   fn linefeed(&mut self) {

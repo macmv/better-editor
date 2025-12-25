@@ -20,6 +20,10 @@ pub struct Line<'a> {
   line: &'a [Cell],
 }
 
+pub struct LineMut<'a> {
+  line: &'a mut [Cell],
+}
+
 pub struct StyleIter<'a> {
   line:   &'a [Cell],
   prev:   Style,
@@ -45,6 +49,10 @@ impl Grid {
     self.lines.get(index).map(|line| Line { line })
   }
 
+  pub fn line_mut(&mut self, index: usize) -> LineMut<'_> {
+    LineMut { line: self.lines.get_mut(index).expect("line out of bounds") }
+  }
+
   pub fn resize(&mut self, size: Size) {
     self.lines.resize(size.rows, vec![]);
 
@@ -57,6 +65,14 @@ impl Grid {
     let cells = self.lines.remove(0);
     self.lines.push(vec![Cell::default(); size.cols]);
     OwnedLine { cells }
+  }
+}
+
+impl<'a> LineMut<'a> {
+  pub fn clear_range(&mut self, range: std::ops::RangeInclusive<usize>) {
+    for i in range {
+      self.line[i].c = ' ';
+    }
   }
 }
 
