@@ -79,7 +79,7 @@ impl Grid {
     }
   }
 
-  pub fn linefeed(&mut self, range: Range<usize>) -> OwnedLine {
+  pub fn scroll_up(&mut self, range: Range<usize>) -> OwnedLine {
     let cells = self.lines.remove(range.start);
     if range.end < self.lines.len() {
       self.lines.insert(range.end, vec![Cell::default(); self.size.cols]);

@@ -278,7 +278,7 @@ impl TerminalState {
 
   fn linefeed(&mut self) {
     if self.cursor.row == self.scroll_end - 1 {
-      let line = self.grid.linefeed(self.scroll_start..self.scroll_end);
+      let line = self.grid.scroll_up(self.scroll_start..self.scroll_end);
       if !self.alt_screen {
         self.scrollback.push(line);
       }
