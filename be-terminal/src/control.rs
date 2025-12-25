@@ -17,22 +17,110 @@ impl Perform for TerminalState {
     }
   }
 
-  fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _byte: u8) {
-    println!("unhandled ESC: {}", _byte);
+  fn esc_dispatch(&mut self, intermediates: &[u8], _ignore: bool, byte: u8) {
+    macro_rules! unhandled {
+      () => {{
+        eprintln!("[unhandled ESC] byte={byte:?} intermediates={intermediates:?}");
+      }};
+
+      ($msg:literal) => {{
+        eprintln!("[unhandled ESC] {} (byte={byte:?} intermediates={intermediates:?})", $msg);
+      }};
+    }
+
+    unhandled!();
   }
 
-  fn osc_dispatch(&mut self, _params: &[&[u8]], _bell_terminated: bool) {
-    println!("unhandled OSC: {:?}", _params);
+  fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
+    macro_rules! unhandled {
+      () => {{
+        eprintln!("[unhandled OSC] params={params:?}");
+      }};
+
+      ($msg:literal) => {{
+        eprintln!("[unhandled OSC] {} (params={params:?})", $msg);
+      }};
+    }
+
+    unhandled!();
   }
 
   fn csi_dispatch(
     &mut self,
-    _params: &anstyle_parse::Params,
-    _intermediates: &[u8],
+    params: &anstyle_parse::Params,
+    intermediates: &[u8],
     _ignore: bool,
-    _action: u8,
+    action: u8,
   ) {
-    println!("unhandled CSI: {}", _action);
+    macro_rules! unhandled {
+      () => {{
+        eprintln!(
+          "[unhandled CSI] action={action:?}, params={params:?}, intermediates={intermediates:?}",
+        );
+      }};
+
+      ($msg:literal) => {{
+        eprintln!(
+          "[unhandled CSI] {} (action={action:?}, params={params:?}, intermediates={intermediates:?})",
+          $msg
+        );
+      }};
+    }
+
+    let mut params_iter = params.iter();
+
+    let mut next_param_or = |default: u16| match params_iter.next() {
+      Some(&[param, ..]) if param != 0 => param,
+      _ => default,
+    };
+
+    match (action, intermediates) {
+      (b'@', []) => unhandled!("insert blank"),
+      (b'A', []) => unhandled!("move up"),
+      (b'B', []) | (b'e', []) => unhandled!("move down"),
+      (b'b', []) => unhandled!("repeat the preceding char"),
+      (b'C', []) | (b'a', []) => unhandled!("move forward"),
+      (b'c', intermediates) if next_param_or(0) == 0 => unhandled!("identify terminal"),
+      (b'D', []) => unhandled!("move left"),
+      (b'd', []) => unhandled!("goto line"),
+      (b'E', []) => unhandled!("move down and clear line"),
+      (b'F', []) => unhandled!("move up and clear line"),
+      (b'G', []) | (b'`', []) => unhandled!("goto column"),
+      (b'W', [b'?']) if next_param_or(0) == 5 => unhandled!("set tabs to 8"),
+      (b'g', []) => unhandled!("clear tabs"),
+      (b'H', []) | (b'f', []) => unhandled!("goto `y`, `x`"),
+      (b'h', []) => unhandled!("set mode"),
+      (b'h', [b'?']) => unhandled!("set private mode"),
+      (b'I', []) => unhandled!("move forward tabs"),
+      (b'J', []) => unhandled!("clear screen (0: below, 1: above, 2: all, 3: saved)"),
+      (b'K', []) => unhandled!("clear line (0: right, 1: left, 2: all)"),
+      (b'k', [b' ']) => unhandled!("set scp"),
+      (b'L', []) => unhandled!("insert blank lines"),
+      (b'l', []) => unhandled!("reset mode"),
+      (b'l', [b'?']) => unhandled!("reset private mode"),
+      (b'M', []) => unhandled!("delete lines"),
+      (b'm', []) => unhandled!("set graphics mode"),
+      (b'm', [b'>']) => unhandled!("set keyboard mode"),
+      (b'm', [b'?']) => unhandled!("report graphics mode"),
+      (b'n', []) => unhandled!("device status"),
+      (b'P', []) => unhandled!("delete chars"),
+      (b'p', [b'$']) => unhandled!("report mode"),
+      (b'p', [b'?', b'$']) => unhandled!("report private mode"),
+      (b'q', [b' ']) => unhandled!("set cursor style"),
+      (b'r', []) => unhandled!("set scrolling region"),
+      (b'S', []) => unhandled!("scroll up"),
+      (b's', []) => unhandled!("save cursor position"),
+      (b'T', []) => unhandled!("scroll down"),
+      (b't', []) => unhandled!("push title/text area"),
+      (b'u', [b'?']) => unhandled!("report keyboard mode"),
+      (b'u', [b'=']) => unhandled!("set keyboard mode"),
+      (b'u', [b'>']) => unhandled!("push keyboard mode"),
+      (b'u', [b'<']) => unhandled!("pop keyboard modes"),
+      (b'u', []) => unhandled!("restore cursor position"),
+      (b'X', []) => unhandled!("erase chars"),
+      (b'Z', []) => unhandled!("move backward tabs"),
+      _ => unhandled!(),
+    }
   }
 }
 
