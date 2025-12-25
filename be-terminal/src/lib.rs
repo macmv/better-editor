@@ -33,6 +33,58 @@ pub struct TerminalState {
   pub cursor_visible: bool,
 
   pending_writes: Vec<u8>,
+
+  charsets:       [Charset; 4],
+  active_charset: usize,
+}
+
+#[derive(Clone, Copy)]
+enum Charset {
+  Ascii,
+  LineDrawing,
+}
+
+impl Charset {
+  pub fn map(self, c: char) -> char {
+    match self {
+      Charset::Ascii => c,
+      Charset::LineDrawing => match c {
+        '_' => ' ',
+        '`' => '◆',
+        'a' => '▒',
+        'b' => '\u{2409}', // Symbol for horizontal tabulation
+        'c' => '\u{240c}', // Symbol for form feed
+        'd' => '\u{240d}', // Symbol for carriage return
+        'e' => '\u{240a}', // Symbol for line feed
+        'f' => '°',
+        'g' => '±',
+        'h' => '\u{2424}', // Symbol for newline
+        'i' => '\u{240b}', // Symbol for vertical tabulation
+        'j' => '┘',
+        'k' => '┐',
+        'l' => '┌',
+        'm' => '└',
+        'n' => '┼',
+        'o' => '⎺',
+        'p' => '⎻',
+        'q' => '─',
+        'r' => '⎼',
+        's' => '⎽',
+        't' => '├',
+        'u' => '┤',
+        'v' => '┴',
+        'w' => '┬',
+        'x' => '│',
+        'y' => '≤',
+        'z' => '≥',
+        '{' => 'π',
+        '|' => '≠',
+        '}' => '£',
+        '~' => '·',
+        _ => c,
+      },
+    }
+  }
 }
 
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
@@ -175,6 +227,9 @@ impl TerminalState {
       style: Style::default(),
       cursor_visible: true,
       pending_writes: vec![],
+
+      charsets: [Charset::Ascii; 4],
+      active_charset: 0,
     }
   }
 

@@ -1,10 +1,10 @@
 use anstyle_parse::{Params, Perform};
 
-use crate::{BuiltinColor, Style, StyleFlags, TerminalColor, TerminalState};
+use crate::{BuiltinColor, Charset, Style, StyleFlags, TerminalColor, TerminalState};
 
 impl Perform for TerminalState {
   fn print(&mut self, c: char) {
-    self.grid.put(self.cursor, c, self.style);
+    self.grid.put(self.cursor, self.charsets[self.active_charset].map(c), self.style);
     self.cursor.col += 1;
   }
 
@@ -14,6 +14,8 @@ impl Perform for TerminalState {
       C0::CR => self.cursor.col = 0,
       C0::LF | C0::VT | C0::FF => self.linefeed(),
       C0::BEL => {} // Ignore bell.
+      C0::SI => self.set_active_charset(0),
+      C0::SO => self.set_active_charset(1),
       _ => debug!("[unhandled C0] {b}"),
     }
   }
@@ -30,7 +32,7 @@ impl Perform for TerminalState {
     }
 
     match (byte, intermediates) {
-      (b'B', _) => unhandled!("set normal charset"),
+      (b'B', &[index]) => self.set_charset(index, Charset::Ascii),
       (b'D', []) => self.linefeed(),
       (b'E', []) => {
         self.linefeed();
@@ -40,7 +42,7 @@ impl Perform for TerminalState {
       (b'M', []) => unhandled!("reverse index"),
       (b'Z', []) => unhandled!("identify terminal"),
       (b'c', []) => unhandled!("reset state"),
-      (b'0', _) => unhandled!("set special character charset"),
+      (b'0', &[index]) => self.set_charset(index, Charset::LineDrawing),
       (b'7', []) => unhandled!("save cursor position"),
       (b'8', [b'#']) => unhandled!("show test screen"),
       (b'8', []) => unhandled!("restore cursor position"),
@@ -251,6 +253,19 @@ impl TerminalState {
   }
 
   fn send_text(&mut self, text: &str) { self.pending_writes.extend_from_slice(text.as_bytes()); }
+
+  fn set_charset(&mut self, index: u8, charset: Charset) {
+    let index = match index {
+      b'(' => 0,
+      b')' => 1,
+      b'*' => 2,
+      b'+' => 3,
+      _ => return,
+    };
+    self.charsets[index] = charset;
+  }
+
+  fn set_active_charset(&mut self, index: usize) { self.active_charset = index; }
 
   fn set_private_mode(&mut self, mode: u16, set: bool) {
     macro_rules! unhandled {
