@@ -30,6 +30,11 @@ pub struct TerminalState {
   size:       Size,
   style:      Style,
 
+  alt_grid:   Grid,
+  alt_screen: bool,
+  alt_cursor: Cursor,
+  alt_style:  Style,
+
   pub cursor_keys:     bool,
   pub cursor_visible:  bool,
   pub bracketed_paste: bool,
@@ -252,6 +257,11 @@ impl TerminalState {
       size,
       style: Style::default(),
 
+      alt_grid: Grid::new(size),
+      alt_screen: false,
+      alt_cursor: Cursor { row: 0, col: 0 },
+      alt_style: Style::default(),
+
       cursor_keys: false,
       cursor_visible: true,
       bracketed_paste: false,
@@ -265,6 +275,7 @@ impl TerminalState {
   fn resize(&mut self, size: Size) {
     self.size = size;
     self.grid.resize(size);
+    self.alt_grid.resize(size);
     self.cursor.row = self.cursor.row.clamp(0, size.rows - 1);
     self.cursor.col = self.cursor.col.clamp(0, size.cols - 1);
   }

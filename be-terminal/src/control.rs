@@ -246,7 +246,9 @@ impl TerminalState {
   fn linefeed(&mut self) {
     if self.cursor.row == self.size.rows - 1 {
       let line = self.grid.linefeed(self.size);
-      self.scrollback.push(line);
+      if !self.alt_screen {
+        self.scrollback.push(line);
+      }
     } else {
       self.cursor.row += 1;
     }
@@ -289,10 +291,29 @@ impl TerminalState {
       1006 => unhandled!("sgr mouse"),
       1007 => unhandled!("alternate scroll"),
       1042 => unhandled!("urgency hints"),
-      1049 => unhandled!("swap screen and set restore cursor"),
+      1049 => self.set_alt_screen(set),
       2004 => self.bracketed_paste = set,
       2026 => unhandled!("sync update"),
       _ => {}
+    }
+  }
+
+  fn set_alt_screen(&mut self, set: bool) {
+    if set == self.alt_screen {
+      return;
+    }
+
+    self.alt_screen = set;
+    std::mem::swap(&mut self.grid, &mut self.alt_grid);
+
+    if self.alt_screen {
+      self.alt_style = self.style;
+      self.alt_cursor = self.cursor;
+    } else {
+      self.style = self.alt_style;
+      self.cursor = self.alt_cursor;
+      self.alt_grid.clear(Default::default());
+      self.alt_style = Default::default();
     }
   }
 
