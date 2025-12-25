@@ -65,9 +65,9 @@ impl Grid {
     }
   }
 
-  pub fn clear(&mut self) {
+  pub fn clear(&mut self, style: Style) {
     for line in &mut self.lines {
-      LineMut { line }.clear();
+      LineMut { line }.clear(style);
     }
   }
 
@@ -79,11 +79,15 @@ impl Grid {
 }
 
 impl<'a> LineMut<'a> {
-  pub fn clear(&mut self) { self.line.fill(Cell::default()); }
+  pub fn clear(&mut self, style: Style) {
+    let cell = Cell { c: ' ', style };
+    self.line.fill(cell);
+  }
 
-  pub fn clear_range(&mut self, range: std::ops::RangeInclusive<usize>) {
+  pub fn clear_range(&mut self, range: std::ops::RangeInclusive<usize>, style: Style) {
     for i in range {
       self.line[i].c = ' ';
+      self.line[i].style = style;
     }
   }
 }

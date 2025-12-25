@@ -188,33 +188,36 @@ impl TerminalState {
 
   fn clear_screen_down(&mut self) {
     for line in self.cursor.row..=self.size.rows - 1 {
-      self.grid.line_mut(line).clear();
+      self.grid.line_mut(line).clear(self.style);
     }
   }
 
   fn clear_screen_up(&mut self) {
     for line in 0..=self.cursor.row {
-      self.grid.line_mut(line).clear();
+      self.grid.line_mut(line).clear(self.style);
     }
   }
 
-  fn clear_screen(&mut self) { self.grid.clear(); }
+  fn clear_screen(&mut self) { self.grid.clear(self.style); }
 
   fn clear_screen_saved(&mut self) {
-    self.grid.clear();
+    self.grid.clear(self.style);
     self.scrollback.clear();
   }
 
   fn clear_line_right(&mut self) {
-    self.grid.line_mut(self.cursor.row).clear_range(self.cursor.col..=self.size.cols - 1);
+    self
+      .grid
+      .line_mut(self.cursor.row)
+      .clear_range(self.cursor.col..=self.size.cols - 1, self.style);
   }
 
   fn clear_line_left(&mut self) {
-    self.grid.line_mut(self.cursor.row).clear_range(0..=self.cursor.col);
+    self.grid.line_mut(self.cursor.row).clear_range(0..=self.cursor.col, self.style);
   }
 
   fn clear_line(&mut self) {
-    self.grid.line_mut(self.cursor.row).clear_range(0..=self.size.cols - 1);
+    self.grid.line_mut(self.cursor.row).clear_range(0..=self.size.cols - 1, self.style);
   }
 
   fn linefeed(&mut self) {
