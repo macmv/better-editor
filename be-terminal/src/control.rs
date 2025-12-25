@@ -85,7 +85,17 @@ impl Perform for TerminalState {
     }
 
     match params[0] {
-      b"0" | b"2" => unhandled!("set title"),
+      b"0" | b"2" => {
+        let title = params[1..]
+          .iter()
+          .flat_map(|x| str::from_utf8(x))
+          .collect::<Vec<&str>>()
+          .join(";")
+          .trim()
+          .to_owned();
+
+        self.title = title;
+      }
       b"4" => unhandled!("set color index"),
       b"8" if params.len() > 2 => unhandled!("hyperline"),
       b"10" | b"11" | b"12" => unhandled!("set color"),

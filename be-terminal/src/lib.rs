@@ -49,6 +49,7 @@ pub struct TerminalState {
   alt_screen: bool,
   alt_cursor: Cursor,
 
+  pub title:                   String,
   pub report_mouse:            bool,
   pub cursor_keys:             bool,
   pub bracketed_paste:         bool,
@@ -275,6 +276,7 @@ impl TerminalState {
       alt_screen: false,
       alt_cursor: Cursor::default(),
 
+      title: String::new(),
       report_mouse: false,
       cursor_keys: false,
       bracketed_paste: false,
