@@ -31,6 +31,7 @@ impl Shell {
       Action::Edit { count: _, e: Edit::Insert(c) } => self.terminal.perform_input(c),
       Action::Edit { count: _, e: Edit::Backspace } => self.terminal.perform_backspace(),
       Action::Edit { count: _, e: Edit::Delete } => self.terminal.perform_delete(),
+      Action::Control { char: c @ 'a'..='z' } => self.terminal.perform_control(c as u8 - b'a' + 1),
 
       _ => {}
     }

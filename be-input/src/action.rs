@@ -7,6 +7,7 @@ pub enum Action {
   Append { after: bool },
   Move { count: Option<NonZero<u32>>, m: Move },
   Edit { count: Option<NonZero<u32>>, e: Edit },
+  Control { char: char },
   Navigate { nav: Navigation },
   Autocomplete,
 }
@@ -86,6 +87,7 @@ impl Action {
         },
 
         (Mode::Insert, Key::Char(' ')) if key.control => Ok(Action::Autocomplete),
+        (Mode::Insert, Key::Char(c)) if key.control => Ok(Action::Control { char: c }),
 
         (Mode::Insert | Mode::Command, Key::Char(c)) => e!(Insert(c)),
         (Mode::Insert | Mode::Command, Key::Backspace) => e!(Backspace),
