@@ -295,7 +295,7 @@ impl Default for Cursor {
       pos:       Position::default(),
       visible:   true,
       insert:    true,
-      line_feed: true,
+      line_feed: false,
       blink:     false,
       style:     Default::default(),
 

@@ -4,6 +4,10 @@ use crate::{BuiltinColor, Charset, Style, StyleFlags, TerminalColor, TerminalSta
 
 impl Perform for TerminalState {
   fn print(&mut self, c: char) {
+    if self.cursor.insert {
+      self.grid.line_mut(self.cursor.row).shift_right_from(self.cursor.pos.col);
+    }
+
     self.grid.put(
       self.cursor.pos,
       self.charsets[self.cursor.active_charset].map(c),

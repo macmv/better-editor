@@ -93,6 +93,12 @@ impl<'a> LineMut<'a> {
       self.line[i].style = style;
     }
   }
+
+  pub(crate) fn shift_right_from(&mut self, col: usize) {
+    for i in (col + 1..self.line.len()).rev() {
+      self.line.swap(i - 1, i);
+    }
+  }
 }
 
 impl Line<'_> {
