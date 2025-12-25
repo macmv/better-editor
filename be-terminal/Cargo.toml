@@ -9,3 +9,4 @@ be-async = { version = "0.1.0", path = "../be-async" }
 libc = "0.2.178"
 rustix = { version = "1.1.3", features = ["std"] }
 rustix-openpty = "0.2.0"
+unicode-width = "0.2.2"

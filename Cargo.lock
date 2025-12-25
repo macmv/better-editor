@@ -229,6 +229,7 @@ dependencies = [
  "libc",
  "rustix 1.1.3",
  "rustix-openpty",
+ "unicode-width",
 ]
 
 [[package]]

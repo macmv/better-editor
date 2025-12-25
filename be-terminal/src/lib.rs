@@ -6,20 +6,35 @@ mod grid;
 mod pty;
 
 pub struct Terminal {
-  pty:  Pty,
-  grid: Grid,
+  pty:   Pty,
+  state: TerminalState,
 
   parser: Parser,
 }
 
+struct TerminalState {
+  grid:   Grid,
+  cursor: Cursor,
+}
+
+#[derive(Copy, Clone)]
+struct Cursor {
+  row: usize,
+  col: usize,
+}
+
 impl Terminal {
   pub fn new() -> Self {
-    Terminal { pty: Pty::new(), grid: Grid::new(), parser: Parser::<Utf8Parser>::new() }
+    Terminal {
+      pty:    Pty::new(),
+      state:  TerminalState::new(),
+      parser: Parser::<Utf8Parser>::new(),
+    }
   }
 
   pub fn perform_input(&mut self, c: char) { self.pty.input(c); }
 
-  pub fn line(&self, index: usize) -> Option<&str> { self.grid.line(index) }
+  pub fn line(&self, index: usize) -> Option<&str> { self.state.grid.line(index) }
 
   pub fn update(&mut self) {
     loop {
@@ -29,7 +44,7 @@ impl Terminal {
         Ok(0) => break,
         Ok(n) => {
           for &b in &buf[..n] {
-            self.parser.advance(&mut self.grid, b);
+            self.parser.advance(&mut self.state, b);
           }
         }
         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
@@ -39,8 +54,23 @@ impl Terminal {
   }
 }
 
-impl Perform for Grid {
-  fn print(&mut self, _c: char) {}
+impl TerminalState {
+  fn new() -> Self { TerminalState { grid: Grid::new(), cursor: Cursor { row: 0, col: 0 } } }
+}
+
+impl Perform for TerminalState {
+  fn print(&mut self, c: char) {
+    self.grid.put(self.cursor, c);
+    self.cursor.col += 1;
+  }
+
+  fn execute(&mut self, b: u8) {
+    match b {
+      b'\n' => self.cursor.row += 1,
+      b'\r' => self.cursor.col = 0,
+      _ => (),
+    }
+  }
 }
 
 #[cfg(test)]
@@ -54,9 +84,11 @@ mod tests {
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     terminal.update();
-    for line in terminal.grid.lines() {
+    println!("===");
+    for line in terminal.state.grid.lines() {
       println!("{}", line);
     }
+    println!("===");
 
     panic!();
   }
