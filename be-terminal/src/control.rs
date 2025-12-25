@@ -65,8 +65,8 @@ impl Perform for TerminalState {
       (b'7', []) => unhandled!("save cursor position"),
       (b'8', [b'#']) => unhandled!("show test screen"),
       (b'8', []) => unhandled!("restore cursor position"),
-      (b'=', []) => unhandled!("set keypad application mode"),
-      (b'>', []) => unhandled!("unset keypad application mode"),
+      (b'=', []) => self.keypad_application_mode = true,
+      (b'>', []) => self.keypad_application_mode = false,
       // String terminator, do nothing (parser handles as string terminator).
       (b'\\', []) => (),
       _ => unhandled!(),

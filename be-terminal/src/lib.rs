@@ -49,13 +49,13 @@ pub struct TerminalState {
   alt_screen: bool,
   alt_cursor: Cursor,
 
-  pub report_mouse:    bool,
-  pub cursor_keys:     bool,
-  pub bracketed_paste: bool,
+  pub report_mouse:            bool,
+  pub cursor_keys:             bool,
+  pub bracketed_paste:         bool,
+  pub keypad_application_mode: bool,
 
   pending_writes: Vec<u8>,
-
-  charsets: [Charset; 4],
+  charsets:       [Charset; 4],
 }
 
 #[derive(Clone, Copy)]
@@ -278,8 +278,9 @@ impl TerminalState {
       report_mouse: false,
       cursor_keys: false,
       bracketed_paste: false,
-      pending_writes: vec![],
+      keypad_application_mode: false,
 
+      pending_writes: vec![],
       charsets: [Charset::Ascii; 4],
     }
   }
