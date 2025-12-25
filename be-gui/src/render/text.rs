@@ -1,6 +1,6 @@
 use std::{ops::Range, sync::Arc};
 
-use kurbo::{Affine, Point, Rect, Size, Vec2};
+use kurbo::{Affine, Line, Point, Rect, Size, Stroke, Vec2};
 use peniko::{
   Blob, Fill, ImageBrush, ImageData,
   color::{AlphaColor, Srgb},
@@ -113,16 +113,42 @@ impl Render<'_> {
 
     let offset = self.offset();
 
-    let transform = Affine::translate((pos.into().to_vec2() + offset) * self.scale);
+    let transform = Affine::translate(((pos.into().to_vec2() + offset) * self.scale).round());
 
     for line in text.layout.lines() {
       for item in line.items() {
         let parley::PositionedLayoutItem::GlyphRun(glyph_run) = item else { continue };
 
+        let style = glyph_run.style();
         let run = glyph_run.run();
         rect.y0 = rect.y1.round() - rect.height();
         let mut x = rect.x0 as f32 + glyph_run.offset();
         let baseline = (rect.y0 as f32 + glyph_run.baseline()).round();
+
+        if let Some(underline) = &style.underline {
+          let underline_brush = &style.brush;
+          let run_metrics = glyph_run.run().metrics();
+          let offset = match underline.offset {
+            Some(offset) => offset,
+            None => run_metrics.underline_offset,
+          };
+          let width = match underline.size {
+            Some(size) => size.round(),
+            None => run_metrics.underline_size.round(),
+          };
+          // The `offset` is the distance from the baseline to the top of the underline
+          // so we move the line down by half the width
+          // Remember that we are using a y-down coordinate system
+          // If there's a custom width, because this is an underline, we want the custom
+          // width to go down from the default expectation
+          let y = (glyph_run.baseline() - offset).round() + width / 2.0;
+
+          let line = Line::new(
+            (glyph_run.offset() as f64, y as f64),
+            ((glyph_run.offset() + glyph_run.advance()) as f64, y as f64),
+          );
+          self.scene.stroke(&Stroke::new(width.into()), transform, underline_brush, None, &line);
+        }
 
         let font_data = run.font();
         let font = skrifa::FontRef::from_index(font_data.data.as_ref(), font_data.index).unwrap();
