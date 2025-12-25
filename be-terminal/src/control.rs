@@ -125,7 +125,10 @@ impl Perform for TerminalState {
     };
 
     match (action, intermediates) {
-      (b'@', []) => unhandled!("insert blank"),
+      (b'@', []) => {
+        self.grid.line_mut(self.cursor.row).shift_right_from(self.cursor.col);
+        self.grid.put(self.cursor.pos, ' ', self.cursor.style);
+      }
       (b'A', []) => self.move_up(next_param_or(1)),
       (b'B', []) | (b'e', []) => self.move_down(next_param_or(1)),
       (b'b', []) => unhandled!("repeat the preceding char"),
