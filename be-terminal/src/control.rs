@@ -16,7 +16,12 @@ impl Perform for TerminalState {
     match b {
       C0::BS => self.cursor.col = self.cursor.col.saturating_sub(1),
       C0::CR => self.cursor.col = 0,
-      C0::LF | C0::VT | C0::FF => self.linefeed(),
+      C0::LF | C0::VT | C0::FF => {
+        self.linefeed();
+        if self.cursor.line_feed {
+          self.cursor.col = 0;
+        }
+      }
       C0::BEL => {} // Ignore bell.
       C0::SI => self.set_active_charset(0),
       C0::SO => self.set_active_charset(1),
