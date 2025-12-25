@@ -10,10 +10,10 @@ impl Perform for TerminalState {
 
   fn execute(&mut self, b: u8) {
     match b {
-      C0::BS => {}
+      C0::BS => self.cursor.col = self.cursor.col.saturating_sub(1),
       C0::CR => self.cursor.col = 0,
       C0::LF | C0::VT | C0::FF => self.cursor.row += 1,
-      _ => (),
+      _ => eprintln!("unhandled C0: {b}"),
     }
   }
 
