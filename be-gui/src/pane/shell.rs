@@ -21,6 +21,8 @@ impl Shell {
       self.cached_scale = render.scale();
     }
 
+    self.terminal.update();
+
     // TODO
     /*
     if self.editor.take_damage_all() {
@@ -56,7 +58,12 @@ impl Shell {
     let layout = layout.build(&line);
     let layout = render.build_layout(layout);
 
-    self.cached_layouts[i] = layout;
+    if self.cached_layouts.len() == i {
+      self.cached_layouts.push(layout);
+    } else {
+      self.cached_layouts[i] = layout;
+    }
+
     Some(&mut self.cached_layouts[i])
   }
 }
