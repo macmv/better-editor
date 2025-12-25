@@ -117,7 +117,9 @@ impl Perform for TerminalState {
       (b'C', []) | (b'a', []) => self.move_right(next_param_or(1)),
       (b'c', intermediates) if next_param_or(0) == 0 => unhandled!("identify terminal"),
       (b'D', []) => self.move_left(next_param_or(1)),
-      (b'd', []) => unhandled!("goto line"),
+      (b'd', []) => {
+        self.cursor.row = (next_param_or(1) as usize - 1).clamp(0, self.size.rows - 1);
+      }
       (b'E', []) => {
         self.move_down(next_param_or(1));
         unhandled!("clear line")
@@ -126,7 +128,9 @@ impl Perform for TerminalState {
         self.move_up(next_param_or(1));
         unhandled!("clear line")
       }
-      (b'G', []) | (b'`', []) => unhandled!("goto column"),
+      (b'G', []) | (b'`', []) => {
+        self.cursor.col = (next_param_or(1) as usize - 1).clamp(0, self.size.cols - 1);
+      }
       (b'W', [b'?']) if next_param_or(0) == 5 => unhandled!("set tabs to 8"),
       (b'g', []) => unhandled!("clear tabs"),
       (b'H', []) | (b'f', []) => {
