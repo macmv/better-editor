@@ -30,6 +30,7 @@ pub struct TerminalState {
   size:       Size,
   style:      Style,
 
+  pub cursor_keys:     bool,
   pub cursor_visible:  bool,
   pub bracketed_paste: bool,
 
@@ -177,10 +178,34 @@ impl Terminal {
   pub fn perform_backspace(&mut self) { self.pty.input(control::C0::BS.into()); }
   pub fn perform_delete(&mut self) { self.pty.input(control::C0::DEL.into()); }
   pub fn perform_control(&mut self, b: u8) { self.pty.input_bytes(&[b]); }
-  pub fn perform_up(&mut self) { self.pty.input_str("\x1b[A"); }
-  pub fn perform_down(&mut self) { self.pty.input_str("\x1b[B"); }
-  pub fn perform_left(&mut self) { self.pty.input_str("\x1b[D"); }
-  pub fn perform_right(&mut self) { self.pty.input_str("\x1b[C"); }
+  pub fn perform_up(&mut self) {
+    if self.state.cursor_keys {
+      self.pty.input_str("\x1bOA");
+    } else {
+      self.pty.input_str("\x1b[A");
+    }
+  }
+  pub fn perform_down(&mut self) {
+    if self.state.cursor_keys {
+      self.pty.input_str("\x1bOB");
+    } else {
+      self.pty.input_str("\x1b[B");
+    }
+  }
+  pub fn perform_left(&mut self) {
+    if self.state.cursor_keys {
+      self.pty.input_str("\x1bOD");
+    } else {
+      self.pty.input_str("\x1b[D");
+    }
+  }
+  pub fn perform_right(&mut self) {
+    if self.state.cursor_keys {
+      self.pty.input_str("\x1bOC");
+    } else {
+      self.pty.input_str("\x1b[C");
+    }
+  }
 
   pub fn line(&self, index: usize) -> Option<Line<'_>> { self.state.grid.line(index) }
 
@@ -227,6 +252,7 @@ impl TerminalState {
       size,
       style: Style::default(),
 
+      cursor_keys: false,
       cursor_visible: true,
       bracketed_paste: false,
       pending_writes: vec![],

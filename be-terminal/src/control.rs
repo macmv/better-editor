@@ -275,7 +275,7 @@ impl TerminalState {
     }
 
     match mode {
-      1 => unhandled!("cursor keys"),
+      1 => self.cursor_keys = set,
       3 => unhandled!("column mode"),
       6 => unhandled!("origin"),
       7 => unhandled!("line wrap"),
