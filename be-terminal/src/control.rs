@@ -1,4 +1,4 @@
-use anstyle_parse::{Params, Perform};
+use anstyle_parse::{Params, ParamsIter, Perform};
 
 use crate::{BuiltinColor, Charset, Style, StyleFlags, TerminalColor, TerminalState};
 
@@ -327,8 +327,9 @@ impl TerminalState {
     }
 
     let style = &mut self.cursor.style;
+    let mut iter = params.iter();
 
-    for args in params.iter() {
+    while let Some(args) = iter.next() {
       match args {
         [0] => *style = Style::default(),
         [1] => style.flags.set(StyleFlags::BOLD, true),
@@ -356,8 +357,10 @@ impl TerminalState {
         [35] => style.foreground = Some(builtin!(Magenta, false)),
         [36] => style.foreground = Some(builtin!(Cyan, false)),
         [37] => style.foreground = Some(builtin!(White, false)),
-        [38, 2, r, g, b] => {
-          style.foreground = Some(TerminalColor::Rgb { r: *r as u8, g: *g as u8, b: *b as u8 })
+        [38] => {
+          if let Some(color) = parse_color(&mut iter) {
+            style.foreground = Some(color);
+          }
         }
         [39] => style.foreground = None,
 
@@ -369,8 +372,10 @@ impl TerminalState {
         [45] => style.background = Some(builtin!(Magenta, false)),
         [46] => style.background = Some(builtin!(Cyan, false)),
         [47] => style.background = Some(builtin!(White, false)),
-        [48, 2, r, g, b] => {
-          style.background = Some(TerminalColor::Rgb { r: *r as u8, g: *g as u8, b: *b as u8 })
+        [48] => {
+          if let Some(color) = parse_color(&mut iter) {
+            style.background = Some(color);
+          }
         }
         [49] => style.background = None,
 
@@ -397,6 +402,20 @@ impl TerminalState {
         }
       }
     }
+  }
+}
+
+fn parse_color(iter: &mut ParamsIter<'_>) -> Option<TerminalColor> {
+  let mut iter = iter.map(|param| param[0]);
+  match iter.next() {
+    Some(2) => Some(TerminalColor::Rgb {
+      r: iter.next()? as u8,
+      g: iter.next()? as u8,
+      b: iter.next()? as u8,
+    }),
+    Some(5) => None, // TODO: Indexed colors.
+
+    _ => None,
   }
 }
 
