@@ -4,7 +4,7 @@ use crate::{BuiltinColor, Style, StyleFlags, TerminalColor, TerminalState};
 
 impl Perform for TerminalState {
   fn print(&mut self, c: char) {
-    self.grid.put(self.cursor, c);
+    self.grid.put(self.cursor, c, self.style);
     self.cursor.col += 1;
   }
 

@@ -1,5 +1,4 @@
 use crate::{Cursor, Size, Style};
-use unicode_width::UnicodeWidthChar;
 
 pub struct Grid {
   lines: Vec<Vec<Cell>>,
@@ -15,17 +14,25 @@ pub struct Line<'a> {
   line: &'a [Cell],
 }
 
+pub struct StyleIter<'a> {
+  line:   &'a [Cell],
+  prev:   Style,
+  index:  usize,
+  offset: usize,
+}
+
 impl Grid {
   pub fn new(size: Size) -> Self {
     Grid { lines: vec![vec![Cell::default(); size.cols]; size.rows] }
   }
 
-  pub fn put(&mut self, pos: Cursor, c: char) {
+  pub fn put(&mut self, pos: Cursor, c: char, style: Style) {
     if pos.row >= self.lines.len() {
       return;
     }
 
     self.lines[pos.row][pos.col].c = c;
+    self.lines[pos.row][pos.col].style = style;
   }
 
   pub fn line(&self, index: usize) -> Option<Line<'_>> {
@@ -51,19 +58,26 @@ impl Line<'_> {
     }
     line
   }
+
+  pub fn styles(&self) -> StyleIter<'_> {
+    StyleIter { line: self.line, prev: Style::default(), index: 0, offset: 0 }
+  }
 }
 
-fn column_offset(line: &str, column: usize) -> std::ops::Range<usize> {
-  let mut col = 0;
-  let mut offset = 0;
+impl Iterator for StyleIter<'_> {
+  type Item = (Style, usize);
 
-  for c in line.chars() {
-    if col >= column {
-      return offset..offset + c.len_utf8();
+  fn next(&mut self) -> Option<Self::Item> {
+    loop {
+      let cell = self.line.get(self.index)?;
+      let style = self.prev;
+      let offset = self.offset;
+      self.index += 1;
+      self.offset += cell.c.len_utf8();
+      if cell.style != self.prev {
+        self.prev = cell.style;
+        return Some((style, offset));
+      }
     }
-    col += c.width().unwrap_or(0);
-    offset += c.len_utf8();
   }
-
-  0..line.chars().next().unwrap().len_utf8()
 }

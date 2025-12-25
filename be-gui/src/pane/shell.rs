@@ -1,8 +1,8 @@
 use be_input::{Action, Edit};
-use be_terminal::Terminal;
+use be_terminal::{Terminal, TerminalColor};
 use kurbo::Rect;
 
-use crate::{Render, TextLayout, oklch};
+use crate::{Color, Render, TextLayout, oklch, theme::Theme};
 
 pub struct Shell {
   terminal: Terminal,
@@ -69,11 +69,20 @@ impl Shell {
       return Some(&mut self.cached_layouts[i]);
     }
 
-    let line = self.terminal.line(i)?.to_string();
+    let line = self.terminal.line(i)?;
+    let line_string = line.to_string();
 
-    let layout = render.store.text.layout_builder(&line, render.theme().text, render.scale());
+    let theme = &render.store.theme;
+    let mut layout =
+      render.store.text.layout_builder(&line_string, render.theme().text, render.scale());
 
-    let layout = layout.build(&line);
+    let mut prev = 0;
+    for (style, i) in line.styles() {
+      layout.color_range(prev..i, terminal_color(theme, style.foreground));
+      prev = i;
+    }
+
+    let layout = layout.build(&line_string);
     let layout = render.build_layout(layout);
 
     if self.cached_layouts.len() == i {
@@ -83,5 +92,21 @@ impl Shell {
     }
 
     Some(&mut self.cached_layouts[i])
+  }
+}
+
+fn terminal_color(theme: &Theme, color: Option<TerminalColor>) -> Color {
+  use be_terminal::BuiltinColor::*;
+
+  match color {
+    Some(TerminalColor::Builtin { color: Black, bright: _ }) => oklch(0.0, 0.0, 0.0),
+    Some(TerminalColor::Builtin { color: Red, bright: _ }) => oklch(0.7, 0.13, 25.0),
+    Some(TerminalColor::Builtin { color: Green, bright: _ }) => oklch(0.7, 0.13, 130.0),
+    Some(TerminalColor::Builtin { color: Yellow, bright: _ }) => oklch(0.8, 0.13, 05.0),
+    Some(TerminalColor::Builtin { color: Blue, bright: _ }) => oklch(0.7, 0.13, 240.0),
+    Some(TerminalColor::Builtin { color: Magenta, bright: _ }) => oklch(0.7, 0.13, 350.0),
+    Some(TerminalColor::Builtin { color: Cyan, bright: _ }) => oklch(0.8, 0.13, 200.0),
+    Some(TerminalColor::Builtin { color: White, bright: _ }) => oklch(1.0, 0.0, 0.0),
+    _ => theme.text,
   }
 }

@@ -24,16 +24,16 @@ struct TerminalState {
   style: Style,
 }
 
-#[derive(Default, Clone, Copy, Debug)]
-struct Style {
-  flags:      StyleFlags,
-  foreground: Option<TerminalColor>,
-  background: Option<TerminalColor>,
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Style {
+  pub flags:      StyleFlags,
+  pub foreground: Option<TerminalColor>,
+  pub background: Option<TerminalColor>,
 }
 
 bitflags::bitflags! {
-  #[derive(Default, Clone, Copy, Debug)]
-  struct StyleFlags: u8 {
+  #[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+  pub struct StyleFlags: u8 {
     const BOLD          = 1 << 0;
     const DIM           = 1 << 1;
     const ITALIC        = 1 << 2;
@@ -45,14 +45,14 @@ bitflags::bitflags! {
   }
 }
 
-#[derive(Clone, Copy, Debug)]
-enum TerminalColor {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TerminalColor {
   Builtin { color: BuiltinColor, bright: bool },
   Rgb { r: u8, g: u8, b: u8 },
 }
 
-#[derive(Clone, Copy, Debug)]
-enum BuiltinColor {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuiltinColor {
   Black,
   Red,
   Green,
