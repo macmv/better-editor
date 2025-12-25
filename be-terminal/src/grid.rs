@@ -44,6 +44,9 @@ impl Grid {
     if pos.row >= self.lines.len() {
       return;
     }
+    if pos.col >= self.lines[pos.row].len() {
+      return;
+    }
 
     self.lines[pos.row][pos.col].c = c;
     self.lines[pos.row][pos.col].style = style;
