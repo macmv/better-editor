@@ -1,4 +1,4 @@
-use crate::{Cursor, Size, Style};
+use crate::{Position, Size, Style};
 
 pub struct Grid {
   lines: Vec<Vec<Cell>>,
@@ -40,7 +40,7 @@ impl Grid {
     Grid { lines: vec![vec![Cell::default(); size.cols]; size.rows] }
   }
 
-  pub fn put(&mut self, pos: Cursor, c: char, style: Style) {
+  pub fn put(&mut self, pos: Position, c: char, style: Style) {
     if pos.row >= self.lines.len() {
       return;
     }

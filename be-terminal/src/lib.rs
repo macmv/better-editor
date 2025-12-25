@@ -1,4 +1,7 @@
-use std::os::fd::BorrowedFd;
+use std::{
+  ops::{Deref, DerefMut},
+  os::fd::BorrowedFd,
+};
 
 use anstyle_parse::{Parser, Utf8Parser};
 use polling::Events;
@@ -22,6 +25,12 @@ pub struct Terminal {
   parser: Parser,
 }
 
+#[derive(Clone, Copy)]
+pub struct Cursor {
+  pub pos:     Position,
+  pub visible: bool,
+}
+
 pub struct TerminalState {
   grid:       Grid,
   pub cursor: Cursor,
@@ -36,7 +45,6 @@ pub struct TerminalState {
   alt_style:  Style,
 
   pub cursor_keys:     bool,
-  pub cursor_visible:  bool,
   pub bracketed_paste: bool,
 
   pending_writes: Vec<u8>,
@@ -133,8 +141,8 @@ pub enum BuiltinColor {
   White,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub struct Cursor {
+#[derive(Default, Copy, Clone, PartialEq, Eq)]
+pub struct Position {
   pub row: usize,
   pub col: usize,
 }
@@ -252,18 +260,17 @@ impl TerminalState {
   fn new(size: Size) -> Self {
     TerminalState {
       grid: Grid::new(size),
-      cursor: Cursor { row: 0, col: 0 },
+      cursor: Cursor::default(),
       scrollback: vec![],
       size,
       style: Style::default(),
 
       alt_grid: Grid::new(size),
       alt_screen: false,
-      alt_cursor: Cursor { row: 0, col: 0 },
+      alt_cursor: Cursor::default(),
       alt_style: Style::default(),
 
       cursor_keys: false,
-      cursor_visible: true,
       bracketed_paste: false,
       pending_writes: vec![],
 
@@ -279,6 +286,18 @@ impl TerminalState {
     self.cursor.row = self.cursor.row.clamp(0, size.rows - 1);
     self.cursor.col = self.cursor.col.clamp(0, size.cols - 1);
   }
+}
+
+impl Default for Cursor {
+  fn default() -> Self { Cursor { pos: Position::default(), visible: true } }
+}
+
+impl Deref for Cursor {
+  type Target = Position;
+  fn deref(&self) -> &Self::Target { &self.pos }
+}
+impl DerefMut for Cursor {
+  fn deref_mut(&mut self) -> &mut Self::Target { &mut self.pos }
 }
 
 #[cfg(test)]

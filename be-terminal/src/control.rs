@@ -4,7 +4,7 @@ use crate::{BuiltinColor, Charset, Style, StyleFlags, TerminalColor, TerminalSta
 
 impl Perform for TerminalState {
   fn print(&mut self, c: char) {
-    self.grid.put(self.cursor, self.charsets[self.active_charset].map(c), self.style);
+    self.grid.put(self.cursor.pos, self.charsets[self.active_charset].map(c), self.style);
     self.cursor.col += 1;
   }
 
@@ -282,7 +282,7 @@ impl TerminalState {
       6 => unhandled!("origin"),
       7 => unhandled!("line wrap"),
       12 => unhandled!("blinking cursor"),
-      25 => self.cursor_visible = !set,
+      25 => self.cursor.visible = !set,
       1000 => unhandled!("report mouse clicks"),
       1002 => unhandled!("report cell mouse motion"),
       1003 => unhandled!("report all mouse motion"),

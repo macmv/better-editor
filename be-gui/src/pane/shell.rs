@@ -91,7 +91,7 @@ impl Shell {
       render.draw_text(&layout, (0.0, line as f64 * line_height));
     }
 
-    if self.terminal.state().cursor_visible {
+    if self.terminal.state().cursor.visible {
       let cursor = self.terminal.state().cursor;
       render.fill(
         &Rect::from_origin_size(
