@@ -140,11 +140,11 @@ impl Perform for TerminalState {
       }
       (b'E', []) => {
         self.move_down(next_param_or(1));
-        unhandled!("clear line")
+        self.cursor.col = 0;
       }
       (b'F', []) => {
         self.move_up(next_param_or(1));
-        unhandled!("clear line")
+        self.cursor.col = 0;
       }
       (b'G', []) | (b'`', []) => {
         self.cursor.col = (next_param_or(1) as usize - 1).clamp(0, self.size.cols - 1);
