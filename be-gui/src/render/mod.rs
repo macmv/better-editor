@@ -1,5 +1,8 @@
 use kurbo::{Affine, Axis, Point, Rect, Shape, Size, Stroke, Vec2};
-use peniko::color::{AlphaColor, Oklab, Oklch, Srgb};
+use peniko::{
+  Gradient,
+  color::{AlphaColor, Oklab, Oklch, Srgb},
+};
 
 use crate::{render::text::TextStore, theme::Theme};
 
@@ -43,6 +46,20 @@ struct App {
 }
 
 pub type Color = AlphaColor<Oklab>;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Brush {
+  Solid(Color),
+  Gradient(Gradient),
+}
+
+impl From<Color> for Brush {
+  fn from(value: Color) -> Self { Brush::Solid(value) }
+}
+
+impl Default for Brush {
+  fn default() -> Self { Self::Solid(Color::TRANSPARENT) }
+}
 
 pub fn oklch(l: f32, c: f32, h: f32) -> Color { AlphaColor::<Oklch>::new([l, c, h, 1.0]).convert() }
 
@@ -177,6 +194,21 @@ impl Distance {
     match self {
       Distance::Pixels(pixels) => pixels,
       Distance::Percent(percent) => size * percent,
+    }
+  }
+}
+
+impl Brush {
+  pub fn encode(self) -> peniko::Brush {
+    match self {
+      Brush::Solid(color) => peniko::Brush::Solid(encode_color(color)),
+      Brush::Gradient(mut gradient) => {
+        for stop in gradient.stops.iter_mut() {
+          stop.color = encode_color(stop.color.to_alpha_color()).into();
+        }
+
+        peniko::Brush::Gradient(gradient)
+      }
     }
   }
 }

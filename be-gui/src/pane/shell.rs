@@ -1,6 +1,7 @@
 use be_input::{Action, Direction, Edit, Move};
-use be_terminal::{Terminal, TerminalColor};
+use be_terminal::{StyleFlags, Terminal, TerminalColor};
 use kurbo::Rect;
+use parley::FontWeight;
 
 use crate::{Color, Render, TextLayout, oklch, theme::Theme};
 
@@ -120,6 +121,9 @@ impl Shell {
     let mut prev = 0;
     for (style, i) in line.styles() {
       layout.color_range(prev..i, terminal_color(theme, style.foreground));
+      if style.flags.contains(StyleFlags::BOLD) {
+        layout.apply(prev..i, parley::StyleProperty::FontWeight(FontWeight::BLACK));
+      }
       prev = i;
     }
 

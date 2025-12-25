@@ -13,7 +13,7 @@ use skrifa::{
   raw::TableProvider,
 };
 
-use crate::{Color, CursorMode, Render, encode_color};
+use crate::{Brush, Color, CursorMode, Render, encode_color};
 
 pub struct TextStore {
   font:         parley::FontContext,
@@ -355,6 +355,10 @@ impl LayoutBuilder<'_> {
     self.builder.push(parley::StyleProperty::Brush(encode_color(color).into()), range);
   }
 
+  pub fn apply(&mut self, range: Range<usize>, style: parley::StyleProperty<Brush>) {
+    self.builder.push(map_property(style, |b| b.encode()), range);
+  }
+
   pub fn build(self, text: &str) -> parley::Layout<peniko::Brush> { self.builder.build(text) }
 }
 
@@ -443,5 +447,44 @@ impl TextLayout {
       f64::from(self.layout.full_width()) / self.scale,
       f64::from(self.layout.height()) / self.scale,
     )
+  }
+}
+
+// TODO: Replace once this is merged: https://github.com/linebender/parley/pull/494
+fn map_property<'a, A, B>(
+  prop: parley::StyleProperty<'a, A>,
+  f: impl FnOnce(A) -> B,
+) -> parley::StyleProperty<'a, B>
+where
+  A: parley::Brush,
+  B: parley::Brush,
+{
+  use parley::StyleProperty::*;
+
+  match prop {
+    Brush(v) => Brush(f(v)),
+    UnderlineBrush(v) => UnderlineBrush(v.map(f)),
+    StrikethroughBrush(v) => StrikethroughBrush(v.map(f)),
+
+    FontStack(v) => FontStack(v),
+    FontSize(v) => FontSize(v),
+    FontWidth(v) => FontWidth(v),
+    FontStyle(v) => FontStyle(v),
+    FontWeight(v) => FontWeight(v),
+    FontVariations(v) => FontVariations(v),
+    FontFeatures(v) => FontFeatures(v),
+    Locale(v) => Locale(v),
+    Underline(v) => Underline(v),
+    UnderlineOffset(v) => UnderlineOffset(v),
+    UnderlineSize(v) => UnderlineSize(v),
+    Strikethrough(v) => Strikethrough(v),
+    StrikethroughOffset(v) => StrikethroughOffset(v),
+    StrikethroughSize(v) => StrikethroughSize(v),
+    LineHeight(v) => LineHeight(v),
+    WordSpacing(v) => WordSpacing(v),
+    LetterSpacing(v) => LetterSpacing(v),
+    WordBreak(v) => WordBreak(v),
+    OverflowWrap(v) => OverflowWrap(v),
+    TextWrapMode(v) => TextWrapMode(v),
   }
 }
