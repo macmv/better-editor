@@ -30,7 +30,8 @@ pub struct TerminalState {
   size:       Size,
   style:      Style,
 
-  pub cursor_visible: bool,
+  pub cursor_visible:  bool,
+  pub bracketed_paste: bool,
 
   pending_writes: Vec<u8>,
 
@@ -225,7 +226,9 @@ impl TerminalState {
       scrollback: vec![],
       size,
       style: Style::default(),
+
       cursor_visible: true,
+      bracketed_paste: false,
       pending_writes: vec![],
 
       charsets: [Charset::Ascii; 4],

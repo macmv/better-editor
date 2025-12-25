@@ -290,7 +290,7 @@ impl TerminalState {
       1007 => unhandled!("alternate scroll"),
       1042 => unhandled!("urgency hints"),
       1049 => unhandled!("swap screen and set restore cursor"),
-      2004 => unhandled!("bracketed paste"),
+      2004 => self.bracketed_paste = set,
       2026 => unhandled!("sync update"),
       _ => {}
     }
