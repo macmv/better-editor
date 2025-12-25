@@ -1,6 +1,6 @@
 use std::{
   fs::File,
-  io::{self, Write},
+  io::{self, Read, Write},
   os::{fd::AsRawFd, unix::process::CommandExt},
   process::Command,
 };
@@ -49,7 +49,9 @@ impl Pty {
     Pty { _child: child, pty: File::from(pty.controller) }
   }
 
-  pub fn perform_input(&mut self, c: char) { write!(self.pty, "{c}").unwrap(); }
+  pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> { self.pty.read(buf) }
+
+  pub fn input(&mut self, c: char) { write!(self.pty, "{c}").unwrap(); }
 }
 
 #[cfg(test)]
