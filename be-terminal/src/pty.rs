@@ -1,7 +1,10 @@
 use std::{
   fs::File,
   io::{self, Read, Write},
-  os::{fd::AsRawFd, unix::process::CommandExt},
+  os::{
+    fd::{AsRawFd, OwnedFd},
+    unix::process::CommandExt,
+  },
   process::Command,
 };
 
@@ -9,6 +12,7 @@ use crate::Size;
 
 pub struct Pty {
   _child: std::process::Child,
+  user:   OwnedFd,
   pty:    File,
 }
 
@@ -58,7 +62,19 @@ impl Pty {
 
     be_async::set_nonblocking(&pty.controller).unwrap();
 
-    Pty { _child: child, pty: File::from(pty.controller) }
+    Pty { _child: child, user: pty.user, pty: File::from(pty.controller) }
+  }
+
+  pub fn resize(&mut self, size: Size) {
+    rustix::termios::tcsetwinsize(
+      &self.user,
+      rustix::termios::Winsize {
+        ws_row: size.rows as u16,
+        ws_col: size.cols as u16,
+        ..unsafe { std::mem::zeroed() }
+      },
+    )
+    .unwrap();
   }
 
   pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> { self.pty.read(buf) }
