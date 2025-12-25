@@ -19,19 +19,27 @@ struct TerminalState {
 }
 
 #[derive(Copy, Clone)]
-struct Cursor {
-  row: usize,
-  col: usize,
+pub struct Cursor {
+  pub row: usize,
+  pub col: usize,
+}
+
+#[derive(Copy, Clone)]
+pub struct Size {
+  pub rows: usize,
+  pub cols: usize,
 }
 
 impl Terminal {
-  pub fn new() -> Self {
+  pub fn new(size: Size) -> Self {
     Terminal {
       pty:    Pty::new(),
-      state:  TerminalState::new(),
+      state:  TerminalState::new(size),
       parser: Parser::<Utf8Parser>::new(),
     }
   }
+
+  pub fn set_size(&mut self, size: Size) { self.state.resize(size); }
 
   pub fn perform_input(&mut self, c: char) { self.pty.input(c); }
 
@@ -56,7 +64,15 @@ impl Terminal {
 }
 
 impl TerminalState {
-  fn new() -> Self { TerminalState { grid: Grid::new(), cursor: Cursor { row: 0, col: 0 } } }
+  fn new(size: Size) -> Self {
+    TerminalState { grid: Grid::new(size), cursor: Cursor { row: 0, col: 0 } }
+  }
+
+  fn resize(&mut self, size: Size) {
+    self.grid.resize(size);
+    self.cursor.row = self.cursor.row.clamp(0, size.rows - 1);
+    self.cursor.col = self.cursor.col.clamp(0, size.cols - 1);
+  }
 }
 
 #[cfg(test)]

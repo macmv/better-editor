@@ -1,4 +1,4 @@
-use crate::Cursor;
+use crate::{Cursor, Size};
 use unicode_width::UnicodeWidthChar;
 
 pub struct Grid {
@@ -6,11 +6,11 @@ pub struct Grid {
 }
 
 impl Grid {
-  pub fn new() -> Self { Grid { lines: Vec::new() } }
+  pub fn new(size: Size) -> Self { Grid { lines: vec![" ".repeat(size.cols); size.rows] } }
 
   pub fn put(&mut self, pos: Cursor, c: char) {
-    if self.lines.len() <= pos.row {
-      self.lines.resize(pos.row + 1, " ".repeat(80));
+    if pos.row >= self.lines.len() {
+      return;
     }
 
     let line = &mut self.lines[pos.row];
@@ -24,6 +24,18 @@ impl Grid {
   #[cfg(test)]
   pub fn lines(&self) -> impl Iterator<Item = &str> { self.lines.iter().map(|s| s.as_str()) }
   pub fn line(&self, index: usize) -> Option<&str> { self.lines.get(index).map(|s| s.as_str()) }
+
+  pub fn resize(&mut self, size: Size) {
+    self.lines.resize(size.rows, " ".repeat(size.cols));
+
+    for line in &mut self.lines {
+      if line.len() < size.cols {
+        line.push_str(&" ".repeat(size.cols - line.len()));
+      } else {
+        line.truncate(size.cols);
+      }
+    }
+  }
 }
 
 fn column_offset(line: &str, column: usize) -> std::ops::Range<usize> {

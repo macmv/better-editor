@@ -13,7 +13,11 @@ pub struct Shell {
 
 impl Shell {
   pub fn new() -> Self {
-    Shell { terminal: Terminal::new(), cached_layouts: vec![], cached_scale: 0.0 }
+    Shell {
+      terminal:       Terminal::new(be_terminal::Size { rows: 40, cols: 80 }),
+      cached_layouts: vec![],
+      cached_scale:   0.0,
+    }
   }
 
   pub fn perform_action(&mut self, action: Action) {
