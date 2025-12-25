@@ -27,8 +27,10 @@ pub struct Terminal {
 
 #[derive(Clone, Copy)]
 pub struct Cursor {
-  pub pos:     Position,
-  pub visible: bool,
+  pub pos:            Position,
+  pub visible:        bool,
+  pub style:          Style,
+  pub active_charset: usize,
 }
 
 pub struct TerminalState {
@@ -37,20 +39,17 @@ pub struct TerminalState {
 
   scrollback: Vec<OwnedLine>,
   size:       Size,
-  style:      Style,
 
   alt_grid:   Grid,
   alt_screen: bool,
   alt_cursor: Cursor,
-  alt_style:  Style,
 
   pub cursor_keys:     bool,
   pub bracketed_paste: bool,
 
   pending_writes: Vec<u8>,
 
-  charsets:       [Charset; 4],
-  active_charset: usize,
+  charsets: [Charset; 4],
 }
 
 #[derive(Clone, Copy)]
@@ -263,19 +262,16 @@ impl TerminalState {
       cursor: Cursor::default(),
       scrollback: vec![],
       size,
-      style: Style::default(),
 
       alt_grid: Grid::new(size),
       alt_screen: false,
       alt_cursor: Cursor::default(),
-      alt_style: Style::default(),
 
       cursor_keys: false,
       bracketed_paste: false,
       pending_writes: vec![],
 
       charsets: [Charset::Ascii; 4],
-      active_charset: 0,
     }
   }
 
@@ -289,7 +285,14 @@ impl TerminalState {
 }
 
 impl Default for Cursor {
-  fn default() -> Self { Cursor { pos: Position::default(), visible: true } }
+  fn default() -> Self {
+    Cursor {
+      pos:            Position::default(),
+      visible:        true,
+      style:          Default::default(),
+      active_charset: 0,
+    }
+  }
 }
 
 impl Deref for Cursor {
