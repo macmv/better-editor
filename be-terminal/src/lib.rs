@@ -1,4 +1,7 @@
+use std::os::fd::BorrowedFd;
+
 use anstyle_parse::{Parser, Utf8Parser};
+use polling::Events;
 
 use crate::{
   grid::{Grid, Line},
@@ -75,6 +78,11 @@ pub struct Size {
   pub cols: usize,
 }
 
+pub struct Poller {
+  poller: polling::Poller,
+  fd:     BorrowedFd<'static>,
+}
+
 impl Terminal {
   pub fn new(size: Size) -> Self {
     Terminal {
@@ -83,6 +91,17 @@ impl Terminal {
       size,
       parser: Parser::<Utf8Parser>::new(),
     }
+  }
+
+  /// # Safety
+  ///
+  /// The `Poller` must not outlive the `Terminal`.
+  pub unsafe fn make_poller(&self) -> Poller {
+    let poller = polling::Poller::new().unwrap();
+    unsafe {
+      poller.add(&self.pty.fd(), polling::Event::readable(0)).unwrap();
+    }
+    Poller { fd: unsafe { std::mem::transmute(self.pty.fd()) }, poller }
   }
 
   pub fn set_size(&mut self, size: Size) {
@@ -114,6 +133,17 @@ impl Terminal {
       }
     }
   }
+}
+
+impl Poller {
+  pub fn poll(&self) {
+    self.poller.wait(&mut Events::new(), None).unwrap();
+    self.poller.modify(self.fd, polling::Event::readable(0)).unwrap();
+  }
+}
+
+impl Drop for Poller {
+  fn drop(&mut self) { self.poller.delete(self.fd).unwrap(); }
 }
 
 impl TerminalState {

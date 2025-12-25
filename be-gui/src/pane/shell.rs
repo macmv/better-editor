@@ -5,7 +5,8 @@ use kurbo::Rect;
 use crate::{Color, Render, TextLayout, oklch, theme::Theme};
 
 pub struct Shell {
-  terminal: Terminal,
+  terminal:  Terminal,
+  set_waker: bool,
 
   cached_layouts: Vec<TextLayout>,
   cached_scale:   f64,
@@ -15,6 +16,7 @@ impl Shell {
   pub fn new() -> Self {
     Shell {
       terminal:       Terminal::new(be_terminal::Size { rows: 40, cols: 80 }),
+      set_waker:      false,
       cached_layouts: vec![],
       cached_scale:   0.0,
     }
@@ -33,6 +35,22 @@ impl Shell {
     let character_width = render.store.text.font_metrics().character_width;
     let height = (render.size().height / line_height).floor() as usize;
     let width = (render.size().width / character_width).floor() as usize;
+
+    if !self.set_waker {
+      self.set_waker = true;
+      let waker = render.waker();
+      // SAFETY: This isn't safe. Need to join the thread on drop.
+      let poller = unsafe { self.terminal.make_poller() };
+      std::thread::spawn(move || {
+        loop {
+          poller.poll();
+          waker.wake();
+
+          // We only need to wake it up once per frame, so don't spam wake ups.
+          std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+      });
+    }
 
     self.terminal.set_size(be_terminal::Size { rows: height, cols: width });
 

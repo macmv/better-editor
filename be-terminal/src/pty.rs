@@ -2,7 +2,7 @@ use std::{
   fs::File,
   io::{self, Read, Write},
   os::{
-    fd::{AsRawFd, OwnedFd},
+    fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
     unix::process::CommandExt,
   },
   process::Command,
@@ -64,6 +64,8 @@ impl Pty {
 
     Pty { _child: child, user: pty.user, pty: File::from(pty.controller) }
   }
+
+  pub fn fd(&self) -> BorrowedFd<'_> { self.pty.as_fd() }
 
   pub fn resize(&mut self, size: Size) {
     rustix::termios::tcsetwinsize(
