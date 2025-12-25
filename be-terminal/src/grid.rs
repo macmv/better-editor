@@ -4,6 +4,7 @@ use crate::{Position, Size, Style};
 
 pub struct Grid {
   lines: Vec<Vec<Cell>>,
+  size:  Size,
 }
 
 #[derive(Clone, Copy)]
@@ -39,7 +40,7 @@ impl Default for Cell {
 
 impl Grid {
   pub fn new(size: Size) -> Self {
-    Grid { lines: vec![vec![Cell::default(); size.cols]; size.rows] }
+    Grid { lines: vec![vec![Cell::default(); size.cols]; size.rows], size }
   }
 
   pub fn put(&mut self, pos: Position, c: char, style: Style) {
@@ -68,6 +69,8 @@ impl Grid {
     for line in &mut self.lines {
       line.resize(size.cols, Cell::default());
     }
+
+    self.size = size;
   }
 
   pub fn clear(&mut self, style: Style) {
@@ -76,12 +79,12 @@ impl Grid {
     }
   }
 
-  pub fn linefeed(&mut self, size: Size, range: Range<usize>) -> OwnedLine {
+  pub fn linefeed(&mut self, range: Range<usize>) -> OwnedLine {
     let cells = self.lines.remove(range.start);
     if range.end < self.lines.len() {
-      self.lines.insert(range.end, vec![Cell::default(); size.cols]);
+      self.lines.insert(range.end, vec![Cell::default(); self.size.cols]);
     } else {
-      self.lines.push(vec![Cell::default(); size.cols]);
+      self.lines.push(vec![Cell::default(); self.size.cols]);
     }
     OwnedLine { cells }
   }
