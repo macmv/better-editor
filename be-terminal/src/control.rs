@@ -134,7 +134,11 @@ impl Perform for TerminalState {
         self.cursor.col = (next_param_or(1) as usize - 1).clamp(0, self.size.cols - 1);
       }
       (b'h', []) => unhandled!("set mode"),
-      (b'h', [b'?']) => unhandled!("set private mode"),
+      (b'h', [b'?']) => {
+        for param in params_iter.map(|param| param[0]) {
+          self.set_private_mode(param)
+        }
+      }
       (b'I', []) => unhandled!("move forward tabs"),
       (b'J', []) => match next_param_or(0) {
         0 => self.clear_screen_down(),
@@ -225,6 +229,35 @@ impl TerminalState {
       self.scrollback.push(line);
     } else {
       self.cursor.row += 1;
+    }
+  }
+
+  fn set_private_mode(&mut self, mode: u16) {
+    macro_rules! unhandled {
+      ($mode:literal) => {
+        eprintln!("[unhandled private mode] {mode}")
+      };
+    }
+
+    match mode {
+      1 => unhandled!("cursor keys"),
+      3 => unhandled!("column mode"),
+      6 => unhandled!("origin"),
+      7 => unhandled!("line wrap"),
+      12 => unhandled!("blinking cursor"),
+      25 => unhandled!("show cursor"),
+      1000 => unhandled!("report mouse clicks"),
+      1002 => unhandled!("report cell mouse motion"),
+      1003 => unhandled!("report all mouse motion"),
+      1004 => unhandled!("report focus in out"),
+      1005 => unhandled!("utf8 mouse"),
+      1006 => unhandled!("sgr mouse"),
+      1007 => unhandled!("alternate scroll"),
+      1042 => unhandled!("urgency hints"),
+      1049 => unhandled!("swap screen and set restore cursor"),
+      2004 => unhandled!("bracketed paste"),
+      2026 => unhandled!("sync update"),
+      _ => {}
     }
   }
 
