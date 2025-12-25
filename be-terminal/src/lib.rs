@@ -28,6 +28,8 @@ pub struct TerminalState {
   style:      Style,
 
   pub cursor_visible: bool,
+
+  pending_writes: Vec<u8>,
 }
 
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
@@ -134,6 +136,11 @@ impl Terminal {
         Ok(n) => {
           for &b in &buf[..n] {
             self.parser.advance(&mut self.state, b);
+
+            if !self.state.pending_writes.is_empty() {
+              self.pty.input_bytes(&self.state.pending_writes);
+              self.state.pending_writes.clear();
+            }
           }
         }
         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
@@ -163,6 +170,7 @@ impl TerminalState {
       size,
       style: Style::default(),
       cursor_visible: true,
+      pending_writes: vec![],
     }
   }
 

@@ -83,4 +83,7 @@ impl Pty {
 
   pub fn input(&mut self, c: char) { write!(self.pty, "{c}").unwrap(); }
   pub fn input_str(&mut self, s: &str) { write!(self.pty, "{s}").unwrap(); }
+  pub fn input_bytes(&mut self, pending_writes: &[u8]) {
+    self.pty.write_all(pending_writes).unwrap()
+  }
 }

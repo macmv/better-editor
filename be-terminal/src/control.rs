@@ -172,7 +172,17 @@ impl Perform for TerminalState {
       (b'm', []) => self.set_graphics_mode(params),
       (b'm', [b'>']) => unhandled!("set keyboard mode"),
       (b'm', [b'?']) => unhandled!("report graphics mode"),
-      (b'n', []) => unhandled!("device status"),
+      (b'n', []) => {
+        match next_param_or(0) {
+          // "is the device functioning?" -> "yes"
+          5 => self.send_text("\x1b[0n"),
+          // "where is the cursor"
+          6 => {
+            self.send_text(&format!("\x1b[{};{}R", self.cursor.row + 1, self.cursor.col + 1));
+          }
+          arg => unhandled!("unknown device status query: {arg}"),
+        };
+      }
       (b'P', []) => unhandled!("delete chars"),
       (b'p', [b'$']) => unhandled!("report mode"),
       (b'p', [b'?', b'$']) => unhandled!("report private mode"),
@@ -239,6 +249,8 @@ impl TerminalState {
       self.cursor.row += 1;
     }
   }
+
+  fn send_text(&mut self, text: &str) { self.pending_writes.extend_from_slice(text.as_bytes()); }
 
   fn set_private_mode(&mut self, mode: u16, set: bool) {
     macro_rules! unhandled {
