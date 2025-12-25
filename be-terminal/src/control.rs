@@ -129,7 +129,10 @@ impl Perform for TerminalState {
       (b'G', []) | (b'`', []) => unhandled!("goto column"),
       (b'W', [b'?']) if next_param_or(0) == 5 => unhandled!("set tabs to 8"),
       (b'g', []) => unhandled!("clear tabs"),
-      (b'H', []) | (b'f', []) => unhandled!("goto `y`, `x`"),
+      (b'H', []) | (b'f', []) => {
+        self.cursor.row = (next_param_or(1) as usize - 1).clamp(0, self.size.rows - 1);
+        self.cursor.col = (next_param_or(1) as usize - 1).clamp(0, self.size.cols - 1);
+      }
       (b'h', []) => unhandled!("set mode"),
       (b'h', [b'?']) => unhandled!("set private mode"),
       (b'I', []) => unhandled!("move forward tabs"),
