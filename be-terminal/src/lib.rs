@@ -4,7 +4,7 @@ use anstyle_parse::{Parser, Utf8Parser};
 use polling::Events;
 
 use crate::{
-  grid::{Grid, Line},
+  grid::{Grid, Line, OwnedLine},
   pty::Pty,
 };
 
@@ -16,7 +16,6 @@ pub struct Terminal {
   pty:   Pty,
   state: TerminalState,
 
-  size:   Size,
   parser: Parser,
 }
 
@@ -24,7 +23,9 @@ struct TerminalState {
   grid:   Grid,
   cursor: Cursor,
 
-  style: Style,
+  scrollback: Vec<OwnedLine>,
+  size:       Size,
+  style:      Style,
 }
 
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
@@ -86,9 +87,8 @@ pub struct Poller {
 impl Terminal {
   pub fn new(size: Size) -> Self {
     Terminal {
-      pty: Pty::new(size),
-      state: TerminalState::new(size),
-      size,
+      pty:    Pty::new(size),
+      state:  TerminalState::new(size),
       parser: Parser::<Utf8Parser>::new(),
     }
   }
@@ -105,9 +105,7 @@ impl Terminal {
   }
 
   pub fn set_size(&mut self, size: Size) {
-    if size != self.size {
-      self.size = size;
-
+    if size != self.state.size {
       self.state.resize(size);
       self.pty.resize(size);
     }
@@ -157,13 +155,16 @@ impl Drop for Poller {
 impl TerminalState {
   fn new(size: Size) -> Self {
     TerminalState {
-      grid:   Grid::new(size),
+      grid: Grid::new(size),
       cursor: Cursor { row: 0, col: 0 },
-      style:  Style::default(),
+      scrollback: vec![],
+      size,
+      style: Style::default(),
     }
   }
 
   fn resize(&mut self, size: Size) {
+    self.size = size;
     self.grid.resize(size);
     self.cursor.row = self.cursor.row.clamp(0, size.rows - 1);
     self.cursor.col = self.cursor.col.clamp(0, size.cols - 1);

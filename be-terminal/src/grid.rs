@@ -10,6 +10,10 @@ struct Cell {
   style: Style,
 }
 
+pub struct OwnedLine {
+  cells: Vec<Cell>,
+}
+
 pub struct Line<'a> {
   line: &'a [Cell],
 }
@@ -45,6 +49,12 @@ impl Grid {
     for line in &mut self.lines {
       line.resize(size.cols, Cell::default());
     }
+  }
+
+  pub fn linefeed(&mut self, size: Size) -> OwnedLine {
+    let cells = self.lines.remove(0);
+    self.lines.push(vec![Cell::default(); size.cols]);
+    OwnedLine { cells }
   }
 }
 

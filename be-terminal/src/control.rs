@@ -12,7 +12,7 @@ impl Perform for TerminalState {
     match b {
       C0::BS => self.cursor.col = self.cursor.col.saturating_sub(1),
       C0::CR => self.cursor.col = 0,
-      C0::LF | C0::VT | C0::FF => self.cursor.row += 1,
+      C0::LF | C0::VT | C0::FF => self.linefeed(),
       _ => eprintln!("unhandled C0: {b}"),
     }
   }
@@ -30,8 +30,11 @@ impl Perform for TerminalState {
 
     match (byte, intermediates) {
       (b'B', _) => unhandled!("set normal charset"),
-      (b'D', []) => unhandled!("linefeed"),
-      (b'E', []) => unhandled!("linefeed and carriage return"),
+      (b'D', []) => self.linefeed(),
+      (b'E', []) => {
+        self.linefeed();
+        self.cursor.col = 0;
+      }
       (b'H', []) => unhandled!("set horizontal tab stop"),
       (b'M', []) => unhandled!("reverse index"),
       (b'Z', []) => unhandled!("identify terminal"),
@@ -156,6 +159,15 @@ impl Perform for TerminalState {
 }
 
 impl TerminalState {
+  fn linefeed(&mut self) {
+    if self.cursor.row == self.size.rows - 1 {
+      let line = self.grid.linefeed(self.size);
+      self.scrollback.push(line);
+    } else {
+      self.cursor.row += 1;
+    }
+  }
+
   fn set_graphics_mode(&mut self, params: &Params) {
     macro_rules! builtin {
       ($name:ident, $bright:expr) => {
