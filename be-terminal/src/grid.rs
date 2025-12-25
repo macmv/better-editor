@@ -4,7 +4,7 @@ pub struct Grid {
   lines: Vec<Vec<Cell>>,
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Clone, Copy)]
 struct Cell {
   c:     char,
   style: Style,
@@ -29,6 +29,10 @@ pub struct StyleIter<'a> {
   prev:   Style,
   index:  usize,
   offset: usize,
+}
+
+impl Default for Cell {
+  fn default() -> Self { Cell { c: ' ', style: Style::default() } }
 }
 
 impl Grid {
