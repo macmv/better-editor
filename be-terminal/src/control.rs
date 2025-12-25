@@ -28,7 +28,24 @@ impl Perform for TerminalState {
       }};
     }
 
-    unhandled!();
+    match (byte, intermediates) {
+      (b'B', _) => unhandled!("set normal charset"),
+      (b'D', []) => unhandled!("linefeed"),
+      (b'E', []) => unhandled!("linefeed and carriage return"),
+      (b'H', []) => unhandled!("set horizontal tab stop"),
+      (b'M', []) => unhandled!("reverse index"),
+      (b'Z', []) => unhandled!("identify terminal"),
+      (b'c', []) => unhandled!("reset state"),
+      (b'0', _) => unhandled!("set special character charset"),
+      (b'7', []) => unhandled!("save cursor position"),
+      (b'8', [b'#']) => unhandled!("show test screen"),
+      (b'8', []) => unhandled!("restore cursor position"),
+      (b'=', []) => unhandled!("set keypad application mode"),
+      (b'>', []) => unhandled!("unset keypad application mode"),
+      // String terminator, do nothing (parser handles as string terminator).
+      (b'\\', []) => (),
+      _ => unhandled!(),
+    }
   }
 
   fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
@@ -42,7 +59,21 @@ impl Perform for TerminalState {
       }};
     }
 
-    unhandled!();
+    match params[0] {
+      b"0" | b"2" => unhandled!("set title"),
+      b"4" => unhandled!("set color index"),
+      b"8" if params.len() > 2 => unhandled!("hyperline"),
+      b"10" | b"11" | b"12" => unhandled!("set color"),
+      b"22" if params.len() == 2 => unhandled!("set cursor shape"),
+      b"50" => unhandled!("set cursor style"),
+      b"52" => unhandled!("set clipboard"),
+      b"104" => unhandled!("reset color index"),
+      b"110" => unhandled!("reset foreground color"),
+      b"111" => unhandled!("reset background color"),
+      b"112" => unhandled!("reset cursor color"),
+
+      _ => unhandled!(),
+    }
   }
 
   fn csi_dispatch(
