@@ -80,18 +80,21 @@ impl Grid {
   }
 
   pub fn scroll_down(&mut self, range: Range<usize>) {
-    self.lines.insert(range.start, vec![Cell::default(); self.size.cols]);
-    self.lines.remove(range.end - 1);
+    for line in (range.start + 1..range.end).rev() {
+      self.lines.swap(line, line - 1);
+    }
+    self.line_mut(range.start).clear(Style::default());
   }
 
   pub fn scroll_up(&mut self, range: Range<usize>) -> OwnedLine {
-    let cells = self.lines.remove(range.start);
-    if range.end < self.lines.len() {
-      self.lines.insert(range.end, vec![Cell::default(); self.size.cols]);
-    } else {
-      self.lines.push(vec![Cell::default(); self.size.cols]);
+    let line = OwnedLine { cells: self.lines[range.start].clone() };
+
+    for line in range.start..range.end - 1 {
+      self.lines.swap(line, line + 1);
     }
-    OwnedLine { cells }
+    self.line_mut(range.end - 1).clear(Style::default());
+
+    line
   }
 }
 
