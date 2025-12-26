@@ -115,9 +115,9 @@ impl Split {
         for (i, item) in self.items.iter_mut().enumerate() {
           let percent =
             self.percent.get(i).copied().unwrap_or_else(|| 1.0 - self.percent.iter().sum::<f64>());
-          let mut distance = Distance::Percent(percent).to_pixels_in(render.size().width);
+          let mut distance = Distance::Percent(percent).to_pixels_in(render.size().height);
           if distance < 0.0 {
-            distance += render.size().width;
+            distance += render.size().height;
           }
 
           bounds.y1 = bounds.y0 + distance;
