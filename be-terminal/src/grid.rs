@@ -34,6 +34,14 @@ pub struct StyleIter<'a> {
   offset: usize,
 }
 
+pub struct SpecificStyleIter<'a, F, T> {
+  line:   &'a [Cell],
+  prev:   Option<T>,
+  index:  usize,
+  offset: usize,
+  func:   F,
+}
+
 impl Default for Cell {
   fn default() -> Self { Cell { c: ' ', style: Style::default() } }
 }
@@ -132,6 +140,13 @@ impl Line<'_> {
   pub fn styles(&self) -> StyleIter<'_> {
     StyleIter { line: self.line, prev: Style::default(), index: 0, offset: 0 }
   }
+
+  pub fn specific_styles<T, F>(&self, f: F) -> SpecificStyleIter<'_, F, T>
+  where
+    F: Fn(Style) -> T,
+  {
+    SpecificStyleIter { line: self.line, prev: None, index: 0, offset: 0, func: f }
+  }
 }
 
 impl Iterator for StyleIter<'_> {
@@ -147,6 +162,35 @@ impl Iterator for StyleIter<'_> {
       if cell.style != self.prev {
         self.prev = cell.style;
         return Some((style, offset));
+      }
+    }
+  }
+}
+
+impl<T, F> Iterator for SpecificStyleIter<'_, F, T>
+where
+  F: Fn(Style) -> T,
+  T: Clone + PartialEq,
+{
+  type Item = (T, usize);
+
+  fn next(&mut self) -> Option<Self::Item> {
+    loop {
+      let cell = self.line.get(self.index)?;
+      let offset = self.offset;
+      self.index += 1;
+      self.offset += cell.c.len_utf8();
+
+      if self.index == 1 {
+        self.prev = Some((self.func)(cell.style));
+        continue;
+      }
+
+      let v = (self.func)(cell.style);
+      if self.prev.as_ref() != Some(&v) {
+        let ret = self.prev.clone();
+        self.prev = Some(v);
+        return Some((ret.unwrap(), offset));
       }
     }
   }
