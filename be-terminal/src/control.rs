@@ -18,6 +18,17 @@ impl Perform for TerminalState {
 
   fn execute(&mut self, b: u8) {
     match b {
+      C0::HT => {
+        let dist = 8 - self.cursor.col % 8;
+
+        for _ in 0..dist {
+          if self.cursor.insert {
+            self.grid.line_mut(self.cursor.row).shift_right_from(self.cursor.pos.col);
+          }
+          self.grid.put(self.cursor.pos, ' ', self.cursor.style);
+          self.cursor.col += 1;
+        }
+      }
       C0::BS => self.cursor.col = self.cursor.col.saturating_sub(1),
       C0::CR => self.cursor.col = 0,
       C0::LF | C0::VT | C0::FF => {
