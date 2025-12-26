@@ -1,5 +1,5 @@
 use be_input::{Action, Direction, Mode, Navigation};
-use kurbo::Axis;
+use kurbo::{Axis, Point, Rect};
 
 use crate::{
   Distance, Render,
@@ -23,26 +23,21 @@ pub enum Content {
 
 pub struct Split {
   axis:    Axis,
-  percent: f64,
-  active:  Side,
-  left:    Box<Pane>,
-  right:   Box<Pane>,
-}
-
-#[derive(Copy, Clone)]
-enum Side {
-  Left,
-  Right,
+  percent: Vec<f64>,
+  active:  usize,
+  items:   Vec<Pane>,
 }
 
 impl Pane {
   pub fn new_editor() -> Self {
     Pane::Split(Split {
       axis:    Axis::Vertical,
-      percent: 0.2,
-      active:  Side::Right,
-      left:    Box::new(Pane::Content(Content::FileTree(FileTree::current_directory()))),
-      right:   Box::new(Pane::Content(Content::Editor(EditorView::new()))),
+      percent: vec![0.2],
+      active:  1,
+      items:   vec![
+        Pane::Content(Content::FileTree(FileTree::current_directory())),
+        Pane::Content(Content::Editor(EditorView::new())),
+      ],
     })
   }
 
@@ -98,56 +93,66 @@ impl Pane {
 
 impl Split {
   fn draw(&mut self, render: &mut Render) {
-    render.split(
-      self,
-      self.axis,
-      Distance::Percent(self.percent),
-      |state, render| state.left.draw(render),
-      |state, render| state.right.draw(render),
-    );
-  }
+    let mut bounds = Rect::from_origin_size(Point::ZERO, render.size());
 
-  fn active(&self) -> &Content {
-    match self.active {
-      Side::Left => self.left.active(),
-      Side::Right => self.right.active(),
+    match self.axis {
+      Axis::Vertical => {
+        for (i, item) in self.items.iter_mut().enumerate() {
+          let percent =
+            self.percent.get(i).copied().unwrap_or_else(|| 1.0 - self.percent.iter().sum::<f64>());
+          let mut distance = Distance::Percent(percent).to_pixels_in(render.size().width);
+          if distance < 0.0 {
+            distance += render.size().width;
+          }
+
+          bounds.x1 = bounds.x0 + distance + 1.0;
+          render.clipped(bounds, |render| item.draw(render));
+          bounds.x0 += distance;
+        }
+      }
+
+      Axis::Horizontal => {
+        for (i, item) in self.items.iter_mut().enumerate() {
+          let percent =
+            self.percent.get(i).copied().unwrap_or_else(|| 1.0 - self.percent.iter().sum::<f64>());
+          let mut distance = Distance::Percent(percent).to_pixels_in(render.size().width);
+          if distance < 0.0 {
+            distance += render.size().width;
+          }
+
+          bounds.y1 = bounds.y0 + distance + 1.0;
+          render.clipped(bounds, |render| item.draw(render));
+          bounds.y0 += distance;
+        }
+      }
     }
   }
 
-  fn active_mut(&mut self) -> &mut Content {
-    match self.active {
-      Side::Left => self.left.active_mut(),
-      Side::Right => self.right.active_mut(),
-    }
-  }
+  fn active(&self) -> &Content { self.items[self.active].active() }
+
+  fn active_mut(&mut self) -> &mut Content { self.items[self.active].active_mut() }
 
   /// Returns true if the focus changed.
   fn focus(&mut self, direction: Direction) -> bool {
-    let focused = match self.active {
-      Side::Left => &mut self.left,
-      Side::Right => &mut self.right,
-    };
+    let focused = &mut self.items[self.active];
 
     if !focused.focus(direction) {
-      match (self.active, self.axis, direction) {
-        (Side::Left, Axis::Vertical, Direction::Right) => self.active = Side::Right,
-        (Side::Right, Axis::Vertical, Direction::Left) => self.active = Side::Left,
-        (Side::Left, Axis::Horizontal, Direction::Down) => self.active = Side::Right,
-        (Side::Right, Axis::Horizontal, Direction::Up) => self.active = Side::Left,
+      let prev_active = self.active;
+      match (self.axis, direction) {
+        (Axis::Vertical, Direction::Right) if self.active < self.items.len() - 1 => {
+          self.active += 1
+        }
+        (Axis::Vertical, Direction::Left) if self.active > 0 => self.active -= 1,
+        (Axis::Horizontal, Direction::Down) if self.active < self.items.len() - 1 => {
+          self.active += 1
+        }
+        (Axis::Horizontal, Direction::Up) if self.active > 0 => self.active -= 1,
 
         _ => return false,
       }
 
-      match self.active {
-        Side::Left => {
-          self.left.active_mut().on_focus(true);
-          self.right.active_mut().on_focus(false);
-        }
-        Side::Right => {
-          self.right.active_mut().on_focus(true);
-          self.left.active_mut().on_focus(false);
-        }
-      }
+      self.items[prev_active].active_mut().on_focus(false);
+      self.items[self.active].active_mut().on_focus(true);
 
       true
     } else {
