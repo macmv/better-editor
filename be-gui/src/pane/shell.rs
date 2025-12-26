@@ -95,7 +95,6 @@ impl Shell {
     for line in 0..height {
       let Some(layout) = self.layout_line(render, line) else { break };
 
-      render.draw_text(&layout.layout, (0.0, line as f64 * line_height));
       for range in &layout.background {
         render.fill(
           &Rect::from_origin_size(
@@ -105,6 +104,7 @@ impl Shell {
           range.2,
         );
       }
+      render.draw_text(&layout.layout, (0.0, line as f64 * line_height));
     }
 
     if self.terminal.state().cursor.visible {
