@@ -61,6 +61,7 @@ impl Perform for TerminalState {
       }
       (b'Z', []) => unhandled!("identify terminal"),
       (b'c', []) => unhandled!("reset state"),
+      (b'g', []) => {} // Visual bell, ignore.
       (b'0', &[index]) => self.set_charset(index, Charset::LineDrawing),
       (b'7', []) => unhandled!("save cursor position"),
       (b'8', [b'#']) => unhandled!("show test screen"),
