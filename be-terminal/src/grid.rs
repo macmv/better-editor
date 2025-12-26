@@ -32,6 +32,7 @@ pub struct StyleIter<'a> {
   prev:   Style,
   index:  usize,
   offset: usize,
+  done:   bool,
 }
 
 pub struct SpecificStyleIter<'a, F, T> {
@@ -40,6 +41,7 @@ pub struct SpecificStyleIter<'a, F, T> {
   index:  usize,
   offset: usize,
   func:   F,
+  done:   bool,
 }
 
 impl Default for Cell {
@@ -138,14 +140,21 @@ impl Line<'_> {
   }
 
   pub fn styles(&self) -> StyleIter<'_> {
-    StyleIter { line: self.line, prev: Style::default(), index: 0, offset: 0 }
+    StyleIter { line: self.line, prev: Style::default(), index: 0, offset: 0, done: false }
   }
 
   pub fn specific_styles<T, F>(&self, f: F) -> SpecificStyleIter<'_, F, T>
   where
     F: Fn(Style) -> T,
   {
-    SpecificStyleIter { line: self.line, prev: None, index: 0, offset: 0, func: f }
+    SpecificStyleIter {
+      line:   self.line,
+      prev:   None,
+      index:  0,
+      offset: 0,
+      func:   f,
+      done:   false,
+    }
   }
 }
 
@@ -154,7 +163,14 @@ impl Iterator for StyleIter<'_> {
 
   fn next(&mut self) -> Option<Self::Item> {
     loop {
-      let cell = self.line.get(self.index)?;
+      let Some(cell) = self.line.get(self.index) else {
+        if !self.done {
+          self.done = true;
+          return Some((self.prev, self.offset));
+        } else {
+          return None;
+        }
+      };
       let style = self.prev;
       let offset = self.offset;
       self.index += 1;
@@ -176,7 +192,14 @@ where
 
   fn next(&mut self) -> Option<Self::Item> {
     loop {
-      let cell = self.line.get(self.index)?;
+      let Some(cell) = self.line.get(self.index) else {
+        if !self.done {
+          self.done = true;
+          return self.prev.take().map(|v| (v, self.offset));
+        } else {
+          return None;
+        }
+      };
       let offset = self.offset;
       self.index += 1;
       self.offset += cell.c.len_utf8();
