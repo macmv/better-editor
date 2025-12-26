@@ -74,7 +74,9 @@ impl Perform for TerminalState {
     }
   }
 
-  fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
+  fn osc_dispatch(&mut self, params: &[&[u8]], bell_terminated: bool) {
+    let terminator = if bell_terminated { "\x07" } else { "\x1b\\" };
+
     macro_rules! unhandled {
       () => {{
         debug!("[unhandled OSC] params={params:?}");
@@ -99,7 +101,25 @@ impl Perform for TerminalState {
       }
       b"4" => unhandled!("set color index"),
       b"8" if params.len() > 2 => unhandled!("hyperline"),
-      b"10" | b"11" | b"12" => unhandled!("set color"),
+      b"10" => unhandled!("set foreground color"),
+      b"11" => {
+        if params.len() == 2 {
+          if params[1] == b"?" {
+            self.send_text(&format!(
+              "\x1b]11;rgb:{r:02x}{r:02x}/{g:02x}{g:02x}/{b:02x}{b:02x}{terminator}",
+              // TODO: Report background color.
+              r = 0,
+              g = 0,
+              b = 0,
+            ));
+          } else {
+            unhandled!("set background color");
+          }
+        } else {
+          unhandled!("background color");
+        }
+      }
+      b"12" => unhandled!("set cursor color"),
       b"22" if params.len() == 2 => unhandled!("set cursor shape"),
       b"50" => unhandled!("set cursor style"),
       b"52" => unhandled!("set clipboard"),
