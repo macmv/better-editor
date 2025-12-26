@@ -399,7 +399,7 @@ impl TerminalState {
       6 => unhandled!("origin"),
       7 => unhandled!("line wrap"),
       12 => self.cursor.blink = set,
-      25 => self.cursor.visible = !set,
+      25 => self.cursor.visible = set,
       1000 => self.report_mouse = set,
       1002 => unhandled!("report cell mouse motion"),
       1003 => unhandled!("report all mouse motion"),
