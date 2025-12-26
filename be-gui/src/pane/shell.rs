@@ -1,4 +1,4 @@
-use be_input::{Action, Direction, Edit, Move};
+use be_input::{Action, Direction, Edit, Mode, Move};
 use be_terminal::{StyleFlags, Terminal, TerminalColor};
 use kurbo::Rect;
 use parley::FontWeight;
@@ -33,6 +33,8 @@ impl Shell {
       Action::Edit { count: _, e: Edit::Backspace } => self.terminal.perform_backspace(),
       Action::Edit { count: _, e: Edit::Delete } => self.terminal.perform_delete(),
       Action::Control { char: c @ 'a'..='z' } => self.terminal.perform_control(c as u8 - b'a' + 1),
+      // Bit of a hack, but we're in "insert" mode, so escape sends us this.
+      Action::SetMode { mode: Mode::Normal, .. } => self.terminal.perform_escape(),
 
       _ => {}
     }

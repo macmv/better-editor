@@ -197,6 +197,7 @@ impl Terminal {
   pub fn perform_backspace(&mut self) { self.pty.input(control::C0::BS.into()); }
   pub fn perform_delete(&mut self) { self.pty.input(control::C0::DEL.into()); }
   pub fn perform_control(&mut self, b: u8) { self.pty.input_bytes(&[b]); }
+  pub fn perform_escape(&mut self) { self.pty.input(control::C0::ESC.into()); }
   pub fn perform_up(&mut self) {
     if self.state.cursor_keys {
       self.pty.input_str("\x1bOA");
