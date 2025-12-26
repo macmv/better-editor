@@ -105,7 +105,7 @@ impl Split {
             distance += render.size().width;
           }
 
-          bounds.x1 = bounds.x0 + distance + 1.0;
+          bounds.x1 = bounds.x0 + distance;
           render.clipped(bounds, |render| item.draw(render));
           bounds.x0 += distance;
         }
@@ -120,7 +120,7 @@ impl Split {
             distance += render.size().width;
           }
 
-          bounds.y1 = bounds.y0 + distance + 1.0;
+          bounds.y1 = bounds.y0 + distance;
           render.clipped(bounds, |render| item.draw(render));
           bounds.y0 += distance;
         }

@@ -247,10 +247,7 @@ impl<'a> Render<'a> {
           distance += self.size().width;
         }
 
-        // HACK: Without this overlap, there's a gap between splits. This is probably
-        // from something being rounded somewhere, as changing the window size
-        // makes the gap flicker.
-        left_bounds.x1 = distance + 1.0;
+        left_bounds.x1 = distance;
         right_bounds.x0 = distance;
       }
       Axis::Horizontal => {
@@ -259,7 +256,7 @@ impl<'a> Render<'a> {
           distance += self.size().height;
         }
 
-        left_bounds.y1 = distance + 1.0;
+        left_bounds.y1 = distance;
         right_bounds.y0 = distance;
       }
     }
@@ -271,8 +268,9 @@ impl<'a> Render<'a> {
   pub fn clipped(&mut self, mut rect: Rect, f: impl FnOnce(&mut Render)) {
     rect = rect + self.offset();
 
-    self.stack.push(rect);
-    self.scene.push_clip_layer(Affine::IDENTITY, &rect.scale_from_origin(self.scale));
+    let scaled_rect = rect.scale_from_origin(self.scale).round();
+    self.stack.push(scaled_rect.scale_from_origin(1.0 / self.scale));
+    self.scene.push_clip_layer(Affine::IDENTITY, &scaled_rect);
 
     f(self);
 
