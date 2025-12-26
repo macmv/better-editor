@@ -9,8 +9,13 @@ pub struct Shell {
   terminal:  Terminal,
   set_waker: bool,
 
-  cached_layouts: Vec<TextLayout>,
+  cached_layouts: Vec<LineLayout>,
   cached_scale:   f64,
+}
+
+struct LineLayout {
+  layout:     TextLayout,
+  background: Vec<(f64, f64, Color)>,
 }
 
 impl Shell {
@@ -90,7 +95,13 @@ impl Shell {
     for line in 0..height {
       let Some(layout) = self.layout_line(render, line) else { break };
 
-      render.draw_text(&layout, (0.0, line as f64 * line_height));
+      render.draw_text(&layout.layout, (0.0, line as f64 * line_height));
+      for range in &layout.background {
+        render.fill(
+          &Rect::new(range.0, line as f64 * line_height, range.1, (line + 1) as f64 * line_height),
+          range.2,
+        );
+      }
     }
 
     if self.terminal.state().cursor.visible {
@@ -108,7 +119,7 @@ impl Shell {
     }
   }
 
-  fn layout_line(&mut self, render: &mut Render, i: usize) -> Option<&mut TextLayout> {
+  fn layout_line(&mut self, render: &mut Render, i: usize) -> Option<&mut LineLayout> {
     if self.cached_layouts.len() < i {
       return Some(&mut self.cached_layouts[i]);
     }
@@ -122,7 +133,9 @@ impl Shell {
 
     let mut prev = 0;
     for (style, i) in line.styles() {
-      layout.color_range(prev..i, terminal_color(theme, style.foreground));
+      if let Some(color) = terminal_color(theme, style.foreground) {
+        layout.color_range(prev..i, color);
+      }
       if style.flags.contains(StyleFlags::BOLD) {
         layout.apply(prev..i, parley::StyleProperty::FontWeight(FontWeight::BLACK));
       }
@@ -135,6 +148,18 @@ impl Shell {
     let layout = layout.build(&line_string);
     let layout = render.build_layout(layout);
 
+    let mut background = vec![];
+    let mut prev = 0.0;
+    for (b, i) in line.specific_styles(|s| s.background) {
+      let x = layout.cursor(i, crate::CursorMode::Line).x0;
+      if let Some(color) = terminal_color(&render.store.theme, b) {
+        background.push((prev, x, color));
+      }
+      prev = x;
+    }
+
+    let layout = LineLayout { layout, background };
+
     if self.cached_layouts.len() == i {
       self.cached_layouts.push(layout);
     } else {
@@ -145,10 +170,10 @@ impl Shell {
   }
 }
 
-fn terminal_color(theme: &Theme, color: Option<TerminalColor>) -> Color {
+fn terminal_color(_theme: &Theme, color: Option<TerminalColor>) -> Option<Color> {
   use be_terminal::BuiltinColor::*;
 
-  match color {
+  Some(match color {
     Some(TerminalColor::Builtin { color: Black, bright: _ }) => oklch(0.6, 0.0, 0.0),
     Some(TerminalColor::Builtin { color: Red, bright: _ }) => oklch(0.75, 0.13, 25.0),
     Some(TerminalColor::Builtin { color: Green, bright: _ }) => oklch(0.8, 0.14, 140.0),
@@ -157,6 +182,6 @@ fn terminal_color(theme: &Theme, color: Option<TerminalColor>) -> Color {
     Some(TerminalColor::Builtin { color: Magenta, bright: _ }) => oklch(0.8, 0.13, 350.0),
     Some(TerminalColor::Builtin { color: Cyan, bright: _ }) => oklch(0.85, 0.1, 200.0),
     Some(TerminalColor::Builtin { color: White, bright: _ }) => oklch(1.0, 0.0, 0.0),
-    _ => theme.text,
-  }
+    _ => return None,
+  })
 }
