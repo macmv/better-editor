@@ -98,7 +98,10 @@ impl Shell {
       render.draw_text(&layout.layout, (0.0, line as f64 * line_height));
       for range in &layout.background {
         render.fill(
-          &Rect::new(range.0, line as f64 * line_height, range.1, (line + 1) as f64 * line_height),
+          &Rect::from_origin_size(
+            (range.0.round(), (line as f64 * line_height).round()),
+            ((range.1 - range.0).ceil(), line_height.ceil()),
+          ),
           range.2,
         );
       }
