@@ -59,7 +59,7 @@ impl Perform for TerminalState {
           self.cursor.row = self.cursor.row.saturating_sub(1);
         }
       }
-      (b'Z', []) => unhandled!("identify terminal"),
+      (b'Z', []) => self.identify_terminal(None),
       (b'c', []) => unhandled!("reset state"),
       (b'g', []) => {} // Visual bell, ignore.
       (b'0', &[index]) => self.set_charset(index, Charset::LineDrawing),
@@ -150,7 +150,9 @@ impl Perform for TerminalState {
       (b'B', []) | (b'e', []) => self.move_down(next_param_or(1)),
       (b'b', []) => unhandled!("repeat the preceding char"),
       (b'C', []) | (b'a', []) => self.move_right(next_param_or(1)),
-      (b'c', intermediates) if next_param_or(0) == 0 => unhandled!("identify terminal"),
+      (b'c', intermediates) if next_param_or(0) == 0 => {
+        self.identify_terminal(intermediates.first().copied())
+      }
       (b'D', []) => self.move_left(next_param_or(1)),
       (b'd', []) => {
         self.cursor.row = (next_param_or(1) as usize - 1).clamp(0, self.size.rows - 1);
@@ -339,6 +341,17 @@ impl TerminalState {
       20 => self.cursor.line_feed = set,
       34 => self.cursor.blink = set,
       _ => unhandled!("unknown"),
+    }
+  }
+
+  fn identify_terminal(&mut self, arg: Option<u8>) {
+    match arg {
+      // primary device attributes
+      None => self.send_text("\x1b[?6c"),
+      // secondary device attributes
+      Some(b'>') => self.send_text("\x1b[>0;1;1c"),
+
+      _ => debug!("[unhandled identify terminal] arg={arg:?}"),
     }
   }
 
