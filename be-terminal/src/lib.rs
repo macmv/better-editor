@@ -288,12 +288,12 @@ impl TerminalState {
   }
 
   fn resize(&mut self, size: Size) {
+    if self.scroll_end == self.size.rows {
+      self.scroll_end = size.rows;
+    }
     self.size = size;
     self.grid.resize(size);
     self.alt_grid.resize(size);
-    if self.scroll_end == size.rows {
-      self.scroll_end = size.rows;
-    }
     self.cursor.row = self.cursor.row.clamp(0, size.rows - 1);
     self.cursor.col = self.cursor.col.clamp(0, size.cols - 1);
   }
