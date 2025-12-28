@@ -1,4 +1,4 @@
-use std::{ops::Range, sync::Arc};
+use std::{cell::RefCell, ops::Range, rc::Rc, sync::Arc};
 
 use be_config::Config;
 use kurbo::{Affine, Line, Point, Rect, Size, Stroke, Vec2};
@@ -19,8 +19,9 @@ use crate::{Brush, Color, CursorMode, Render, encode_color};
 pub struct TextStore {
   font:         parley::FontContext,
   layout:       parley::LayoutContext<peniko::Brush>,
-  stack:        String,
   font_metrics: FontMetrics,
+
+  config: Rc<RefCell<Config>>,
 }
 
 #[derive(Clone, Default)]
@@ -41,12 +42,12 @@ pub struct LayoutBuilder<'a> {
 }
 
 impl TextStore {
-  pub fn new(config: &Config) -> Self {
+  pub fn new(config: &Rc<RefCell<Config>>) -> Self {
     let mut store = TextStore {
       font:         parley::FontContext::new(),
       layout:       parley::LayoutContext::new(),
-      stack:        config.font.family.clone(),
       font_metrics: FontMetrics::default(),
+      config:       config.clone(),
     };
 
     store.update_metrics();
@@ -60,9 +61,9 @@ impl TextStore {
   fn update_metrics(&mut self) {
     const TEXT: &str = " ";
     let mut builder = self.layout.ranged_builder(&mut self.font, TEXT, 1.0, false);
-    builder.push_default(parley::StyleProperty::FontSize(16.0));
+    builder.push_default(parley::StyleProperty::FontSize(self.config.borrow().font.size as f32));
     builder.push_default(parley::StyleProperty::FontStack(parley::FontStack::Source(
-      self.stack.as_str().into(),
+      self.config.borrow().font.family.as_str().into(),
     )));
     let mut layout = builder.build(TEXT);
 
@@ -88,8 +89,12 @@ impl TextStore {
   ) -> LayoutBuilder<'a> {
     let mut builder = self.layout.ranged_builder(&mut self.font, text, 1.0, false);
     builder.push_default(parley::StyleProperty::Brush(encode_color(color).into()));
-    builder.push_default(parley::StyleProperty::FontSize(16.0 * scale as f32));
-    builder.push_default(parley::StyleProperty::FontStack(self.stack.as_str().into()));
+    builder.push_default(parley::StyleProperty::FontSize(
+      (self.config.borrow().font.size * scale) as f32,
+    ));
+    builder.push_default(parley::StyleProperty::FontStack(
+      self.config.borrow().font.family.as_str().into(),
+    ));
 
     LayoutBuilder { builder }
   }

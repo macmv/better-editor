@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 use be_config::Config;
 use kurbo::{Affine, Axis, Point, Rect, Shape, Size, Stroke, Vec2};
 use peniko::{
@@ -19,7 +21,7 @@ pub struct RenderStore {
   pub text:  TextStore,
   pub theme: Theme,
 
-  config: Config,
+  config: Rc<RefCell<Config>>,
   render: vello::Renderer,
 }
 
@@ -93,7 +95,7 @@ pub fn run() {
     });
     let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-    let config = Config::load();
+    let config = Rc::new(RefCell::new(Config::load()));
 
     let mut app = App {
       state: super::State::default(),
