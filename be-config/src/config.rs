@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 trait Partial {
   type Partial;
   fn replace_with(&mut self, partial: Self::Partial);
@@ -19,6 +21,18 @@ macro_rules! partial_option {
 partial_option!(String);
 partial_option!(f64);
 
+impl<T> Partial for HashMap<String, T> {
+  type Partial = Option<HashMap<String, T>>;
+
+  fn replace_with(&mut self, partial: Self::Partial) {
+    if let Some(partial) = partial {
+      for (key, value) in partial {
+        self.insert(key, value);
+      }
+    }
+  }
+}
+
 macro_rules! config {
   (
     #[partial = $partial_name:ident]
@@ -29,11 +43,13 @@ macro_rules! config {
     }
   ) => {
     #[derive(serde::Deserialize)]
+    #[serde(rename_all = "kebab-case")]
     pub struct $name {
       $(pub $field_ident: $field_type,)*
     }
 
     #[derive(serde::Deserialize)]
+    #[serde(rename_all = "kebab-case")]
     struct $partial_name {
       $($field_ident: <$field_type as Partial>::Partial,)*
     }
@@ -53,7 +69,8 @@ macro_rules! config {
 config!(
   #[partial = ConfigDataPartial]
   pub struct Config {
-    pub font: FontSettings,
+    pub font:     FontSettings,
+    pub language: HashMap<String, LanguageSettings>,
   }
 );
 
@@ -64,6 +81,19 @@ config!(
     pub size:   f64,
   }
 );
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct LanguageSettings {
+  pub tree_sitter: String,
+  pub lsp:         LspSettings,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct LspSettings {
+  pub command: String,
+}
 
 impl Config {
   pub fn load() -> Config {
