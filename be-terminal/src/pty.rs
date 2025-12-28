@@ -45,7 +45,7 @@ impl Pty {
         }
 
         // Needed for control signals to work.
-        libc::ioctl(user, libc::TIOCSCTTY);
+        libc::ioctl(user, libc::TIOCSCTTY as _);
 
         // No longer need user/controller fds.
         libc::close(user);
