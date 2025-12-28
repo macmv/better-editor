@@ -45,7 +45,7 @@ impl TextStore {
     let mut store = TextStore {
       font:         parley::FontContext::new(),
       layout:       parley::LayoutContext::new(),
-      stack:        config.font.clone(),
+      stack:        config.font.family.clone(),
       font_metrics: FontMetrics::default(),
     };
 

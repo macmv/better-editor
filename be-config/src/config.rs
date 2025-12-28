@@ -1,3 +1,24 @@
+trait Partial {
+  type Partial;
+  fn replace_with(&mut self, partial: Self::Partial);
+}
+
+macro_rules! partial_option {
+  ($ty:ty) => {
+    impl Partial for $ty {
+      type Partial = Option<$ty>;
+      fn replace_with(&mut self, partial: Option<Self>) {
+        if let Some(partial) = partial {
+          *self = partial;
+        }
+      }
+    }
+  };
+}
+
+partial_option!(String);
+partial_option!(f64);
+
 macro_rules! config {
   (
     #[partial = $partial_name:ident]
@@ -13,16 +34,16 @@ macro_rules! config {
     }
 
     #[derive(serde::Deserialize)]
-    pub struct $partial_name {
-      $(pub $field_ident: Option<$field_type>,)*
+    struct $partial_name {
+      $($field_ident: <$field_type as Partial>::Partial,)*
     }
 
-    impl $name {
+    impl Partial for $name {
+      type Partial = $partial_name;
+
       fn replace_with(&mut self, partial: $partial_name) {
         $(
-          if let Some(value) = partial.$field_ident {
-            self.$field_ident = value;
-          }
+          self.$field_ident.replace_with(partial.$field_ident);
         )*
       }
     }
@@ -32,7 +53,15 @@ macro_rules! config {
 config!(
   #[partial = ConfigDataPartial]
   pub struct Config {
-    pub font: String,
+    pub font: FontSettings,
+  }
+);
+
+config!(
+  #[partial = FontSettingsPartial]
+  pub struct FontSettings {
+    pub family: String,
+    pub size:   f64,
   }
 );
 
