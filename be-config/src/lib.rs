@@ -5,5 +5,10 @@ mod config;
 pub use config::Config;
 
 fn config_root() -> io::Result<PathBuf> {
-  Ok(dirs::config_dir().ok_or(io::ErrorKind::NotFound)?.join("be"))
+  #[cfg(unix)]
+  let base: PathBuf = std::env::home_dir().ok_or(io::ErrorKind::NotFound)?.join(".config");
+  #[cfg(not(unix))]
+  compile_error!("no config path set for target platform");
+
+  Ok(base.join("be"))
 }
