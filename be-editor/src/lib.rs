@@ -1,5 +1,6 @@
-use std::{collections::HashSet, ops::Range, path::Path};
+use std::{cell::RefCell, collections::HashSet, ops::Range, path::Path, rc::Rc};
 
+use be_config::Config;
 use be_doc::{Column, Cursor, Document, Line};
 use be_input::{Action, Direction, Edit, Mode, Move};
 use unicode_segmentation::UnicodeSegmentation;
@@ -30,7 +31,8 @@ pub struct EditorState {
   damages:    HashSet<Line>,
   damage_all: bool,
 
-  pub lsp: Option<LspState>,
+  pub config: Option<Rc<RefCell<Config>>>,
+  pub lsp:    Option<LspState>,
 }
 
 struct Change {

@@ -1,5 +1,6 @@
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
+use be_config::Config;
 use be_doc::crop::RopeSlice;
 use be_editor::EditorState;
 use be_input::Mode;
@@ -18,14 +19,18 @@ pub struct EditorView {
 }
 
 impl EditorView {
-  pub fn new() -> Self {
-    EditorView {
+  pub fn new(config: &Rc<RefCell<Config>>) -> Self {
+    let mut view = EditorView {
       editor:         EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n"),
       scroll:         Point::ZERO,
       focused:        true,
       cached_layouts: HashMap::new(),
       cached_scale:   0.0,
-    }
+    };
+
+    view.editor.config = Some(config.clone());
+
+    view
   }
 
   pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }

@@ -98,7 +98,7 @@ pub fn run() {
     let config = Rc::new(RefCell::new(Config::load()));
 
     let mut app = App {
-      state: super::State::default(),
+      state: super::State::new(&config),
 
       store: RenderStore {
         proxy,

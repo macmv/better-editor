@@ -1,3 +1,6 @@
+use std::{cell::RefCell, rc::Rc};
+
+use be_config::Config;
 use be_input::{Action, Direction, Mode, Navigation};
 use kurbo::{Axis, Point, Rect};
 
@@ -29,14 +32,14 @@ pub struct Split {
 }
 
 impl Pane {
-  pub fn new_editor() -> Self {
+  pub fn new_editor(config: &Rc<RefCell<Config>>) -> Self {
     Pane::Split(Split {
       axis:    Axis::Vertical,
       percent: vec![0.2],
       active:  1,
       items:   vec![
         Pane::Content(Content::FileTree(FileTree::current_directory())),
-        Pane::Content(Content::Editor(EditorView::new())),
+        Pane::Content(Content::Editor(EditorView::new(config))),
       ],
     })
   }

@@ -1,5 +1,8 @@
 mod render;
 
+use std::{cell::RefCell, rc::Rc};
+
+use be_config::Config;
 use be_input::{Action, KeyStroke, Navigation};
 use kurbo::{Axis, Cap, Line, Point, Rect, Stroke};
 pub use render::*;
@@ -21,6 +24,18 @@ struct Tab {
 }
 
 impl State {
+  pub fn new(config: &Rc<RefCell<Config>>) -> Self {
+    Self {
+      keys:   vec![],
+      active: 0,
+      tabs:   vec![
+        Tab { title: "zsh".into(), content: Pane::new_shell() },
+        Tab { title: "editor".into(), content: Pane::new_editor(config) },
+        Tab { title: "zsh".into(), content: Pane::new_shell() },
+      ],
+    }
+  }
+
   fn draw(&mut self, render: &mut Render) {
     render.split(
       self,
@@ -88,20 +103,6 @@ impl State {
         Stroke::new(1.0).with_caps(Cap::Butt),
       );
       x += 6.0;
-    }
-  }
-}
-
-impl Default for State {
-  fn default() -> Self {
-    Self {
-      keys:   vec![],
-      active: 0,
-      tabs:   vec![
-        Tab { title: "zsh".into(), content: Pane::new_shell() },
-        Tab { title: "editor".into(), content: Pane::new_editor() },
-        Tab { title: "zsh".into(), content: Pane::new_shell() },
-      ],
     }
   }
 }
