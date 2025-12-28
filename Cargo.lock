@@ -219,6 +219,7 @@ dependencies = [
  "be-task",
  "crossbeam-channel",
  "libc",
+ "log",
  "lsp-types",
  "parking_lot",
  "polling",

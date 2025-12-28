@@ -14,6 +14,9 @@ use std::{
 
 mod init;
 
+#[macro_use]
+extern crate log;
+
 pub extern crate lsp_types as types;
 
 pub struct LspClient {
@@ -217,8 +220,8 @@ impl LspWorker {
           READ => {
             while let Some(msg) = self.reader.recv() {
               match msg {
-                Message::Request { method, .. } => println!("request: {}", method),
-                Message::Notification { method, .. } => println!("notification: {}", method),
+                Message::Request { method, .. } => info!("unhandled request: {}", method),
+                Message::Notification { method, .. } => info!("unhandled notification: {}", method),
                 Message::Response { id, result, .. } => {
                   if let Some(completer) = self.pending.remove(&id) {
                     completer(&result);
