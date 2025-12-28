@@ -186,6 +186,7 @@ dependencies = [
 name = "be-gui"
 version = "0.1.0"
 dependencies = [
+ "be-config",
  "be-doc",
  "be-editor",
  "be-input",

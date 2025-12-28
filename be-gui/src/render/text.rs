@@ -1,5 +1,6 @@
 use std::{ops::Range, sync::Arc};
 
+use be_config::Config;
 use kurbo::{Affine, Line, Point, Rect, Size, Stroke, Vec2};
 use peniko::{
   Blob, Fill, ImageBrush, ImageData,
@@ -18,6 +19,7 @@ use crate::{Brush, Color, CursorMode, Render, encode_color};
 pub struct TextStore {
   font:         parley::FontContext,
   layout:       parley::LayoutContext<peniko::Brush>,
+  stack:        String,
   font_metrics: FontMetrics,
 }
 
@@ -39,10 +41,11 @@ pub struct LayoutBuilder<'a> {
 }
 
 impl TextStore {
-  pub fn new() -> Self {
+  pub fn new(config: &Config) -> Self {
     let mut store = TextStore {
       font:         parley::FontContext::new(),
       layout:       parley::LayoutContext::new(),
+      stack:        config.font.clone(),
       font_metrics: FontMetrics::default(),
     };
 
@@ -58,8 +61,9 @@ impl TextStore {
     const TEXT: &str = " ";
     let mut builder = self.layout.ranged_builder(&mut self.font, TEXT, 1.0, false);
     builder.push_default(parley::StyleProperty::FontSize(16.0));
-    builder
-      .push_default(parley::StyleProperty::FontStack(parley::FontStack::Source("Iosevka".into())));
+    builder.push_default(parley::StyleProperty::FontStack(parley::FontStack::Source(
+      self.stack.as_str().into(),
+    )));
     let mut layout = builder.build(TEXT);
 
     layout.break_all_lines(None);
@@ -85,8 +89,7 @@ impl TextStore {
     let mut builder = self.layout.ranged_builder(&mut self.font, text, 1.0, false);
     builder.push_default(parley::StyleProperty::Brush(encode_color(color).into()));
     builder.push_default(parley::StyleProperty::FontSize(16.0 * scale as f32));
-    builder
-      .push_default(parley::StyleProperty::FontStack(parley::FontStack::Source("Iosevka".into())));
+    builder.push_default(parley::StyleProperty::FontStack(self.stack.as_str().into()));
 
     LayoutBuilder { builder }
   }

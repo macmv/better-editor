@@ -1,3 +1,4 @@
+use be_config::Config;
 use kurbo::{Affine, Axis, Point, Rect, Shape, Size, Stroke, Vec2};
 use peniko::{
   Gradient,
@@ -18,6 +19,7 @@ pub struct RenderStore {
   pub text:  TextStore,
   pub theme: Theme,
 
+  config: Config,
   render: vello::Renderer,
 }
 
@@ -91,14 +93,17 @@ pub fn run() {
     });
     let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
+    let config = Config::load();
+
     let mut app = App {
       state: super::State::default(),
 
       store: RenderStore {
         proxy,
-        text: TextStore::new(),
+        text: TextStore::new(&config),
         render: vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),
         theme: Theme::default_theme(),
+        config,
       },
 
       texture,
