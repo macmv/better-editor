@@ -27,7 +27,7 @@ impl State {
   pub fn new(config: &Rc<RefCell<Config>>) -> Self {
     Self {
       keys:   vec![],
-      active: 0,
+      active: 1,
       tabs:   vec![
         Tab { title: "zsh".into(), content: Pane::new_shell() },
         Tab { title: "editor".into(), content: Pane::new_editor(config) },
