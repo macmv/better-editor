@@ -4,6 +4,7 @@ members = [
   "be-async",
   "be-task",
   "be-crdt",
+  "be-config",
   "be-input",
   "be-doc",
   "be-editor",
