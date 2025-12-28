@@ -37,7 +37,12 @@ pub fn load_grammar(ft: &FileType) -> Option<Highlighter> {
     return None;
   }
 
-  let grammar_path = install_grammar(ft).unwrap();
+  #[cfg(target_os = "linux")]
+  let so_name = "libtree-sitter.so";
+  #[cfg(target_os = "macos")]
+  let so_name = "libtree-sitter.dylib";
+
+  let grammar_path = install_grammar(ft, so_name).unwrap();
 
   let spec = std::fs::read_to_string(grammar_path.join("tree-sitter.json")).unwrap();
   let spec = serde_json::from_str::<TreeSitterSpec>(&spec).unwrap();
@@ -48,7 +53,7 @@ pub fn load_grammar(ft: &FileType) -> Option<Highlighter> {
 
   let grammar = &spec.grammars[0];
 
-  let so_path = grammar_path.join("libtree-sitter.so");
+  let so_path = grammar_path.join(so_name);
   let language = LoadedLanguage::load(so_path, &grammar.name);
 
   let mut parser = Parser::new();
@@ -180,7 +185,7 @@ impl<'a> Iterator for CapturesIter<'a> {
   }
 }
 
-fn install_grammar(ft: &FileType) -> Option<PathBuf> {
+fn install_grammar(ft: &FileType, so_name: &str) -> Option<PathBuf> {
   let Some(repo) = repo(ft) else { return None };
 
   let language_path = PathBuf::new()
@@ -205,7 +210,7 @@ fn install_grammar(ft: &FileType) -> Option<PathBuf> {
       .unwrap();
   }
 
-  let so_path = grammar_path.join("libtree-sitter.so");
+  let so_path = grammar_path.join(so_name);
   if !so_path.exists() {
     std::process::Command::new("cc")
       .args(["-Isrc", "-std=c11", "-fPIC", "-O3", "-c", "-o", "src/parser.o", "src/parser.c"])
@@ -217,19 +222,31 @@ fn install_grammar(ft: &FileType) -> Option<PathBuf> {
       .current_dir(&grammar_path)
       .status()
       .unwrap();
-    std::process::Command::new("cc")
-      .args([
-        "-O3",
-        "-shared",
-        "-Wl,-soname,libtree-sitter.so",
-        "src/parser.o",
-        "src/scanner.o",
-        "-o",
-        "libtree-sitter.so",
-      ])
-      .current_dir(&grammar_path)
-      .status()
-      .unwrap();
+
+    #[cfg(target_os = "linux")]
+    let args = [
+      "-O3",
+      "-shared",
+      "-Wl,-soname,libtree-sitter.so",
+      "src/parser.o",
+      "src/scanner.o",
+      "-o",
+      so_name,
+    ];
+    #[cfg(target_os = "macos")]
+    let args = [
+      "-O3",
+      "-dynamiclib",
+      "-Wl,-install_name,libtree-sitter.dylib",
+      "src/parser.o",
+      "src/scanner.o",
+      "-o",
+      so_name,
+    ];
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    compile_error!("tree sitter not setup for target os");
+
+    std::process::Command::new("cc").args(args).current_dir(&grammar_path).status().unwrap();
   }
 
   Some(grammar_path)
