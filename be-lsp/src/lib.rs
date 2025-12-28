@@ -235,7 +235,7 @@ impl LspWorker {
             }
           }
           WRITE => {
-            println!("writable");
+            // TODO
           }
 
           _ => panic!("unexpected event"),
