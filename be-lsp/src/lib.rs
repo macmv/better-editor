@@ -449,7 +449,7 @@ impl<'de> de::Deserialize<'de> for Message {
         let mut error: Option<Box<RawValue>> = None;
 
         let mut method: Option<String> = None;
-        let mut params: Option<Option<Box<RawValue>>> = None;
+        let mut params: Option<Box<RawValue>> = None;
 
         while let Some(key) = map.next_key::<Field>()? {
           macro_rules! fields {
@@ -457,7 +457,6 @@ impl<'de> de::Deserialize<'de> for Message {
               match key {
                 $(
                   Field::$field => {
-
                     if $var.is_some() {
                       return Err(de::Error::duplicate_field(stringify!($var)));
                     }
@@ -492,12 +491,10 @@ impl<'de> de::Deserialize<'de> for Message {
         match (method, id, params, result, error) {
           (None, Some(id), None, Some(result), None) => Ok(Message::Response { id, result }),
           (None, Some(id), None, None, Some(error)) => Ok(Message::Error { id, error }),
-          (Some(method), Some(id), Some(params), None, None) => {
+          (Some(method), Some(id), params, None, None) => {
             Ok(Message::Request { id, method, params })
           }
-          (Some(method), None, Some(params), None, None) => {
-            Ok(Message::Notification { method, params })
-          }
+          (Some(method), None, params, None, None) => Ok(Message::Notification { method, params }),
 
           _ => Err(de::Error::custom("invalid or ambiguous JSON-RPC message")),
         }
