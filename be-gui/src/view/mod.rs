@@ -65,6 +65,12 @@ impl View {
     }
   }
 
+  pub fn on_visible(&mut self, visible: bool) {
+    if !visible {
+      self.bounds = Rect::ZERO;
+    }
+  }
+
   pub fn on_focus(&mut self, focus: bool) {
     match &mut self.content {
       ViewContent::Editor(editor) => editor.on_focus(focus),

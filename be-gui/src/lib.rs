@@ -126,12 +126,21 @@ impl State {
           return;
         }
 
-        let prev_focus = self.active_tab().content.active();
+        let prev_active = self.active;
         self.active = new_index;
-        let new_focus = self.active_tab().content.active();
+        let new_active = self.active;
 
-        self.views.get_mut(&prev_focus).unwrap().on_focus(false);
-        self.views.get_mut(&new_focus).unwrap().on_focus(true);
+        // Ordering: lose focus, lose visibility, gain visibility, gain focus.
+        self.views.get_mut(&self.tabs[prev_active].content.active()).unwrap().on_focus(false);
+
+        for view in self.tabs[prev_active].content.views() {
+          self.views.get_mut(&view).unwrap().on_visible(false);
+        }
+        for view in self.tabs[new_active].content.views() {
+          self.views.get_mut(&view).unwrap().on_visible(true);
+        }
+
+        self.views.get_mut(&self.tabs[prev_active].content.active()).unwrap().on_focus(true);
       }
       Action::Navigate { nav: Navigation::Direction(dir) } => {
         let prev_focus = self.active_tab().content.active();
