@@ -5,13 +5,15 @@ use winit::{
   keyboard::NamedKey,
 };
 
+use crate::Event;
+
 type AppBuilder =
-  fn(&wgpu::Device, &wgpu::SurfaceConfiguration, event_loop::EventLoopProxy<()>) -> super::App;
+  fn(&wgpu::Device, &wgpu::SurfaceConfiguration, event_loop::EventLoopProxy<Event>) -> super::App;
 
 struct App {
   builder: AppBuilder,
   init:    Option<Init>,
-  proxy:   event_loop::EventLoopProxy<()>,
+  proxy:   event_loop::EventLoopProxy<Event>,
 }
 
 struct Init {
@@ -36,7 +38,7 @@ struct KeyState {
   right_alt:     bool,
 }
 
-impl winit::application::ApplicationHandler for App {
+impl winit::application::ApplicationHandler<Event> for App {
   fn resumed(&mut self, event_loop: &ActiveEventLoop) {
     let window = event_loop
       .create_window(winit::window::WindowAttributes::default().with_title("Better Editor"))
@@ -87,7 +89,7 @@ impl winit::application::ApplicationHandler for App {
     });
   }
 
-  fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
+  fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: Event) {
     if let Some(init) = &mut self.init {
       init.window.request_redraw();
     }
@@ -180,7 +182,7 @@ impl winit::application::ApplicationHandler for App {
 }
 
 pub fn run(builder: AppBuilder) {
-  let event_loop = winit::event_loop::EventLoop::new().unwrap();
+  let event_loop = winit::event_loop::EventLoop::<Event>::with_user_event().build().unwrap();
   event_loop.set_control_flow(event_loop::ControlFlow::Wait);
 
   let mut app = App { builder, proxy: event_loop.create_proxy(), init: None };

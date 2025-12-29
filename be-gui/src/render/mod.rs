@@ -15,8 +15,13 @@ mod window;
 
 pub use text::TextLayout;
 
+#[derive(Debug)]
+pub enum Event {
+  Refresh,
+}
+
 pub struct RenderStore {
-  proxy: winit::event_loop::EventLoopProxy<()>,
+  proxy: winit::event_loop::EventLoopProxy<Event>,
 
   pub text:  TextStore,
   pub theme: Theme,
@@ -26,7 +31,7 @@ pub struct RenderStore {
 }
 
 pub struct Waker {
-  proxy: winit::event_loop::EventLoopProxy<()>,
+  proxy: winit::event_loop::EventLoopProxy<Event>,
 }
 
 pub struct Render<'a> {
@@ -325,7 +330,7 @@ impl<'a> Render<'a> {
 }
 
 impl Waker {
-  pub fn wake(&self) { self.proxy.send_event(()).unwrap(); }
+  pub fn wake(&self) { self.proxy.send_event(Event::Refresh).unwrap(); }
 }
 
 #[derive(Debug, Copy, Clone)]
