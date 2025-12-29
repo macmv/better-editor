@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
 use be_config::Config;
 use kurbo::{Affine, Axis, Point, Rect, Shape, Size, Stroke, Vec2};
@@ -18,6 +18,7 @@ pub use text::TextLayout;
 #[derive(Debug)]
 pub enum Event {
   Refresh,
+  OpenFile(PathBuf),
 }
 
 pub struct RenderStore {
@@ -29,6 +30,7 @@ pub struct RenderStore {
   render: vello::Renderer,
 }
 
+#[derive(Clone)]
 pub struct Waker {
   proxy: winit::event_loop::EventLoopProxy<Event>,
 }
@@ -100,9 +102,10 @@ pub fn run() {
     let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
     let config = Rc::new(RefCell::new(Config::load()));
+    let waker = Waker { proxy: proxy.clone() };
 
     let mut app = App {
-      state: super::State::new(&config),
+      state: super::State::new(&config, &waker),
 
       store: RenderStore {
         proxy,
@@ -329,6 +332,8 @@ impl<'a> Render<'a> {
 
 impl Waker {
   pub fn wake(&self) { self.proxy.send_event(Event::Refresh).unwrap(); }
+
+  pub fn open_file(&self, path: PathBuf) { self.proxy.send_event(Event::OpenFile(path)).unwrap(); }
 }
 
 #[derive(Debug, Copy, Clone)]

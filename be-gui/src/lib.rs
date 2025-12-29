@@ -30,7 +30,7 @@ struct Tab {
 struct ViewId(u64);
 
 impl State {
-  pub fn new(config: &Rc<RefCell<Config>>) -> Self {
+  pub fn new(config: &Rc<RefCell<Config>>, waker: &Waker) -> Self {
     let mut state = State {
       keys:         vec![],
       active:       1,
@@ -42,7 +42,8 @@ impl State {
     let shell = state.new_view(View::Shell(pane::Shell::new()));
     state.tabs.push(Tab { title: "zsh".to_owned(), content: pane::Pane::View(shell) });
 
-    let file_tree = state.new_view(View::FileTree(pane::FileTree::current_directory()));
+    let file_tree =
+      state.new_view(View::FileTree(pane::FileTree::current_directory(waker.clone())));
     let editor = state.new_view(View::Editor(pane::EditorView::new(config)));
     state.tabs.push(Tab {
       title:   "editor".to_owned(),

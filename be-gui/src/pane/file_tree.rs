@@ -6,12 +6,14 @@ use std::{
 use be_input::{Action, Direction, Mode, Move};
 use kurbo::{Point, Rect, Vec2};
 
-use crate::Render;
+use crate::{Render, Waker};
 
 pub struct FileTree {
   tree:    Directory,
   focused: bool,
   active:  usize,
+
+  waker: Waker,
 }
 
 #[derive(PartialOrd, PartialEq, Eq, Ord)]
@@ -30,6 +32,7 @@ struct Directory {
 #[derive(Eq)]
 struct File {
   name: String,
+  path: PathBuf,
 }
 
 impl PartialEq for File {
@@ -57,16 +60,16 @@ impl Ord for Directory {
 }
 
 impl FileTree {
-  pub fn current_directory() -> Self { FileTree::new(Path::new(".")) }
+  pub fn current_directory(waker: Waker) -> Self { FileTree::new(Path::new("."), waker) }
 
   pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
 
-  pub fn new(path: &Path) -> Self {
+  pub fn new(path: &Path, waker: Waker) -> Self {
     let path = path.canonicalize().unwrap();
     let mut tree = Directory::new(path);
     tree.expand();
 
-    FileTree { tree, focused: false, active: 0 }
+    FileTree { tree, focused: false, active: 0, waker }
   }
 
   fn active_mut(&mut self) -> Option<&mut Item> {
@@ -108,7 +111,10 @@ impl FileTree {
       Action::Append { .. } | Action::SetMode { mode: Mode::Insert, .. } => {
         match self.active_mut() {
           Some(Item::Directory(dir)) => dir.toggle_expanded(),
-          Some(Item::File(_)) => {}
+          Some(Item::File(file)) => {
+            let path = file.path.clone();
+            self.waker.open_file(path);
+          }
           None => {}
         }
       }
@@ -155,8 +161,10 @@ impl Directory {
       if path.is_dir() {
         items.push(Item::Directory(Directory::new(path)));
       } else {
-        items
-          .push(Item::File(File { name: path.file_name().unwrap().to_string_lossy().to_string() }));
+        items.push(Item::File(File {
+          name: path.file_name().unwrap().to_string_lossy().to_string(),
+          path,
+        }));
       }
     }
 
