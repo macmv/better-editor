@@ -26,7 +26,6 @@ pub struct RenderStore {
   pub text:  TextStore,
   pub theme: Theme,
 
-  config: Rc<RefCell<Config>>,
   render: vello::Renderer,
 }
 
@@ -110,7 +109,6 @@ pub fn run() {
         text: TextStore::new(&config),
         render: vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),
         theme: Theme::default_theme(),
-        config,
       },
 
       texture,
