@@ -7,10 +7,12 @@ use be_input::{Action, KeyStroke, Navigation};
 use kurbo::{Axis, Cap, Line, Point, Rect, Stroke};
 pub use render::*;
 
-use crate::pane::{Pane, View};
+use pane::Pane;
+use view::View;
 
 mod pane;
 mod theme;
+mod view;
 
 struct State {
   keys:   Vec<KeyStroke>,
@@ -39,12 +41,12 @@ impl State {
       views:        HashMap::new(),
     };
 
-    let shell = state.new_view(View::Shell(pane::Shell::new()));
+    let shell = state.new_view(View::Shell(view::Shell::new()));
     state.tabs.push(Tab { title: "zsh".to_owned(), content: pane::Pane::View(shell) });
 
     let file_tree =
-      state.new_view(View::FileTree(pane::FileTree::current_directory(waker.clone())));
-    let editor = state.new_view(View::Editor(pane::EditorView::new(config)));
+      state.new_view(View::FileTree(view::FileTree::current_directory(waker.clone())));
+    let editor = state.new_view(View::Editor(view::EditorView::new(config)));
     state.tabs.push(Tab {
       title:   "editor".to_owned(),
       content: Pane::Split(pane::Split {
@@ -55,7 +57,7 @@ impl State {
       }),
     });
 
-    let shell = state.new_view(View::Shell(pane::Shell::new()));
+    let shell = state.new_view(View::Shell(view::Shell::new()));
     state.tabs.push(Tab { title: "zsh".to_owned(), content: pane::Pane::View(shell) });
 
     state

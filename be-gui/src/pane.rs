@@ -1,27 +1,13 @@
 use std::collections::HashMap;
 
-use be_input::{Action, Direction, Mode};
+use be_input::Direction;
 use kurbo::{Axis, Point, Rect};
 
-use crate::{Distance, Render, ViewId};
-
-mod editor;
-mod file_tree;
-mod shell;
-
-pub use editor::EditorView;
-pub use file_tree::FileTree;
-pub use shell::Shell;
+use crate::{Distance, Render, ViewId, view::View};
 
 pub enum Pane {
   View(ViewId),
   Split(Split),
-}
-
-pub enum View {
-  Editor(EditorView),
-  FileTree(FileTree),
-  Shell(Shell),
 }
 
 pub struct Split {
@@ -112,40 +98,6 @@ impl Split {
       Some(self.items[self.active].active())
     } else {
       None
-    }
-  }
-}
-
-impl View {
-  fn draw(&mut self, render: &mut Render) {
-    match self {
-      View::Editor(editor) => editor.draw(render),
-      View::FileTree(file_tree) => file_tree.draw(render),
-      View::Shell(shell) => shell.draw(render),
-    }
-  }
-
-  pub fn mode(&self) -> be_input::Mode {
-    match self {
-      View::Editor(editor) => editor.editor.mode(),
-      View::FileTree(_) => Mode::Normal,
-      View::Shell(_) => Mode::Insert,
-    }
-  }
-
-  pub fn perform_action(&mut self, action: Action) {
-    match self {
-      View::Editor(editor) => editor.editor.perform_action(action),
-      View::FileTree(file_tree) => file_tree.perform_action(action),
-      View::Shell(shell) => shell.perform_action(action),
-    }
-  }
-
-  pub fn on_focus(&mut self, focus: bool) {
-    match self {
-      View::Editor(editor) => editor.on_focus(focus),
-      View::FileTree(file_tree) => file_tree.on_focus(focus),
-      View::Shell(_) => {}
     }
   }
 }
