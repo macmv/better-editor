@@ -10,6 +10,8 @@ pub use render::*;
 use pane::Pane;
 use view::View;
 
+use crate::view::ViewContent;
+
 mod pane;
 mod theme;
 mod view;
@@ -41,12 +43,11 @@ impl State {
       views:        HashMap::new(),
     };
 
-    let shell = state.new_view(View::Shell(view::Shell::new()));
+    let shell = state.new_view(view::Shell::new());
     state.tabs.push(Tab { title: "zsh".to_owned(), content: pane::Pane::View(shell) });
 
-    let file_tree =
-      state.new_view(View::FileTree(view::FileTree::current_directory(waker.clone())));
-    let editor = state.new_view(View::Editor(view::EditorView::new(config)));
+    let file_tree = state.new_view(view::FileTree::current_directory(waker.clone()));
+    let editor = state.new_view(view::EditorView::new(config));
     state.tabs.push(Tab {
       title:   "editor".to_owned(),
       content: Pane::Split(pane::Split {
@@ -57,16 +58,16 @@ impl State {
       }),
     });
 
-    let shell = state.new_view(View::Shell(view::Shell::new()));
+    let shell = state.new_view(view::Shell::new());
     state.tabs.push(Tab { title: "zsh".to_owned(), content: pane::Pane::View(shell) });
 
     state
   }
 
-  fn new_view(&mut self, view: View) -> ViewId {
+  fn new_view(&mut self, view: impl Into<View>) -> ViewId {
     let id = self.next_view_id;
     self.next_view_id.0 += 1;
-    self.views.insert(id, view);
+    self.views.insert(id, view.into());
     id
   }
 
@@ -81,7 +82,7 @@ impl State {
   }
 
   fn open(&mut self, path: &std::path::Path) {
-    if let View::Editor(e) = self.active_view_mut() {
+    if let ViewContent::Editor(e) = &mut self.active_view_mut().content {
       let _ = e.editor.open(path);
     }
   }
