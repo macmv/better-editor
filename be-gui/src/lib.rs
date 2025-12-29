@@ -30,8 +30,8 @@ struct Tab {
   content: Pane,
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, Hash)]
-struct ViewId(u64);
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct ViewId(u64);
 
 impl State {
   pub fn new(config: &Rc<RefCell<Config>>, waker: &Waker) -> Self {

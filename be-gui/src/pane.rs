@@ -17,6 +17,10 @@ pub struct Split {
   pub items:   Vec<Pane>,
 }
 
+pub struct ViewsIter<'a> {
+  stack: Vec<&'a Pane>,
+}
+
 impl Pane {
   pub fn draw(&self, views: &mut HashMap<ViewId, View>, render: &mut Render) {
     match self {
@@ -48,6 +52,8 @@ impl Pane {
       Pane::Split(split) => split.focus(direction),
     }
   }
+
+  pub fn views(&self) -> ViewsIter<'_> { ViewsIter { stack: vec![self] } }
 }
 
 impl Split {
@@ -145,5 +151,54 @@ impl Split {
     } else {
       None
     }
+  }
+}
+
+impl Iterator for ViewsIter<'_> {
+  type Item = ViewId;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    loop {
+      match self.stack.pop()? {
+        Pane::View(id) => break Some(*id),
+        Pane::Split(split) => {
+          self.stack.extend(split.items.iter().rev());
+        }
+      }
+    }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn views_iter() {
+    let pane = Pane::Split(Split {
+      axis:    Axis::Vertical,
+      percent: vec![0.2],
+      active:  1,
+      items:   vec![Pane::View(ViewId(0)), Pane::View(ViewId(1))],
+    });
+
+    assert_eq!(pane.views().collect::<Vec<ViewId>>(), vec![ViewId(0), ViewId(1)]);
+
+    let pane = Pane::Split(Split {
+      axis:    Axis::Vertical,
+      percent: vec![0.2],
+      active:  1,
+      items:   vec![
+        Pane::Split(Split {
+          axis:    Axis::Horizontal,
+          percent: vec![0.5],
+          active:  1,
+          items:   vec![Pane::View(ViewId(0)), Pane::View(ViewId(1))],
+        }),
+        Pane::View(ViewId(2)),
+      ],
+    });
+
+    assert_eq!(pane.views().collect::<Vec<ViewId>>(), vec![ViewId(0), ViewId(1), ViewId(2)]);
   }
 }
