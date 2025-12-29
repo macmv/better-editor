@@ -3,7 +3,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use be_input::{Action, Direction, Move};
+use be_input::{Action, Direction, Mode, Move};
 use kurbo::{Point, Rect, Vec2};
 
 use crate::Render;
@@ -69,6 +69,33 @@ impl FileTree {
     FileTree { tree, focused: false, active: 0 }
   }
 
+  fn active_mut(&mut self) -> Option<&mut Item> {
+    fn visit_dir(dir: &mut Directory, mut index: usize, active: usize) -> Option<&mut Item> {
+      if dir.expanded {
+        for item in dir.items.as_mut().unwrap() {
+          index += 1;
+          if let Some(it) = visit_item(item, index, active) {
+            return Some(it);
+          }
+        }
+      }
+
+      None
+    }
+    fn visit_item(item: &mut Item, index: usize, active: usize) -> Option<&mut Item> {
+      if index == active {
+        return Some(item);
+      }
+
+      match item {
+        Item::Directory(dir) => visit_dir(dir, index, active),
+        Item::File(_) => None,
+      }
+    }
+
+    visit_dir(&mut self.tree, 0, self.active)
+  }
+
   pub fn perform_action(&mut self, action: Action) {
     match action {
       Action::Move { count: _, m } => match m {
@@ -78,6 +105,13 @@ impl FileTree {
         }
         _ => (),
       },
+      Action::Append { .. } | Action::SetMode { mode: Mode::Insert, .. } => {
+        match self.active_mut() {
+          Some(Item::Directory(dir)) => dir.toggle_expanded(),
+          Some(Item::File(_)) => {}
+          None => {}
+        }
+      }
 
       _ => {}
     }
@@ -94,6 +128,14 @@ impl Directory {
       self.items.as_ref().map(|i| i.iter().map(|i| i.visible_len()).sum::<usize>()).unwrap_or(0) + 1
     } else {
       1
+    }
+  }
+
+  fn toggle_expanded(&mut self) {
+    if self.expanded {
+      self.expanded = false;
+    } else {
+      self.expand();
     }
   }
 
