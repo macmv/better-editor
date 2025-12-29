@@ -26,6 +26,7 @@ impl EditorState {
     let (file, doc) = OpenedFile::open(&canon)?;
     self.file = Some(file);
     self.doc = doc;
+    self.damage_all = true;
 
     self.on_open_file();
 
