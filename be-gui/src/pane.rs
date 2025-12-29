@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use be_input::Direction;
 use kurbo::{Axis, Point, Rect};
 
-use crate::{Distance, Render, ViewId, view::View};
+use crate::{Distance, Layout, Render, ViewId, view::View};
 
 pub enum Pane {
   View(ViewId),
@@ -22,6 +22,13 @@ impl Pane {
     match self {
       Pane::View(id) => views.get_mut(id).unwrap().draw(render),
       Pane::Split(split) => split.draw(views, render),
+    }
+  }
+
+  pub fn layout(&self, views: &mut HashMap<ViewId, View>, layout: &mut Layout) {
+    match self {
+      Pane::View(_) => {}
+      Pane::Split(split) => split.layout(views, layout),
     }
   }
 
@@ -71,6 +78,42 @@ impl Split {
 
           bounds.y1 = bounds.y0 + distance;
           render.clipped(bounds, |render| item.draw(views, render));
+          bounds.y0 += distance;
+        }
+      }
+    }
+  }
+
+  fn layout(&self, views: &mut HashMap<ViewId, View>, layout: &mut Layout) {
+    let mut bounds = Rect::from_origin_size(Point::ZERO, layout.size());
+
+    match self.axis {
+      Axis::Vertical => {
+        for (i, item) in self.items.iter().enumerate() {
+          let percent =
+            self.percent.get(i).copied().unwrap_or_else(|| 1.0 - self.percent.iter().sum::<f64>());
+          let mut distance = Distance::Percent(percent).to_pixels_in(layout.size().width);
+          if distance < 0.0 {
+            distance += layout.size().width;
+          }
+
+          bounds.x1 = bounds.x0 + distance;
+          layout.clipped(bounds, |layout| item.layout(views, layout));
+          bounds.x0 += distance;
+        }
+      }
+
+      Axis::Horizontal => {
+        for (i, item) in self.items.iter().enumerate() {
+          let percent =
+            self.percent.get(i).copied().unwrap_or_else(|| 1.0 - self.percent.iter().sum::<f64>());
+          let mut distance = Distance::Percent(percent).to_pixels_in(layout.size().height);
+          if distance < 0.0 {
+            distance += layout.size().height;
+          }
+
+          bounds.y1 = bounds.y0 + distance;
+          layout.clipped(bounds, |layout| item.layout(views, layout));
           bounds.y0 += distance;
         }
       }

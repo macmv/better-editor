@@ -45,6 +45,15 @@ pub struct Render<'a> {
   stack: Vec<Rect>,
 }
 
+pub struct Layout<'a> {
+  pub store: &'a mut RenderStore,
+
+  scale: f64,
+  size:  Size,
+
+  stack: Vec<Rect>,
+}
+
 struct App {
   store: RenderStore,
   state: super::State,
@@ -153,6 +162,18 @@ impl App {
     queue: &wgpu::Queue,
     scale: f64,
   ) {
+    let mut layout = Layout {
+      store: &mut self.store,
+      scale,
+      size: Size::new(
+        surface.texture.width() as f64 / scale,
+        surface.texture.height() as f64 / scale,
+      ),
+      stack: vec![],
+    };
+
+    self.state.layout(&mut layout);
+
     let mut render = Render {
       store: &mut self.store,
       scene: vello::Scene::new(),
@@ -327,6 +348,65 @@ impl<'a> Render<'a> {
       radius * self.scale,
       std_dev * self.scale,
     );
+  }
+}
+
+impl<'a> Layout<'a> {
+  pub fn size(&self) -> Size {
+    if let Some(top) = self.stack.last() { top.size() } else { self.size }
+  }
+
+  fn offset(&self) -> Vec2 {
+    if let Some(top) = self.stack.last() { top.origin().to_vec2() } else { Vec2::ZERO }
+  }
+
+  pub fn waker(&self) -> Waker { Waker { proxy: self.store.proxy.clone() } }
+
+  pub fn split<S>(
+    &mut self,
+    state: &mut S,
+    axis: Axis,
+    distance: Distance,
+    left: impl FnOnce(&mut S, &mut Layout),
+    right: impl FnOnce(&mut S, &mut Layout),
+  ) {
+    let mut left_bounds = Rect::from_origin_size(Point::ZERO, self.size());
+    let mut right_bounds = Rect::from_origin_size(Point::ZERO, self.size());
+
+    match axis {
+      Axis::Vertical => {
+        let mut distance = distance.to_pixels_in(self.size().width);
+        if distance < 0.0 {
+          distance += self.size().width;
+        }
+
+        left_bounds.x1 = distance;
+        right_bounds.x0 = distance;
+      }
+      Axis::Horizontal => {
+        let mut distance = distance.to_pixels_in(self.size().height);
+        if distance < 0.0 {
+          distance += self.size().height;
+        }
+
+        left_bounds.y1 = distance;
+        right_bounds.y0 = distance;
+      }
+    }
+
+    self.clipped(left_bounds, |render| left(state, render));
+    self.clipped(right_bounds, |render| right(state, render));
+  }
+
+  pub fn clipped(&mut self, mut rect: Rect, f: impl FnOnce(&mut Layout)) {
+    rect = rect + self.offset();
+
+    let scaled_rect = rect.scale_from_origin(self.scale).round();
+    self.stack.push(scaled_rect.scale_from_origin(1.0 / self.scale));
+
+    f(self);
+
+    self.stack.pop().expect("no clip layer to pop");
   }
 }
 

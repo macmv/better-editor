@@ -71,6 +71,16 @@ impl State {
     id
   }
 
+  fn layout(&mut self, layout: &mut Layout) {
+    layout.split(
+      self,
+      Axis::Horizontal,
+      Distance::Pixels(-20.0),
+      |state, layout| state.tabs[state.active].content.layout(&mut state.views, layout),
+      |_, _| {},
+    );
+  }
+
   fn draw(&mut self, render: &mut Render) {
     render.split(
       self,
