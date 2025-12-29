@@ -121,7 +121,17 @@ impl State {
   fn perform_action(&mut self, action: Action) {
     match action {
       Action::Navigate { nav: Navigation::Tab(i) } => {
-        self.active = (i as usize).clamp(0, self.tabs.len() - 1)
+        let new_index = (i as usize).clamp(0, self.tabs.len() - 1);
+        if new_index == self.active {
+          return;
+        }
+
+        let prev_focus = self.active_tab().content.active();
+        self.active = new_index;
+        let new_focus = self.active_tab().content.active();
+
+        self.views.get_mut(&prev_focus).unwrap().on_focus(false);
+        self.views.get_mut(&new_focus).unwrap().on_focus(true);
       }
       Action::Navigate { nav: Navigation::Direction(dir) } => {
         let prev_focus = self.active_tab().content.active();
