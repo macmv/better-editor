@@ -224,11 +224,13 @@ impl EditorView {
         render.theme().background_raised,
       );
 
+      let text_pos = Point::new(20.0, render.size().height - line_height);
+
       let layout = render.layout_text(&command.text, render.theme().text);
-      render.draw_text(&layout, (20.0, render.size().height - line_height));
+      render.draw_text(&layout, text_pos);
 
       let cursor = layout.cursor(command.cursor as usize, CursorMode::Line);
-      render.fill(&cursor, render.theme().text);
+      render.fill(&(cursor + text_pos.to_vec2()), render.theme().text);
     } else if let Some(status) = self.editor.status() {
       render.fill(
         &Rect::new(
