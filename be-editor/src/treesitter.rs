@@ -1,5 +1,6 @@
 use std::{ffi::CString, mem::ManuallyDrop, ops::Range, path::PathBuf};
 
+use be_config::Config;
 use be_doc::Document;
 use tree_sitter::{
   Language, Node, Parser, Query, QueryCaptures, QueryCursor, StreamingIterator, TextProvider, Tree,
@@ -32,17 +33,15 @@ struct LoadedLanguage {
   language: ManuallyDrop<Language>,
 }
 
-pub fn load_grammar(ft: &FileType) -> Option<Highlighter> {
-  if repo(ft).is_none() {
-    return None;
-  }
+pub fn load_grammar(config: &Config, ft: &FileType) -> Option<Highlighter> {
+  let repo = &config.language.get(ft.name())?.tree_sitter;
 
   #[cfg(target_os = "linux")]
   let so_name = "libtree-sitter.so";
   #[cfg(target_os = "macos")]
   let so_name = "libtree-sitter.dylib";
 
-  let grammar_path = install_grammar(ft, so_name).unwrap();
+  let grammar_path = install_grammar(ft, repo, so_name).unwrap();
 
   let spec = std::fs::read_to_string(grammar_path.join("tree-sitter.json")).unwrap();
   let spec = serde_json::from_str::<TreeSitterSpec>(&spec).unwrap();
@@ -72,7 +71,7 @@ impl EditorState {
   pub(crate) fn on_open_file_highlight(&mut self) {
     let Some(ft) = &self.filetype else { return };
 
-    self.highligher = load_grammar(ft);
+    self.highligher = load_grammar(&self.config.as_ref().unwrap().borrow(), ft);
     if let Some(highligher) = &mut self.highligher {
       highligher.reparse(&self.doc);
     }
@@ -185,9 +184,7 @@ impl<'a> Iterator for CapturesIter<'a> {
   }
 }
 
-fn install_grammar(ft: &FileType, so_name: &str) -> Option<PathBuf> {
-  let Some(repo) = repo(ft) else { return None };
-
+fn install_grammar(ft: &FileType, repo: &str, so_name: &str) -> Option<PathBuf> {
   let language_path = PathBuf::new()
     .join(std::env::home_dir().unwrap())
     .join(".local")
@@ -286,15 +283,6 @@ impl Drop for LoadedLanguage {
   }
 }
 
-// See https://github.com/tree-sitter/tree-sitter/wiki/List-of-parsers
-fn repo(ft: &FileType) -> Option<&'static str> {
-  match ft {
-    FileType::Rust => Some("https://github.com/tree-sitter/tree-sitter-rust"),
-    FileType::Toml => Some("https://github.com/tree-sitter-grammars/tree-sitter-toml"),
-    FileType::Markdown => Some("https://github.com/tree-sitter-grammars/tree-sitter-markdown"),
-  }
-}
-
 #[cfg(test)]
 mod tests {
   use crate::HighlightKey;
@@ -303,7 +291,7 @@ mod tests {
 
   #[test]
   fn it_works() {
-    let mut highlighter = load_grammar(&FileType::Rust).unwrap();
+    let mut highlighter = load_grammar(&Config::default(), &FileType::Rust).unwrap();
 
     let doc = "fn main() {}".into();
     highlighter.reparse(&doc);

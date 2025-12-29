@@ -95,6 +95,11 @@ pub struct LspSettings {
   pub command: String,
 }
 
+impl Default for Config {
+  // TODO: Cache
+  fn default() -> Self { Config::default_config() }
+}
+
 impl Config {
   pub fn load() -> Config {
     let mut config = Config::default_config();
