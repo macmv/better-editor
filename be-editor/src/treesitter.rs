@@ -291,7 +291,7 @@ mod tests {
 
   #[test]
   fn it_works() {
-    let mut highlighter = load_grammar(&Config::default(), &FileType::Rust).unwrap();
+    let mut highlighter = load_grammar(Config::default(), &FileType::Rust).unwrap();
 
     let doc = "fn main() {}".into();
     highlighter.reparse(&doc);

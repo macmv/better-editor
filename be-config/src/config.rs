@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::LazyLock};
 
 trait Partial {
   type Partial;
@@ -36,6 +36,7 @@ impl<T> Partial for HashMap<String, T> {
 macro_rules! config {
   (
     #[partial = $partial_name:ident]
+    $(#[$attrs:meta])*
     pub struct $name:ident {
       $(
         pub $field_ident:ident: $field_type:ty,
@@ -44,12 +45,14 @@ macro_rules! config {
   ) => {
     #[derive(serde::Deserialize)]
     #[serde(rename_all = "kebab-case")]
+    $(#[$attrs])*
     pub struct $name {
       $(pub $field_ident: $field_type,)*
     }
 
     #[derive(serde::Deserialize)]
     #[serde(rename_all = "kebab-case")]
+    $(#[$attrs])*
     struct $partial_name {
       $($field_ident: <$field_type as Partial>::Partial,)*
     }
@@ -68,6 +71,7 @@ macro_rules! config {
 
 config!(
   #[partial = ConfigDataPartial]
+  #[derive(Clone)]
   pub struct Config {
     pub font:     FontSettings,
     pub language: HashMap<String, LanguageSettings>,
@@ -76,33 +80,33 @@ config!(
 
 config!(
   #[partial = FontSettingsPartial]
+  #[derive(Clone)]
   pub struct FontSettings {
     pub family: String,
     pub size:   f64,
   }
 );
 
-#[derive(serde::Deserialize)]
+#[derive(Clone, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct LanguageSettings {
   pub tree_sitter: String,
   pub lsp:         LspSettings,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Clone, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct LspSettings {
   pub command: String,
 }
 
-impl Default for Config {
-  // TODO: Cache
-  fn default() -> Self { Config::default_config() }
-}
+static DEFAULT_CONFIG: LazyLock<Config> = LazyLock::new(Config::parse_default);
 
 impl Config {
+  pub fn default() -> &'static Config { &*DEFAULT_CONFIG }
+
   pub fn load() -> Config {
-    let mut config = Config::default_config();
+    let mut config = Config::default().clone();
 
     if let Ok(data) = std::fs::read_to_string(crate::config_root().unwrap().join("config.toml")) {
       match toml::from_str::<ConfigDataPartial>(&data) {
@@ -114,7 +118,7 @@ impl Config {
     config
   }
 
-  fn default_config() -> Config { parse_default_config().unwrap() }
+  fn parse_default() -> Config { parse_default_config().unwrap() }
 }
 
 fn parse_default_config() -> Result<Config, toml::de::Error> {
