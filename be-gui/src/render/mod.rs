@@ -362,6 +362,10 @@ impl<'a> Layout<'a> {
 
   pub fn waker(&self) -> Waker { Waker { proxy: self.store.proxy.clone() } }
 
+  pub fn current_bounds(&self) -> Rect {
+    Rect::from_origin_size(self.offset().to_point(), self.size())
+  }
+
   pub fn split<S>(
     &mut self,
     state: &mut S,

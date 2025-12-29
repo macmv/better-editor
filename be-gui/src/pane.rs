@@ -27,7 +27,10 @@ impl Pane {
 
   pub fn layout(&self, views: &mut HashMap<ViewId, View>, layout: &mut Layout) {
     match self {
-      Pane::View(_) => {}
+      Pane::View(id) => {
+        let view = views.get_mut(id).unwrap();
+        view.bounds = layout.current_bounds();
+      }
       Pane::Split(split) => split.layout(views, layout),
     }
   }

@@ -1,4 +1,5 @@
 use be_input::{Action, Mode};
+use kurbo::Rect;
 
 use crate::Render;
 
@@ -12,6 +13,7 @@ pub use shell::Shell;
 
 pub struct View {
   pub content: ViewContent,
+  pub bounds:  Rect,
 }
 
 impl From<EditorView> for ViewContent {
@@ -25,7 +27,7 @@ impl From<Shell> for ViewContent {
 }
 
 impl<T: Into<ViewContent>> From<T> for View {
-  fn from(value: T) -> Self { View { content: value.into() } }
+  fn from(value: T) -> Self { View::new(value) }
 }
 
 pub enum ViewContent {
@@ -35,6 +37,10 @@ pub enum ViewContent {
 }
 
 impl View {
+  pub fn new(content: impl Into<ViewContent>) -> Self {
+    View { content: content.into(), bounds: Rect::ZERO }
+  }
+
   pub fn draw(&mut self, render: &mut Render) {
     match &mut self.content {
       ViewContent::Editor(editor) => editor.draw(render),
