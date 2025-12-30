@@ -102,7 +102,7 @@ config!(
 #[serde(rename_all = "kebab-case")]
 pub struct LanguageSettings {
   pub tree_sitter: String,
-  pub lsp:         LspSettings,
+  pub lsp:         Option<LspSettings>,
 }
 
 #[derive(Clone, serde::Deserialize)]

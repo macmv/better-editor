@@ -9,6 +9,8 @@ scroll-offset = 0
 tree-sitter = "https://github.com/tree-sitter/tree-sitter-rust"
 lsp.command = "rust-analyzer"
 
-# TODO
-# toml => "https://github.com/tree-sitter-grammars/tree-sitter-toml"
-# markdown => "https://github.com/tree-sitter-grammars/tree-sitter-markdown"
+[language.toml]
+tree-sitter = "https://github.com/tree-sitter-grammars/tree-sitter-toml"
+
+[language.markdown]
+tree-sitter = "https://github.com/tree-sitter-grammars/tree-sitter-markdown"
