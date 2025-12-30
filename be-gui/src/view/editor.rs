@@ -66,11 +66,11 @@ impl EditorView {
 
     let line_height = render.store.text.font_metrics().line_height;
 
-    const SCROLL_OFF: usize = 5;
+    let scroll_offset = self.editor.config.as_ref().unwrap().borrow().editor.scroll_offset as usize;
 
-    let min_fully_visible_row = (self.scroll.y / line_height).ceil() as usize + SCROLL_OFF;
+    let min_fully_visible_row = (self.scroll.y / line_height).ceil() as usize + scroll_offset;
     let max_fully_visible_row =
-      ((self.scroll.y + render.size().height) / line_height).floor() as usize - 1 - SCROLL_OFF;
+      ((self.scroll.y + render.size().height) / line_height).floor() as usize - 1 - scroll_offset;
 
     if self.editor.cursor().line.as_usize() < min_fully_visible_row {
       let target_line = self
@@ -78,7 +78,7 @@ impl EditorView {
         .cursor()
         .line
         .as_usize()
-        .saturating_sub(SCROLL_OFF)
+        .saturating_sub(scroll_offset)
         .clamp(0, self.editor.doc().rope.lines().len());
 
       self.scroll.y = target_line as f64 * line_height;
@@ -88,7 +88,7 @@ impl EditorView {
         .cursor()
         .line
         .as_usize()
-        .saturating_add(SCROLL_OFF + 1)
+        .saturating_add(scroll_offset + 1)
         .clamp(0, self.editor.doc().rope.lines().len());
 
       self.scroll.y = (target_line as f64 * line_height) - render.size().height;

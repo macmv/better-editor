@@ -20,6 +20,7 @@ macro_rules! partial_option {
 
 partial_option!(String);
 partial_option!(f64);
+partial_option!(u32);
 
 impl<T> Partial for HashMap<String, T> {
   type Partial = Option<HashMap<String, T>>;
@@ -51,7 +52,8 @@ macro_rules! config {
     }
 
     #[derive(serde::Deserialize)]
-    #[serde(rename_all = "kebab-case")]
+    #[serde(default, rename_all = "kebab-case")]
+    #[derive(Default)]
     $(#[$attrs])*
     struct $partial_name {
       $($field_ident: <$field_type as Partial>::Partial,)*
@@ -74,6 +76,7 @@ config!(
   #[derive(Clone)]
   pub struct Config {
     pub font:     FontSettings,
+    pub editor:   EditorSettings,
     pub language: HashMap<String, LanguageSettings>,
   }
 );
@@ -84,6 +87,14 @@ config!(
   pub struct FontSettings {
     pub family: String,
     pub size:   f64,
+  }
+);
+
+config!(
+  #[partial = EditorSettingsPartial]
+  #[derive(Clone)]
+  pub struct EditorSettings {
+    pub scroll_offset: u32,
   }
 );
 
