@@ -155,6 +155,15 @@ impl Highlight {
   }
 }
 
+impl FontWeight {
+  pub const fn to_parley(&self) -> parley::FontWeight {
+    match self {
+      FontWeight::Normal => parley::FontWeight::NORMAL,
+      FontWeight::Bold => parley::FontWeight::BOLD,
+    }
+  }
+}
+
 impl SyntaxTheme {
   pub fn lookup(&self, keys: &[HighlightKey]) -> Option<Highlight> {
     let mut highlight = Highlight::empty();

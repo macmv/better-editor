@@ -277,8 +277,12 @@ impl EditorView {
       let pos = if highlight.pos > max_index { max_index } else { highlight.pos };
 
       if let Some(highlight) = theme.syntax.lookup(&highlight.highlights) {
+        let range = prev - index..pos - index;
         if let Some(foreground) = highlight.foreground {
-          layout.color_range(prev - index..pos - index, foreground);
+          layout.color_range(range.clone(), foreground);
+        }
+        if let Some(weight) = highlight.weight {
+          layout.apply(range.clone(), parley::StyleProperty::FontWeight(weight.to_parley()));
         }
       }
 
