@@ -125,17 +125,48 @@ impl Highlight {
     self.strikethrough = Some(strikethrough);
     self
   }
+
+  pub const fn is_empty(&self) -> bool {
+    self.foreground.is_none()
+      && self.background.is_none()
+      && self.weight.is_none()
+      && self.style.is_none()
+      && self.underline.is_none()
+      && self.strikethrough.is_none()
+  }
+
+  pub const fn merge_from(&mut self, other: &Highlight) {
+    macro_rules! merge {
+      ($field:ident) => {
+        if self.$field.is_none()
+          && let Some(v) = other.$field
+        {
+          self.$field = Some(v);
+        }
+      };
+    }
+
+    merge!(foreground);
+    merge!(background);
+    merge!(weight);
+    merge!(style);
+    merge!(underline);
+    merge!(strikethrough);
+  }
 }
 
 impl SyntaxTheme {
-  pub fn lookup(&self, keys: &[HighlightKey]) -> Option<&Highlight> {
+  pub fn lookup(&self, keys: &[HighlightKey]) -> Option<Highlight> {
+    let mut highlight = Highlight::empty();
+
     for key in keys {
       if let HighlightKey::TreeSitter(key) = key {
         let mut cur = *key;
 
         loop {
           if let Some(v) = self.entries.get(cur) {
-            return Some(v);
+            highlight.merge_from(v);
+            break;
           }
 
           match cur.rfind('.') {
@@ -146,6 +177,6 @@ impl SyntaxTheme {
       }
     }
 
-    None
+    if !highlight.is_empty() { Some(highlight) } else { None }
   }
 }
