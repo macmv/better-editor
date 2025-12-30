@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::sync::{Arc, Weak};
 
 mod client;
 mod init;
@@ -10,12 +10,12 @@ pub extern crate lsp_types as types;
 
 pub use client::LspClient;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub struct LanguageServerId(u32);
-
 pub struct LanguageServerStore {
-  servers:        HashMap<LanguageServerId, LanguageServerState>,
-  next_server_id: LanguageServerId,
+  servers: Vec<Arc<LanguageServerState>>,
+}
+
+pub struct LanguageClientState {
+  servers: Vec<Weak<LanguageServerState>>,
 }
 
 pub struct LanguageServerState {
@@ -24,19 +24,36 @@ pub struct LanguageServerState {
 }
 
 impl Default for LanguageServerStore {
-  fn default() -> Self {
-    LanguageServerStore { servers: HashMap::new(), next_server_id: LanguageServerId(0) }
-  }
+  fn default() -> Self { LanguageServerStore { servers: vec![] } }
 }
 
 impl LanguageServerStore {
-  pub fn spawn(&mut self, cmd: &str) -> LanguageServerId {
-    let id = self.next_server_id;
-    self.next_server_id.0 += 1;
+  pub fn spawn(&mut self, cmd: &str) -> Weak<LanguageServerState> {
     let (client, server_caps) = LspClient::spawn(cmd);
 
-    self.servers.insert(id, LanguageServerState { client, caps: server_caps });
+    let state = Arc::new(LanguageServerState { client, caps: server_caps });
+    let weak = Arc::downgrade(&state);
+    self.servers.push(state);
 
-    id
+    weak
+  }
+}
+
+pub trait LspCommand {
+  type Request: types::request::Request;
+
+  fn is_capable(&self, caps: &types::ServerCapabilities) -> bool;
+  fn params(&self) -> <Self::Request as types::request::Request>::Params;
+}
+
+impl LanguageClientState {
+  pub fn new() -> Self { LanguageClientState { servers: vec![] } }
+
+  pub fn notify<T: LspCommand>(&mut self, command: &T) {
+    for server in &self.servers {
+      if let Some(server) = server.upgrade() {
+        // server.client.request::<T::Request>(command.params());
+      }
+    }
   }
 }
