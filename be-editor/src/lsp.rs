@@ -3,7 +3,7 @@ use std::str::FromStr;
 use be_lsp::{LspClient, types, types::Uri};
 use be_task::Task;
 
-use crate::{EditorState, filetype::FileType};
+use crate::EditorState;
 
 pub struct LspState {
   pub client:  LspClient,
@@ -27,9 +27,11 @@ pub struct CompletionsState {
 impl EditorState {
   pub(crate) fn connect_to_lsp(&mut self) {
     let Some(ft) = &self.filetype else { return };
-    let Some(lsp) = lsp_for_ft(ft) else { return };
+    let config = self.config.as_ref().unwrap().borrow();
+    let Some(language) = config.language.get(ft.name()) else { return };
+    let Some(lsp) = &language.lsp else { return };
 
-    let (client, server_caps) = LspClient::spawn(lsp);
+    let (client, server_caps) = LspClient::spawn(&lsp.command);
     self.lsp = Some(LspState {
       client,
       server_caps,
@@ -162,12 +164,5 @@ impl Drop for LspState {
     unsafe {
       self.client.shutdown_mut();
     }
-  }
-}
-
-fn lsp_for_ft(ft: &FileType) -> Option<&'static str> {
-  match ft {
-    FileType::Rust => Some("rust-analyzer"),
-    _ => None,
   }
 }
