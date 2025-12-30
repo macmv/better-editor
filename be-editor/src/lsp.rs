@@ -27,7 +27,7 @@ pub struct CompletionsState {
 impl EditorState {
   pub(crate) fn connect_to_lsp(&mut self) {
     let Some(ft) = &self.filetype else { return };
-    let config = self.config.as_ref().unwrap().borrow();
+    let config = self.config.borrow();
     let Some(language) = config.language.get(ft.name()) else { return };
     let Some(lsp) = &language.lsp else { return };
 

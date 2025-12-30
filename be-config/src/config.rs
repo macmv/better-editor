@@ -113,6 +113,10 @@ pub struct LspSettings {
 
 static DEFAULT_CONFIG: LazyLock<Config> = LazyLock::new(Config::parse_default);
 
+impl Default for Config {
+  fn default() -> Self { Config::default().clone() }
+}
+
 impl Config {
   pub fn default() -> &'static Config { &*DEFAULT_CONFIG }
 

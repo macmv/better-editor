@@ -31,7 +31,7 @@ pub struct EditorState {
   damages:    HashSet<Line>,
   damage_all: bool,
 
-  pub config: Option<Rc<RefCell<Config>>>,
+  pub config: Rc<RefCell<Config>>,
   pub lsp:    Option<LspState>,
 }
 

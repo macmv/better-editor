@@ -28,7 +28,7 @@ impl EditorView {
       cached_scale:   0.0,
     };
 
-    view.editor.config = Some(config.clone());
+    view.editor.config = config.clone();
 
     view
   }
@@ -66,7 +66,7 @@ impl EditorView {
 
     let line_height = render.store.text.font_metrics().line_height;
 
-    let scroll_offset = self.editor.config.as_ref().unwrap().borrow().editor.scroll_offset as usize;
+    let scroll_offset = self.editor.config.borrow().editor.scroll_offset as usize;
 
     let min_fully_visible_row = (self.scroll.y / line_height).ceil() as usize + scroll_offset;
     let max_fully_visible_row =

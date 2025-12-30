@@ -71,7 +71,7 @@ impl EditorState {
   pub(crate) fn on_open_file_highlight(&mut self) {
     let Some(ft) = &self.filetype else { return };
 
-    self.highligher = load_grammar(&self.config.as_ref().unwrap().borrow(), ft);
+    self.highligher = load_grammar(&self.config.borrow(), ft);
     if let Some(highligher) = &mut self.highligher {
       highligher.reparse(&self.doc);
     }
