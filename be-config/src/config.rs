@@ -114,14 +114,14 @@ pub struct LspSettings {
 static DEFAULT_CONFIG: LazyLock<Config> = LazyLock::new(Config::parse_default);
 
 impl Default for Config {
-  fn default() -> Self { Config::default().clone() }
+  fn default() -> Self { Config::default_ref().clone() }
 }
 
 impl Config {
-  pub fn default() -> &'static Config { &*DEFAULT_CONFIG }
+  pub fn default_ref() -> &'static Config { &*DEFAULT_CONFIG }
 
   pub fn load() -> Config {
-    let mut config = Config::default().clone();
+    let mut config = Config::default();
 
     if let Ok(data) = std::fs::read_to_string(crate::config_root().unwrap().join("config.toml")) {
       match toml::from_str::<ConfigDataPartial>(&data) {
