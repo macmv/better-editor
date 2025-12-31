@@ -1,11 +1,17 @@
-use be_lsp::{LspClient, types};
+use std::{cell::RefCell, rc::Rc, str::FromStr};
+
+use be_lsp::{
+  LanguageClientState,
+  types::{self, Uri},
+};
 use be_task::Task;
 
 use crate::EditorState;
 
+#[derive(Default)]
 pub struct LspState {
-  pub client:  LspClient,
-  server_caps: types::ServerCapabilities,
+  pub store:  Rc<RefCell<be_lsp::LanguageServerStore>>,
+  pub client: LanguageClientState,
 
   text_document:    Option<types::TextDocumentIdentifier>,
   document_version: i32,
@@ -29,10 +35,10 @@ impl EditorState {
     let Some(language) = config.language.get(ft.name()) else { return };
     let Some(lsp) = &language.lsp else { return };
 
-    self.lsp_client.spawn(&lsp.command);
+    let server = self.lsp.store.borrow_mut().spawn(&lsp.command);
+    self.lsp.client.add(server);
 
-    /*
-    lsp.text_document = Some(types::TextDocumentIdentifier {
+    self.lsp.text_document = Some(types::TextDocumentIdentifier {
       uri: Uri::from_str(&format!(
         "file://{}",
         self.file.as_ref().unwrap().path().to_string_lossy()
@@ -40,6 +46,7 @@ impl EditorState {
       .unwrap(),
     });
 
+    /*
     lsp.client.notify::<types::notification::DidOpenTextDocument>(
       types::DidOpenTextDocumentParams {
         text_document: types::TextDocumentItem {
@@ -154,13 +161,5 @@ impl EditorState {
     let line = self.doc.rope.line_of_byte(offset);
     let column = offset - self.doc.rope.byte_of_line(line);
     types::Position { line: line as u32, character: column as u32 }
-  }
-}
-
-impl Drop for LspState {
-  fn drop(&mut self) {
-    unsafe {
-      self.client.shutdown_mut();
-    }
   }
 }

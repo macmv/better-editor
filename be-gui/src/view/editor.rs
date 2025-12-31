@@ -1,6 +1,5 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
-use be_config::Config;
 use be_doc::crop::RopeSlice;
 use be_editor::EditorState;
 use be_input::Mode;
@@ -29,6 +28,7 @@ impl EditorView {
     };
 
     view.editor.config = store.config.clone();
+    view.editor.lsp.store = store.lsp.clone();
 
     view
   }

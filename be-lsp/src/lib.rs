@@ -48,9 +48,7 @@ pub trait LspCommand {
 }
 
 impl LanguageClientState {
-  pub fn spawn(&mut self, cmd: &str) {
-    // TODO
-  }
+  pub fn add(&mut self, server: Weak<LanguageServerState>) { self.servers.push(server); }
 
   pub fn notify<T: LspCommand>(&mut self, command: &T) {
     for server in &self.servers {

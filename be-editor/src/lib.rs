@@ -3,7 +3,6 @@ use std::{cell::RefCell, collections::HashSet, ops::Range, path::Path, rc::Rc};
 use be_config::Config;
 use be_doc::{Column, Cursor, Document, Line};
 use be_input::{Action, Direction, Edit, Mode, Move};
-use be_lsp::LanguageClientState;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{fs::OpenedFile, status::Status};
@@ -32,9 +31,8 @@ pub struct EditorState {
   damages:    HashSet<Line>,
   damage_all: bool,
 
-  pub config:     Rc<RefCell<Config>>,
-  pub lsp_store:  Rc<RefCell<be_lsp::LanguageServerStore>>,
-  pub lsp_client: LanguageClientState,
+  pub config: Rc<RefCell<Config>>,
+  pub lsp:    lsp::LspState,
 }
 
 struct Change {
