@@ -23,8 +23,8 @@ pub struct LspState {
 
 #[derive(Default)]
 pub struct CompletionsState {
-  task:        Vec<Task<Option<types::CompletionResponse>>>,
-  completions: Option<types::CompletionList>,
+  tasks:       Vec<Task<Option<types::CompletionResponse>>>,
+  completions: types::CompletionList,
   show:        bool,
 }
 
@@ -59,13 +59,13 @@ impl EditorState {
       end:   self.offset_to_lsp(change.range.end),
     };
 
+    let Some(doc) = &self.lsp.text_document else { return };
+
+    self.lsp.document_version += 1;
+
+    // TODO
     /*
-    let Some(lsp) = &mut self.lsp else { return };
-    let Some(doc) = &lsp.text_document else { return };
-
-    lsp.document_version += 1;
-
-    lsp.client.notify::<types::notification::DidChangeTextDocument>(
+    self.lsp.client.notify::<types::notification::DidChangeTextDocument>(
       types::DidChangeTextDocumentParams {
         text_document:   types::VersionedTextDocumentIdentifier {
           uri:     doc.uri.clone(),
@@ -87,41 +87,35 @@ impl EditorState {
     let Some(doc) = &self.lsp.text_document else { return };
 
     let tasks = self.lsp.client.send(&command::Completion { uri: doc.uri.clone(), cursor });
-    self.lsp.completions.task = tasks;
+    self.lsp.completions.completions.items.clear(); // TODO: Clear when we get the first response.
+    self.lsp.completions.tasks = tasks;
   }
 
   pub fn completions(&mut self) -> Option<Vec<String>> {
-    /*
-    let Some(lsp) = &mut self.lsp else { return None };
-
-    if let Some(completed) = lsp.completions.task.as_mut().and_then(|task| task.completed()) {
-      lsp.completions.task = None;
-      lsp.completions.completions = completed.map(|res| match res {
-        types::CompletionResponse::List(list) => list,
-        types::CompletionResponse::Array(completions) => {
-          types::CompletionList { is_incomplete: false, items: completions }
+    self.lsp.completions.tasks.retain(|task| {
+      if let Some(completed) = task.completed() {
+        if !self.lsp.completions.show {
+          self.lsp.completions.completions.items.clear();
         }
-      });
-      lsp.completions.show = true;
-    }
 
-    if lsp.completions.show {
-      Some(
-        lsp
-          .completions
-          .completions
-          .as_ref()
-          .unwrap()
-          .items
-          .iter()
-          .map(|i| i.label.clone())
-          .collect(),
-      )
+        if let Some(completions) = completed {
+          self.lsp.completions.completions.items.extend(match completions {
+            types::CompletionResponse::List(list) => list.items,
+            types::CompletionResponse::Array(completions) => completions,
+          });
+        }
+        self.lsp.completions.show = true;
+        false
+      } else {
+        true
+      }
+    });
+
+    if self.lsp.completions.show {
+      Some(self.lsp.completions.completions.items.iter().map(|i| i.label.clone()).collect())
     } else {
       None
     }
-    */
-    None
   }
 
   fn cursor_to_lsp(&self) -> types::Position {
