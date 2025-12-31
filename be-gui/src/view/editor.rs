@@ -5,7 +5,7 @@ use be_editor::EditorState;
 use be_input::Mode;
 use kurbo::{Line, Point, Rect, RoundedRect, Stroke, Vec2};
 
-use crate::{CursorMode, Render, RenderStore, TextLayout};
+use crate::{CursorMode, Render, RenderStore, TextLayout, theme::Underline};
 
 pub struct EditorView {
   pub editor: EditorState,
@@ -276,6 +276,13 @@ impl EditorView {
         }
         if let Some(weight) = highlight.weight {
           layout.apply(range.clone(), parley::StyleProperty::FontWeight(weight.to_parley()));
+        }
+        if let Some(underline) = highlight.underline {
+          layout.apply(range.clone(), parley::StyleProperty::Underline(true));
+
+          if let Underline::Color(c) = underline {
+            layout.apply(range.clone(), parley::StyleProperty::UnderlineBrush(Some(c.into())));
+          }
         }
       }
 

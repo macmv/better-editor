@@ -79,8 +79,8 @@ impl Theme {
         ("type", oklch(0.8, 0.12, 170.0).into()),
         ("variable.builtin", oklch(0.8, 0.13, 50.0).into()),
         ("variable.parameter", oklch(0.8, 0.14, 20.0).into()),
-        ("error", Highlight::from(oklch(0.8, 0.12, 30.0))),
-        ("warning", Highlight::from(oklch(0.8, 0.12, 120.0))),
+        ("error", Highlight::empty().with_underline(Underline::Color(oklch(0.8, 0.12, 30.0)))),
+        ("warning", Highlight::empty().with_underline(Underline::Color(oklch(0.8, 0.12, 120.0)))),
       ]),
     }
   }
