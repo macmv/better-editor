@@ -9,7 +9,7 @@ pub trait LspCommand {
   type Result;
 
   fn is_capable(&self, caps: &types::ServerCapabilities) -> bool;
-  fn send(self, client: &mut LspClient) -> Option<Task<Self::Result>>;
+  fn send(&self, client: &mut LspClient) -> Option<Task<Self::Result>>;
 }
 
 pub struct DidOpenTextDocument {
@@ -29,13 +29,13 @@ impl LspCommand for DidOpenTextDocument {
     caps.text_document_sync.is_some()
   }
 
-  fn send(self, client: &mut LspClient) -> Option<Task<Infallible>> {
+  fn send(&self, client: &mut LspClient) -> Option<Task<Infallible>> {
     client.notify::<types::notification::DidOpenTextDocument>(types::DidOpenTextDocumentParams {
       text_document: types::TextDocumentItem {
         version:     0,
-        uri:         self.uri,
-        text:        self.text,
-        language_id: self.language_id,
+        uri:         self.uri.clone(),
+        text:        self.text.clone(),
+        language_id: self.language_id.clone(),
       },
     });
 
@@ -50,10 +50,10 @@ impl LspCommand for Completion {
     caps.completion_provider.is_some()
   }
 
-  fn send(self, client: &mut LspClient) -> Option<Task<Option<types::CompletionResponse>>> {
+  fn send(&self, client: &mut LspClient) -> Option<Task<Option<types::CompletionResponse>>> {
     Some(client.request::<types::request::Completion>(types::CompletionParams {
       text_document_position:    types::TextDocumentPositionParams {
-        text_document: types::TextDocumentIdentifier { uri: self.uri },
+        text_document: types::TextDocumentIdentifier { uri: self.uri.clone() },
         position:      types::Position { line: 0, character: 0 },
       },
       context:                   None,
