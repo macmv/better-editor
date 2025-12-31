@@ -41,7 +41,13 @@ impl View {
     View { content: content.into(), bounds: Rect::ZERO }
   }
 
+  pub fn visible(&self) -> bool { !self.bounds.is_zero_area() }
+
   pub fn draw(&mut self, render: &mut Render) {
+    if !self.visible() {
+      return;
+    }
+
     match &mut self.content {
       ViewContent::Editor(editor) => editor.draw(render),
       ViewContent::FileTree(file_tree) => file_tree.draw(render),
