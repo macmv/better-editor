@@ -116,8 +116,12 @@ impl Render<'_> {
   }
 
   pub fn draw_text(&mut self, text: &TextLayout, pos: impl Into<Point>) {
-    let mut rect =
-      Rect::new(0.0, 0.0, f64::from(text.layout.full_width()), f64::from(text.layout.height()));
+    let rect = {
+      let mut rect =
+        Rect::new(0.0, 0.0, f64::from(text.layout.full_width()), f64::from(text.layout.height()));
+      rect.y0 = rect.y1.round() - rect.height();
+      rect
+    };
 
     let offset = self.offset();
 
@@ -129,7 +133,6 @@ impl Render<'_> {
 
         let style = glyph_run.style();
         let run = glyph_run.run();
-        rect.y0 = rect.y1.round() - rect.height();
         let mut x = rect.x0 as f32 + glyph_run.offset();
         let baseline = (rect.y0 as f32 + glyph_run.baseline()).round();
 
