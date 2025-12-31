@@ -137,7 +137,7 @@ impl EditorState {
     }
   }
 
-  fn clamp_cursor(&mut self) { self.move_to_line(self.max_line()); }
+  fn clamp_cursor(&mut self) { self.move_to_line(self.cursor.line.clamp(self.max_line())); }
 
   fn clamp_column(&mut self) {
     self.cursor.column = self.cursor.column.clamp(self.max_column());
