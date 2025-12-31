@@ -133,6 +133,8 @@ impl EditorState {
     }
   }
 
+  fn clamp_cursor(&mut self) { self.move_to_line(self.max_line()); }
+
   fn clamp_column(&mut self) {
     self.cursor.column = self.cursor.column.clamp(self.max_column());
     self.cursor.target_column = self.doc.visual_column(self.cursor);
@@ -284,6 +286,7 @@ impl EditorState {
           for change in self.history[self.history.len() - self.history_position].clone().undo() {
             self.change_no_history(change.clone());
           }
+          self.clamp_cursor();
         }
       }
       Edit::Redo => {
@@ -292,6 +295,7 @@ impl EditorState {
             self.change_no_history(change.clone());
           }
           self.history_position -= 1;
+          self.clamp_cursor();
         }
       }
     }
