@@ -118,10 +118,7 @@ pub fn run() {
 
     {
       let waker = Waker { proxy: proxy.clone() };
-      lsp_store.set_on_message(move || {
-        println!("WAKING");
-        waker.wake()
-      });
+      lsp_store.set_on_message(move || waker.wake());
     }
 
     let store = RenderStore {
