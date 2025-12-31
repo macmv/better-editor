@@ -18,17 +18,6 @@ pub struct DidOpenTextDocument {
   pub language_id: String,
 }
 
-pub struct DidChangeTextDocument {
-  pub path:    PathBuf,
-  pub version: i32,
-  pub changes: Vec<(types::Range, String)>,
-}
-
-pub struct Completion {
-  pub path:   PathBuf,
-  pub cursor: types::Position,
-}
-
 impl LspCommand for DidOpenTextDocument {
   type Result = Infallible;
 
@@ -52,6 +41,12 @@ impl LspCommand for DidOpenTextDocument {
 
     None
   }
+}
+
+pub struct DidChangeTextDocument {
+  pub path:    PathBuf,
+  pub version: i32,
+  pub changes: Vec<(types::Range, String)>,
 }
 
 impl LspCommand for DidChangeTextDocument {
@@ -87,6 +82,11 @@ impl LspCommand for DidChangeTextDocument {
 
     None
   }
+}
+
+pub struct Completion {
+  pub path:   PathBuf,
+  pub cursor: types::Position,
 }
 
 impl LspCommand for Completion {
