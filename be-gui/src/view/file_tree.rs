@@ -190,8 +190,14 @@ impl FileTree {
       render.theme().background_lower,
     );
 
-    TreeDraw { line: 0, indent: 0, active: if self.focused { Some(self.active) } else { None } }
-      .draw_directory(&self.tree, render);
+    TreeDraw {
+      line:         0,
+      indent:       0,
+      indent_width: 20.0,
+      line_height:  render.store.text.font_metrics().line_height,
+      active:       if self.focused { Some(self.active) } else { None },
+    }
+    .draw_directory(&self.tree, render);
   }
 }
 
@@ -199,22 +205,27 @@ struct TreeDraw {
   line:   usize,
   indent: usize,
 
+  indent_width: f64,
+  line_height:  f64,
+
   active: Option<usize>,
 }
 
 impl TreeDraw {
-  fn pos(&self) -> Point { Point::new(self.indent as f64 * 20.0, self.line as f64 * 20.0) }
+  fn pos(&self) -> Point {
+    Point::new(self.indent as f64 * self.indent_width, self.line as f64 * self.line_height)
+  }
 
   fn draw_directory(&mut self, dir: &Directory, render: &mut Render) {
     if self.active == Some(self.line) {
       render.fill(
-        &Rect::new(0.0, self.pos().y, render.size().width, self.pos().y + 20.0),
+        &Rect::new(0.0, self.pos().y, render.size().width, self.pos().y + self.line_height),
         render.theme().background_raised,
       );
     }
 
     let text = render.layout_text(&format!(" {}", dir.name()), render.theme().text);
-    render.draw_text(&text, self.pos() + Vec2::new(20.0, 0.0));
+    render.draw_text(&text, self.pos() + Vec2::new(self.indent_width, 0.0));
 
     if dir.expanded
       && let Some(items) = &dir.items
@@ -234,12 +245,12 @@ impl TreeDraw {
   fn draw_file(&self, file: &File, render: &mut Render) {
     if self.active == Some(self.line) {
       render.fill(
-        &Rect::new(0.0, self.pos().y, render.size().width, self.pos().y + 20.0),
+        &Rect::new(0.0, self.pos().y, render.size().width, self.pos().y + self.line_height),
         render.theme().background_raised,
       );
     }
 
     let text = render.layout_text(&file.name, render.theme().text);
-    render.draw_text(&text, self.pos() + Vec2::new(20.0, 0.0));
+    render.draw_text(&text, self.pos() + Vec2::new(self.indent_width, 0.0));
   }
 }
