@@ -1,3 +1,5 @@
+use be_task::Task;
+use parking_lot::Mutex;
 use std::sync::{Arc, Weak};
 
 mod client;
@@ -9,7 +11,6 @@ extern crate log;
 
 pub extern crate lsp_types as types;
 
-use be_task::Task;
 pub use client::LspClient;
 
 pub struct LanguageServerStore {
@@ -22,7 +23,7 @@ pub struct LanguageClientState {
 }
 
 pub struct LanguageServerState {
-  client: LspClient,
+  client: Mutex<LspClient>,
   caps:   types::ServerCapabilities,
 }
 
@@ -34,7 +35,7 @@ impl LanguageServerStore {
   pub fn spawn(&mut self, cmd: &str) -> Weak<LanguageServerState> {
     let (client, server_caps) = LspClient::spawn(cmd);
 
-    let state = Arc::new(LanguageServerState { client, caps: server_caps });
+    let state = Arc::new(LanguageServerState { client: Mutex::new(client), caps: server_caps });
     let weak = Arc::downgrade(&state);
     self.servers.push(state);
 
@@ -50,7 +51,9 @@ impl LanguageClientState {
 
     for server in &self.servers {
       if let Some(server) = server.upgrade() {
-        // server.client.request::<T::Request>(command.params());
+        if let Some(task) = command.send(&mut server.client.lock()) {
+          tasks.push(task);
+        }
       }
     }
 
