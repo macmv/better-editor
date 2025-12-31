@@ -56,17 +56,20 @@ impl LanguageClientState {
   pub fn send<T: command::LspCommand>(&mut self, command: &T) -> Vec<Task<T::Result>> {
     let mut tasks = vec![];
 
-    for server in &self.servers {
+    self.servers.retain_mut(|server| {
       if let Some(server) = server.upgrade() {
         if !command.is_capable(&server.caps) {
-          continue;
+          return true;
         }
 
         if let Some(task) = command.send(&mut server.client.lock()) {
           tasks.push(task);
         }
+        true
+      } else {
+        false
       }
-    }
+    });
 
     tasks
   }
