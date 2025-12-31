@@ -58,6 +58,10 @@ impl LanguageClientState {
 
     for server in &self.servers {
       if let Some(server) = server.upgrade() {
+        if !command.is_capable(&server.caps) {
+          continue;
+        }
+
         if let Some(task) = command.send(&mut server.client.lock()) {
           tasks.push(task);
         }
