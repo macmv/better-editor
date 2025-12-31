@@ -2,6 +2,7 @@ use std::ops::Range;
 
 use crate::Document;
 
+#[derive(Clone)]
 pub struct Edit {
   forward:  Vec<Change>,
   backward: Vec<Change>,
@@ -25,17 +26,9 @@ impl Edit {
     self.forward.push(change.clone());
   }
 
-  pub fn redo(&self, doc: &mut Document) {
-    for change in self.forward.iter() {
-      doc.apply(&change);
-    }
-  }
+  pub fn redo(&self) -> impl Iterator<Item = &Change> { self.forward.iter() }
 
-  pub fn undo(&self, doc: &mut Document) {
-    for change in self.backward.iter().rev() {
-      doc.apply(&change);
-    }
-  }
+  pub fn undo(&self) -> impl Iterator<Item = &Change> { self.backward.iter().rev() }
 }
 
 impl Change {
@@ -76,16 +69,16 @@ mod tests {
     doc.apply(&change);
     assert_eq!(doc, "hallo");
 
-    edit_2.undo(&mut doc);
+    edit_2.undo().for_each(|c| doc.apply(c));
     assert_eq!(doc, "hello");
 
-    edit_1.undo(&mut doc);
+    edit_1.undo().for_each(|c| doc.apply(c));
     assert_eq!(doc, "");
 
-    edit_1.redo(&mut doc);
+    edit_1.redo().for_each(|c| doc.apply(c));
     assert_eq!(doc, "hello");
 
-    edit_2.redo(&mut doc);
+    edit_2.redo().for_each(|c| doc.apply(c));
     assert_eq!(doc, "hallo");
   }
 
@@ -102,10 +95,10 @@ mod tests {
     doc.apply(&change);
     assert_eq!(doc, "hallo");
 
-    edit.undo(&mut doc);
+    edit.undo().for_each(|c| doc.apply(c));
     assert_eq!(doc, "");
 
-    edit.redo(&mut doc);
+    edit.redo().for_each(|c| doc.apply(c));
     assert_eq!(doc, "hallo");
   }
 }
