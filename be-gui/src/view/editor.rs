@@ -49,6 +49,8 @@ impl EditorView {
       self.cached_layouts.remove(&line.as_usize());
     }
 
+    self.editor.update_diagnostics();
+
     render.fill(
       &Rect::new(0.0, 0.0, render.size().width, render.size().height),
       render.theme().background,

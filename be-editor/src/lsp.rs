@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use be_lsp::{LanguageClientState, LanguageServerKey, command, types};
 use be_task::Task;
@@ -12,6 +12,7 @@ pub struct LspState {
 
   document_version: i32,
   pub completions:  CompletionsState,
+  diagnostics:      Vec<Diagnostic>,
 
   // FIXME: ew.
   pub set_waker: bool,
@@ -23,6 +24,17 @@ pub struct CompletionsState {
   completions:      types::CompletionList,
   show:             bool,
   clear_on_message: bool,
+}
+
+struct Diagnostic {
+  range:   Range<usize>,
+  message: String,
+  level:   DiagnosticLevel,
+}
+
+pub enum DiagnosticLevel {
+  Error,
+  Warning,
 }
 
 impl EditorState {
@@ -47,6 +59,25 @@ impl EditorState {
       path:        self.file.as_ref().unwrap().path().to_path_buf(),
       text:        self.doc.rope.to_string(),
       language_id: "rust".into(),
+    });
+  }
+
+  pub fn update_diagnostics(&mut self) {
+    let Some(file) = &self.file else { return };
+
+    self.lsp.diagnostics.clear();
+    self.lsp.client.servers(|state| {
+      if let Some(d) = state.diagnostics.get(file.path()) {
+        self.lsp.diagnostics.extend(d.iter().map(|d| Diagnostic {
+          range:   lsp_to_offset(&self.doc, d.range.start)..lsp_to_offset(&self.doc, d.range.end),
+          message: d.message.clone(),
+          level:   match d.severity {
+            Some(types::DiagnosticSeverity::ERROR) => DiagnosticLevel::Error,
+            Some(types::DiagnosticSeverity::WARNING) => DiagnosticLevel::Warning,
+            _ => DiagnosticLevel::Error,
+          },
+        }));
+      }
     });
   }
 
@@ -116,4 +147,8 @@ impl EditorState {
     let column = offset - self.doc.rope.byte_of_line(line);
     types::Position { line: line as u32, character: column as u32 }
   }
+}
+
+fn lsp_to_offset(doc: &be_doc::Document, position: types::Position) -> usize {
+  doc.rope.byte_of_line(position.line as usize) + position.character as usize
 }

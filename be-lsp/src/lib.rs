@@ -16,6 +16,8 @@ pub extern crate lsp_types as types;
 
 pub use client::LspClient;
 
+use crate::client::LspState;
+
 pub struct LanguageServerStore {
   servers:    HashMap<LanguageServerKey, Arc<LanguageServerState>>,
   on_message: Arc<Mutex<Box<dyn Fn() + Send>>>,
@@ -72,6 +74,12 @@ impl LanguageServerStore {
 impl LanguageClientState {
   pub fn set(&mut self, key: LanguageServerKey, server: Weak<LanguageServerState>) {
     self.servers.insert(key, server);
+  }
+
+  pub fn servers(&self, mut f: impl FnMut(&LspState)) {
+    for server in self.servers.values().filter_map(|s| s.upgrade()) {
+      f(&server.client.lock().state.lock());
+    }
   }
 
   pub fn send<T: command::LspCommand>(&mut self, command: &T) -> Vec<Task<T::Result>> {

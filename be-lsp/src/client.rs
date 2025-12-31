@@ -58,7 +58,7 @@ pub(crate) struct LspWorker {
 
   pending: HashMap<u64, Completer>,
 
-  on_message: Arc<Mutex<Box<dyn Fn() + Send>>>,
+  pub on_message: Arc<Mutex<Box<dyn Fn() + Send>>>,
 }
 
 type Completer = Box<dyn FnOnce(&RawValue) + Send>;
