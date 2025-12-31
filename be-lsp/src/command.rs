@@ -69,7 +69,7 @@ impl LspCommand for DidChangeTextDocument {
   }
 
   fn send(&self, client: &mut LspClient) -> Option<Task<Self::Result>> {
-    if !client.state.opened_files.insert(self.path.clone()) {
+    if !client.state.opened_files.contains(&self.path) {
       error!("cannot change a file that is not opened: {}", self.path.display());
       return None;
     }
