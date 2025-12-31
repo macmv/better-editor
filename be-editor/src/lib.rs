@@ -31,8 +31,9 @@ pub struct EditorState {
   damages:    HashSet<Line>,
   damage_all: bool,
 
-  current_edit: Option<Edit>,
-  history:      Vec<Edit>,
+  current_edit:     Option<Edit>,
+  history_position: usize,
+  history:          Vec<Edit>,
 
   pub config: Rc<RefCell<Config>>,
   pub lsp:    lsp::LspState,
@@ -161,6 +162,10 @@ impl EditorState {
 
     if m == Mode::Normal {
       if let Some(edit) = self.current_edit.take() {
+        if self.history_position > 0 {
+          self.history.drain(self.history.len() - self.history_position..);
+        }
+        self.history_position = 0;
         self.history.push(edit);
       }
     } else if m == Mode::Insert {
@@ -272,14 +277,42 @@ impl EditorState {
         self.move_graphemes(-1);
         self.change(Change::remove(self.doc.grapheme_slice(self.cursor, 1)));
       }
-      Edit::Undo => {}
-      Edit::Redo => {}
+      Edit::Undo => {
+        if self.history_position < self.history.len() {
+          self.history_position += 1;
+          for change in self.history[self.history.len() - self.history_position].clone().undo() {
+            self.change_no_history(change.clone());
+          }
+        }
+      }
+      Edit::Redo => {
+        if self.history_position > 0 {
+          for change in self.history[self.history.len() - self.history_position].clone().redo() {
+            self.change_no_history(change.clone());
+          }
+          self.history_position -= 1;
+        }
+      }
     }
   }
 
   fn perform_autocomplete(&mut self) { self.lsp_request_completions(); }
 
   fn change(&mut self, change: Change) {
+    if let Some(edit) = &mut self.current_edit {
+      edit.push(&change, &self.doc);
+    } else {
+      if self.history_position > 0 {
+        self.history.drain(self.history.len() - self.history_position..);
+      }
+      self.history_position = 0;
+      self.history.push(Edit::new(&change, &self.doc));
+    }
+
+    self.change_no_history(change);
+  }
+
+  fn change_no_history(&mut self, change: Change) {
     let start_pos = self.offset_to_ts_point(change.range.start);
     let end_pos = self.offset_to_ts_point(change.range.end);
 
@@ -292,11 +325,6 @@ impl EditorState {
       self.damage_all = true;
     }
 
-    if let Some(edit) = &mut self.current_edit {
-      edit.push(&change, &self.doc);
-    } else {
-      self.history.push(Edit::new(&change, &self.doc));
-    }
     self.doc.apply(&change);
 
     self.on_change_highlight(&change, start_pos, end_pos);
