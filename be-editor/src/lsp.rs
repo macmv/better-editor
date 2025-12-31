@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc, str::FromStr};
 
 use be_lsp::{
-  LanguageClientState,
+  LanguageClientState, command,
   types::{self, Uri},
 };
 use be_task::Task;
@@ -46,18 +46,11 @@ impl EditorState {
       .unwrap(),
     });
 
-    /*
-    lsp.client.notify::<types::notification::DidOpenTextDocument>(
-      types::DidOpenTextDocumentParams {
-        text_document: types::TextDocumentItem {
-          version:     0,
-          uri:         lsp.text_document.clone().unwrap().uri.clone(),
-          text:        self.doc.rope.to_string(),
-          language_id: "rust".into(),
-        },
-      },
-    );
-    */
+    self.lsp.client.notify(&command::DidOpenTextDocument {
+      uri:         self.lsp.text_document.clone().unwrap().uri.clone(),
+      text:        self.doc.rope.to_string(),
+      language_id: "rust".into(),
+    });
   }
 
   pub(crate) fn lsp_notify_change(&mut self, change: crate::Change) {

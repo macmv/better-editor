@@ -1,6 +1,7 @@
 use std::sync::{Arc, Weak};
 
 mod client;
+pub mod command;
 mod init;
 
 #[macro_use]
@@ -40,17 +41,10 @@ impl LanguageServerStore {
   }
 }
 
-pub trait LspCommand {
-  type Request: types::request::Request;
-
-  fn is_capable(&self, caps: &types::ServerCapabilities) -> bool;
-  fn params(&self) -> <Self::Request as types::request::Request>::Params;
-}
-
 impl LanguageClientState {
   pub fn add(&mut self, server: Weak<LanguageServerState>) { self.servers.push(server); }
 
-  pub fn notify<T: LspCommand>(&mut self, command: &T) {
+  pub fn notify<T: command::LspCommand>(&mut self, command: &T) {
     for server in &self.servers {
       if let Some(server) = server.upgrade() {
         // server.client.request::<T::Request>(command.params());
