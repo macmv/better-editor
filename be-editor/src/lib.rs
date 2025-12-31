@@ -1,12 +1,17 @@
-use std::{cell::RefCell, collections::HashSet, ops::Range, path::Path, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, path::Path, rc::Rc};
 
 use be_config::Config;
 use be_doc::{Column, Cursor, Document, Line};
-use be_input::{Action, Direction, Edit, Mode, Move};
+use be_input::{Action, Direction, Mode, Move};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{fs::OpenedFile, status::Status};
+use crate::{
+  edit::{Change, Edit},
+  fs::OpenedFile,
+  status::Status,
+};
 
+mod edit;
 mod filetype;
 mod fs;
 mod highlight;
@@ -31,13 +36,11 @@ pub struct EditorState {
   damages:    HashSet<Line>,
   damage_all: bool,
 
+  current_edit: Option<Edit>,
+  history:      Vec<Edit>,
+
   pub config: Rc<RefCell<Config>>,
   pub lsp:    lsp::LspState,
-}
-
-struct Change {
-  range: Range<usize>,
-  text:  String,
 }
 
 #[derive(Default)]
@@ -160,6 +163,14 @@ impl EditorState {
     } else {
       self.command = None;
     }
+
+    if m == Mode::Normal {
+      if let Some(edit) = self.current_edit.take() {
+        self.history.push(edit);
+      }
+    } else if m == Mode::Insert {
+      self.current_edit = Some(Edit::empty());
+    }
   }
 
   pub fn perform_action(&mut self, action: Action) {
@@ -217,7 +228,9 @@ impl EditorState {
     }
   }
 
-  fn perform_edit(&mut self, e: Edit) {
+  fn perform_edit(&mut self, e: be_input::Edit) {
+    use be_input::Edit;
+
     if let Some(command) = &mut self.command {
       if matches!(e, Edit::Insert('\n')) {
         self.run_command();
@@ -316,14 +329,6 @@ impl EditorState {
   }
 }
 
-impl Change {
-  pub fn insert(at: usize, text: &str) -> Self { Change { range: at..at, text: text.to_string() } }
-  pub fn remove(range: Range<usize>) -> Self { Change { range, text: String::new() } }
-  pub fn replace(range: Range<usize>, text: &str) -> Self {
-    Change { range, text: text.to_string() }
-  }
-}
-
 impl CommandState {
   fn perform_move(&mut self, m: Move) {
     match m {
@@ -333,7 +338,9 @@ impl CommandState {
       _ => {}
     }
   }
-  fn perform_edit(&mut self, e: Edit) {
+  fn perform_edit(&mut self, e: be_input::Edit) {
+    use be_input::Edit;
+
     match e {
       Edit::Insert(c) => {
         self.text.insert(self.cursor, c);
