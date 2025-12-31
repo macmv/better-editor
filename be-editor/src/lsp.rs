@@ -23,9 +23,10 @@ pub struct LspState {
 
 #[derive(Default)]
 pub struct CompletionsState {
-  tasks:       Vec<Task<Option<types::CompletionResponse>>>,
-  completions: types::CompletionList,
-  show:        bool,
+  tasks:            Vec<Task<Option<types::CompletionResponse>>>,
+  completions:      types::CompletionList,
+  show:             bool,
+  clear_on_message: bool,
 }
 
 impl EditorState {
@@ -76,15 +77,16 @@ impl EditorState {
     let Some(doc) = &self.lsp.text_document else { return };
 
     let tasks = self.lsp.client.send(&command::Completion { uri: doc.uri.clone(), cursor });
-    self.lsp.completions.completions.items.clear(); // TODO: Clear when we get the first response.
+    self.lsp.completions.clear_on_message = true;
     self.lsp.completions.tasks = tasks;
   }
 
   pub fn completions(&mut self) -> Option<Vec<String>> {
     self.lsp.completions.tasks.retain(|task| {
       if let Some(completed) = task.completed() {
-        if !self.lsp.completions.show {
+        if self.lsp.completions.clear_on_message {
           self.lsp.completions.completions.items.clear();
+          self.lsp.completions.clear_on_message = false;
         }
 
         if let Some(completions) = completed {
