@@ -7,6 +7,7 @@ pub struct Edit {
   backward: Vec<Change>,
 }
 
+#[derive(Clone)]
 pub struct Change {
   pub range: Range<usize>,
   pub text:  String,
@@ -15,8 +16,13 @@ pub struct Change {
 impl Edit {
   pub const fn empty() -> Self { Edit { forward: vec![], backward: vec![] } }
 
-  pub fn new(change: Change, doc: &Document) -> Self {
-    Edit { backward: vec![change.reverse(doc)], forward: vec![change] }
+  pub fn new(change: &Change, doc: &Document) -> Self {
+    Edit { backward: vec![change.reverse(doc)], forward: vec![change.clone()] }
+  }
+
+  pub fn push(&mut self, change: &Change, doc: &Document) {
+    self.backward.push(change.reverse(doc));
+    self.forward.push(change.clone());
   }
 }
 

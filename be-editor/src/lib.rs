@@ -290,6 +290,11 @@ impl EditorState {
       self.damage_all = true;
     }
 
+    if let Some(edit) = &mut self.current_edit {
+      edit.push(&change, &self.doc);
+    } else {
+      self.history.push(Edit::new(&change, &self.doc));
+    }
     self.doc.apply(&change);
 
     self.on_change_highlight(&change, start_pos, end_pos);
