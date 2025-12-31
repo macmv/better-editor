@@ -79,6 +79,8 @@ impl Theme {
         ("type", oklch(0.8, 0.12, 170.0).into()),
         ("variable.builtin", oklch(0.8, 0.13, 50.0).into()),
         ("variable.parameter", oklch(0.8, 0.14, 20.0).into()),
+        ("comment.documentation", oklch(0.7, 0.0, 0.0).into()),
+        ("comment", oklch(0.5, 0.0, 0.0).into()),
         ("error", Highlight::empty().with_underline(Underline::Color(oklch(0.8, 0.12, 30.0)))),
         ("warning", Highlight::empty().with_underline(Underline::Color(oklch(0.8, 0.12, 120.0)))),
       ]),
@@ -171,6 +173,17 @@ impl SyntaxTheme {
     let mut highlight = Highlight::empty();
 
     for key in keys {
+      // Deduplicates things like `comment` and `comment.documentation`, so that we
+      // only apply `comment.documentation`.
+      if keys.iter().any(|k| match (k, key) {
+        (HighlightKey::TreeSitter(k), HighlightKey::TreeSitter(key)) => {
+          k.len() > key.len() && k.starts_with(key)
+        }
+        _ => false,
+      }) {
+        continue;
+      }
+
       match key {
         HighlightKey::TreeSitter(key) => {
           let mut cur = *key;
