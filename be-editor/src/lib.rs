@@ -272,6 +272,8 @@ impl EditorState {
         self.move_graphemes(-1);
         self.change(Change::remove(self.doc.grapheme_slice(self.cursor, 1)));
       }
+      Edit::Undo => {}
+      Edit::Redo => {}
     }
   }
 

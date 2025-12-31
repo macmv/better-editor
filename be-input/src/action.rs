@@ -42,6 +42,8 @@ pub enum Edit {
   DeleteLine,
   DeleteRestOfLine,
   Backspace,
+  Undo,
+  Redo,
 }
 
 pub enum ActionError {
@@ -106,16 +108,20 @@ impl Action {
         }
 
         // === edits ===
-        (Mode::Normal, Key::Char('r')) => match iter.next().ok_or(ActionError::Incomplete)?.key {
-          Key::Char(c) => e!(Replace(c)),
-          _ => Err(ActionError::Unrecognized),
-        },
+        (Mode::Normal, Key::Char('r')) if !key.control => {
+          match iter.next().ok_or(ActionError::Incomplete)?.key {
+            Key::Char(c) => e!(Replace(c)),
+            _ => Err(ActionError::Unrecognized),
+          }
+        }
         (Mode::Normal, Key::Char('x')) => e!(Delete),
         (Mode::Normal, Key::Char('d')) => match iter.next().ok_or(ActionError::Incomplete)?.key {
           Key::Char('d') => e!(DeleteLine),
           _ => Err(ActionError::Unrecognized),
         },
         (Mode::Normal, Key::Char('D')) => e!(DeleteRestOfLine),
+        (Mode::Normal, Key::Char('u')) => e!(Undo),
+        (Mode::Normal, Key::Char('r')) if key.control => e!(Redo),
 
         // === modes ===
         (Mode::Normal, Key::Char('i')) => Ok(Action::SetMode { mode: Mode::Insert, delta: 0 }),
