@@ -63,22 +63,11 @@ impl EditorState {
 
     self.lsp.document_version += 1;
 
-    // TODO
-    /*
-    self.lsp.client.notify::<types::notification::DidChangeTextDocument>(
-      types::DidChangeTextDocumentParams {
-        text_document:   types::VersionedTextDocumentIdentifier {
-          uri:     doc.uri.clone(),
-          version: lsp.document_version,
-        },
-        content_changes: vec![types::TextDocumentContentChangeEvent {
-          range:        Some(range),
-          range_length: None,
-          text:         change.text,
-        }],
-      },
-    );
-    */
+    self.lsp.client.send(&command::DidChangeTextDocument {
+      uri:     doc.uri.clone(),
+      version: self.lsp.document_version,
+      changes: vec![(range, change.text)],
+    });
   }
 
   pub(crate) fn lsp_request_completions(&mut self) {

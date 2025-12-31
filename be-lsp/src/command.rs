@@ -18,6 +18,12 @@ pub struct DidOpenTextDocument {
   pub language_id: String,
 }
 
+pub struct DidChangeTextDocument {
+  pub uri:     Uri,
+  pub version: i32,
+  pub changes: Vec<(types::Range, String)>,
+}
+
 pub struct Completion {
   pub uri:    Uri,
   pub cursor: types::Position,
@@ -39,6 +45,36 @@ impl LspCommand for DidOpenTextDocument {
         language_id: self.language_id.clone(),
       },
     });
+
+    None
+  }
+}
+
+impl LspCommand for DidChangeTextDocument {
+  type Result = Infallible;
+
+  fn is_capable(&self, caps: &types::ServerCapabilities) -> bool {
+    caps.text_document_sync.is_some()
+  }
+
+  fn send(&self, client: &mut LspClient) -> Option<Task<Self::Result>> {
+    client.notify::<types::notification::DidChangeTextDocument>(
+      types::DidChangeTextDocumentParams {
+        text_document:   types::VersionedTextDocumentIdentifier {
+          uri:     self.uri.clone(),
+          version: self.version,
+        },
+        content_changes: self
+          .changes
+          .iter()
+          .map(|change| types::TextDocumentContentChangeEvent {
+            range:        Some(change.0),
+            range_length: None,
+            text:         change.1.clone(),
+          })
+          .collect(),
+      },
+    );
 
     None
   }
