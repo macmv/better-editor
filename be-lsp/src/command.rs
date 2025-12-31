@@ -1,4 +1,8 @@
-use std::{convert::Infallible, path::PathBuf, str::FromStr};
+use std::{
+  convert::Infallible,
+  path::{Path, PathBuf},
+  str::FromStr,
+};
 
 use be_task::Task;
 use types::Uri;
@@ -10,6 +14,14 @@ pub trait LspCommand {
 
   fn is_capable(&self, caps: &types::ServerCapabilities) -> bool;
   fn send(&self, client: &mut LspClient) -> Option<Task<Self::Result>>;
+}
+
+fn doc_uri(path: &Path) -> Uri {
+  Uri::from_str(&format!("file://{}", path.to_string_lossy())).unwrap()
+}
+
+fn doc_id(path: &Path) -> types::TextDocumentIdentifier {
+  types::TextDocumentIdentifier { uri: doc_uri(path) }
 }
 
 pub struct DidOpenTextDocument {
@@ -33,7 +45,7 @@ impl LspCommand for DidOpenTextDocument {
     client.notify::<types::notification::DidOpenTextDocument>(types::DidOpenTextDocumentParams {
       text_document: types::TextDocumentItem {
         version:     0,
-        uri:         Uri::from_str(&format!("file://{}", self.path.to_string_lossy())).unwrap(),
+        uri:         doc_uri(&self.path),
         text:        self.text.clone(),
         language_id: self.language_id.clone(),
       },
@@ -65,7 +77,7 @@ impl LspCommand for DidChangeTextDocument {
     client.notify::<types::notification::DidChangeTextDocument>(
       types::DidChangeTextDocumentParams {
         text_document:   types::VersionedTextDocumentIdentifier {
-          uri:     Uri::from_str(&format!("file://{}", self.path.to_string_lossy())).unwrap(),
+          uri:     doc_uri(&self.path),
           version: self.version,
         },
         content_changes: self
@@ -99,9 +111,7 @@ impl LspCommand for Completion {
   fn send(&self, client: &mut LspClient) -> Option<Task<Option<types::CompletionResponse>>> {
     Some(client.request::<types::request::Completion>(types::CompletionParams {
       text_document_position:    types::TextDocumentPositionParams {
-        text_document: types::TextDocumentIdentifier {
-          uri: Uri::from_str(&format!("file://{}", self.path.to_string_lossy())).unwrap(),
-        },
+        text_document: doc_id(&self.path),
         position:      self.cursor,
       },
       context:                   None,
