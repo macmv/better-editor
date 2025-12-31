@@ -26,7 +26,7 @@ pub struct LspClient {
 
 /// This is all the state we've sent to a particular server.
 #[derive(Default)]
-pub(crate) struct LspState {
+pub struct LspState {
   pub opened_files: HashSet<PathBuf>,
 }
 
