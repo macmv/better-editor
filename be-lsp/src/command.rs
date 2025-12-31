@@ -19,7 +19,8 @@ pub struct DidOpenTextDocument {
 }
 
 pub struct Completion {
-  pub uri: Uri,
+  pub uri:    Uri,
+  pub cursor: types::Position,
 }
 
 impl LspCommand for DidOpenTextDocument {
@@ -54,7 +55,7 @@ impl LspCommand for Completion {
     Some(client.request::<types::request::Completion>(types::CompletionParams {
       text_document_position:    types::TextDocumentPositionParams {
         text_document: types::TextDocumentIdentifier { uri: self.uri.clone() },
-        position:      types::Position { line: 0, character: 0 },
+        position:      self.cursor,
       },
       context:                   None,
       work_done_progress_params: types::WorkDoneProgressParams::default(),

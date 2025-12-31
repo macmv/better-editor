@@ -86,7 +86,7 @@ impl EditorState {
 
     let Some(doc) = &self.lsp.text_document else { return };
 
-    let tasks = self.lsp.client.send(&command::Completion { uri: doc.uri.clone() });
+    let tasks = self.lsp.client.send(&command::Completion { uri: doc.uri.clone(), cursor });
     self.lsp.completions.task = tasks;
   }
 
