@@ -3,9 +3,10 @@ use std::{cell::RefCell, collections::HashSet, ops::Range, path::Path, rc::Rc};
 use be_config::Config;
 use be_doc::{Column, Cursor, Document, Line};
 use be_input::{Action, Direction, Edit, Mode, Move};
+use be_lsp::LanguageClientState;
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{fs::OpenedFile, lsp::LspState, status::Status};
+use crate::{fs::OpenedFile, status::Status};
 
 mod filetype;
 mod fs;
@@ -32,7 +33,7 @@ pub struct EditorState {
   damage_all: bool,
 
   pub config: Rc<RefCell<Config>>,
-  pub lsp:    Option<LspState>,
+  pub lsp:    LanguageClientState,
 }
 
 struct Change {
@@ -298,10 +299,7 @@ impl EditorState {
       "w" => {
         self.save().map(|()| format!("{}: written", self.file.as_ref().unwrap().path().display()))
       }
-      "q" => {
-        self.lsp = None; // drop the language server
-        std::process::exit(0);
-      }
+      "q" => std::process::exit(0), // TODO: Send an exit request, just to drop everything.
       "e" => self
         .open(Path::new(args))
         .map(|()| format!("{}: opened", self.file.as_ref().unwrap().path().display())),

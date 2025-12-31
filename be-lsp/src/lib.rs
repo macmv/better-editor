@@ -14,6 +14,7 @@ pub struct LanguageServerStore {
   servers: Vec<Arc<LanguageServerState>>,
 }
 
+#[derive(Default)]
 pub struct LanguageClientState {
   servers: Vec<Weak<LanguageServerState>>,
 }
@@ -47,7 +48,9 @@ pub trait LspCommand {
 }
 
 impl LanguageClientState {
-  pub fn new() -> Self { LanguageClientState { servers: vec![] } }
+  pub fn spawn(&mut self, cmd: &str) {
+    // TODO
+  }
 
   pub fn notify<T: LspCommand>(&mut self, command: &T) {
     for server in &self.servers {

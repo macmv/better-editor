@@ -49,6 +49,7 @@ impl EditorView {
       self.cached_layouts.remove(&line.as_usize());
     }
 
+    /*
     if let Some(lsp) = &mut self.editor.lsp {
       if !lsp.set_waker {
         lsp.set_waker = true;
@@ -58,6 +59,7 @@ impl EditorView {
         });
       }
     }
+    */
 
     render.fill(
       &Rect::new(0.0, 0.0, render.size().width, render.size().height),

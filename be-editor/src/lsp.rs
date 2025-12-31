@@ -1,6 +1,4 @@
-use std::str::FromStr;
-
-use be_lsp::{LspClient, types, types::Uri};
+use be_lsp::{LspClient, types};
 use be_task::Task;
 
 use crate::EditorState;
@@ -31,17 +29,9 @@ impl EditorState {
     let Some(language) = config.language.get(ft.name()) else { return };
     let Some(lsp) = &language.lsp else { return };
 
-    let (client, server_caps) = LspClient::spawn(&lsp.command);
-    self.lsp = Some(LspState {
-      client,
-      server_caps,
-      text_document: None,
-      document_version: 0,
-      completions: Default::default(),
-      set_waker: false,
-    });
+    self.lsp.spawn(&lsp.command);
 
-    let Some(lsp) = &mut self.lsp else { return };
+    /*
     lsp.text_document = Some(types::TextDocumentIdentifier {
       uri: Uri::from_str(&format!(
         "file://{}",
@@ -60,6 +50,7 @@ impl EditorState {
         },
       },
     );
+    */
   }
 
   pub(crate) fn lsp_notify_change(&mut self, change: crate::Change) {
@@ -68,6 +59,7 @@ impl EditorState {
       end:   self.offset_to_lsp(change.range.end),
     };
 
+    /*
     let Some(lsp) = &mut self.lsp else { return };
     let Some(doc) = &lsp.text_document else { return };
 
@@ -86,11 +78,13 @@ impl EditorState {
         }],
       },
     );
+    */
   }
 
   pub(crate) fn lsp_request_completions(&mut self) {
     let cursor = self.cursor_to_lsp();
 
+    /*
     let Some(lsp) = &mut self.lsp else { return };
     if lsp.server_caps.completion_provider.is_none() {
       return;
@@ -112,9 +106,11 @@ impl EditorState {
     });
 
     lsp.completions.task = Some(task);
+    */
   }
 
   pub fn completions(&mut self) -> Option<Vec<String>> {
+    /*
     let Some(lsp) = &mut self.lsp else { return None };
 
     if let Some(completed) = lsp.completions.task.as_mut().and_then(|task| task.completed()) {
@@ -143,6 +139,8 @@ impl EditorState {
     } else {
       None
     }
+    */
+    None
   }
 
   fn cursor_to_lsp(&self) -> types::Position {
