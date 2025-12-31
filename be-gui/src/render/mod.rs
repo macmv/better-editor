@@ -24,8 +24,9 @@ pub enum Event {
 pub struct RenderStore {
   proxy: winit::event_loop::EventLoopProxy<Event>,
 
-  pub text:  TextStore,
-  pub theme: Theme,
+  pub config: Rc<RefCell<Config>>,
+  pub text:   TextStore,
+  pub theme:  Theme,
 
   render: vello::Renderer,
 }
@@ -111,17 +112,19 @@ pub fn run() {
     let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
     let config = Rc::new(RefCell::new(Config::load()));
-    let waker = Waker { proxy: proxy.clone() };
+
+    let store = RenderStore {
+      proxy,
+      text: TextStore::new(&config),
+      config,
+      render: vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),
+      theme: Theme::default_theme(),
+    };
 
     let mut app = App {
-      state: super::State::new(&config, &waker),
+      state: super::State::new(&store),
 
-      store: RenderStore {
-        proxy,
-        text: TextStore::new(&config),
-        render: vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),
-        theme: Theme::default_theme(),
-      },
+      store,
 
       texture,
       texture_view,
@@ -249,6 +252,8 @@ impl Brush {
 
 impl RenderStore {
   pub fn theme(&self) -> &Theme { &self.theme }
+
+  pub fn waker(&self) -> Waker { Waker { proxy: self.proxy.clone() } }
 }
 
 impl<'a> Render<'a> {

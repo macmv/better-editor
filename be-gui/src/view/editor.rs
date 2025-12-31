@@ -6,7 +6,7 @@ use be_editor::EditorState;
 use be_input::Mode;
 use kurbo::{Line, Point, Rect, RoundedRect, Stroke, Vec2};
 
-use crate::{CursorMode, Render, TextLayout};
+use crate::{CursorMode, Render, RenderStore, TextLayout};
 
 pub struct EditorView {
   pub editor: EditorState,
@@ -19,7 +19,7 @@ pub struct EditorView {
 }
 
 impl EditorView {
-  pub fn new(config: &Rc<RefCell<Config>>) -> Self {
+  pub fn new(store: &RenderStore) -> Self {
     let mut view = EditorView {
       editor:         EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n"),
       scroll:         Point::ZERO,
@@ -28,7 +28,7 @@ impl EditorView {
       cached_scale:   0.0,
     };
 
-    view.editor.config = config.clone();
+    view.editor.config = store.config.clone();
 
     view
   }

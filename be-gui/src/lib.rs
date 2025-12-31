@@ -1,8 +1,7 @@
 mod render;
 
-use std::{cell::RefCell, collections::HashMap, hash::Hash, rc::Rc};
+use std::{collections::HashMap, hash::Hash};
 
-use be_config::Config;
 use be_input::{Action, KeyStroke, Navigation};
 use kurbo::{Axis, Cap, Line, Point, Rect, Stroke};
 pub use render::*;
@@ -34,7 +33,7 @@ struct Tab {
 pub struct ViewId(u64);
 
 impl State {
-  pub fn new(config: &Rc<RefCell<Config>>, waker: &Waker) -> Self {
+  pub fn new(store: &RenderStore) -> Self {
     let mut state = State {
       keys:         vec![],
       active:       1,
@@ -46,8 +45,8 @@ impl State {
     let shell = state.new_view(view::Shell::new());
     state.tabs.push(Tab { title: "zsh".to_owned(), content: pane::Pane::View(shell) });
 
-    let file_tree = state.new_view(view::FileTree::current_directory(waker.clone()));
-    let editor = state.new_view(view::EditorView::new(config));
+    let file_tree = state.new_view(view::FileTree::current_directory(store.waker()));
+    let editor = state.new_view(view::EditorView::new(store));
     state.tabs.push(Tab {
       title:   "editor".to_owned(),
       content: Pane::Split(pane::Split {
