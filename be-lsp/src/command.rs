@@ -5,9 +5,10 @@ use std::{
 };
 
 use be_task::Task;
+use serde_json::value::RawValue;
 use types::Uri;
 
-use crate::LspClient;
+use crate::{LspClient, client::LspWorker};
 
 pub trait LspCommand {
   type Result;
@@ -38,7 +39,7 @@ impl LspCommand for DidOpenTextDocument {
   }
 
   fn send(&self, client: &mut LspClient) -> Option<Task<Infallible>> {
-    if !client.state.opened_files.insert(self.path.clone()) {
+    if !client.state.lock().opened_files.insert(self.path.clone()) {
       return None;
     }
 
@@ -69,7 +70,7 @@ impl LspCommand for DidChangeTextDocument {
   }
 
   fn send(&self, client: &mut LspClient) -> Option<Task<Self::Result>> {
-    if !client.state.opened_files.contains(&self.path) {
+    if !client.state.lock().opened_files.contains(&self.path) {
       error!("cannot change a file that is not opened: {}", self.path.display());
       return None;
     }
@@ -118,5 +119,19 @@ impl LspCommand for Completion {
       work_done_progress_params: types::WorkDoneProgressParams::default(),
       partial_result_params:     types::PartialResultParams::default(),
     }))
+  }
+}
+
+impl LspWorker {
+  pub fn handle_notification(&self, method: &str, params: Option<Box<RawValue>>) {
+    if method == "textDocument/publishDiagnostics" {
+      let params =
+        serde_json::from_str::<lsp_types::PublishDiagnosticsParams>(params.unwrap().get()).unwrap();
+
+      let path = PathBuf::from(params.uri.path().as_str());
+      self.state.lock().diagnostics.insert(path, params.diagnostics);
+    } else {
+      info!("unhandled notification: {}", method);
+    }
   }
 }

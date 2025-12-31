@@ -21,13 +21,14 @@ pub struct LspClient {
   poller: Arc<Poller>,
   tx:     ManuallyDrop<crossbeam_channel::Sender<LspRequest>>,
 
-  pub state: LspState,
+  pub state: Arc<Mutex<LspState>>,
 }
 
 /// This is all the state we've sent to a particular server.
 #[derive(Default)]
 pub struct LspState {
   pub opened_files: HashSet<PathBuf>,
+  pub diagnostics:  HashMap<PathBuf, Vec<lsp_types::Diagnostic>>,
 }
 
 enum LspRequest {
@@ -46,12 +47,14 @@ struct Notification {
   params: Box<RawValue>,
 }
 
-struct LspWorker {
+pub(crate) struct LspWorker {
   rx: crossbeam_channel::Receiver<LspRequest>,
 
   poller: Arc<Poller>,
   writer: Writer,
   reader: Reader,
+
+  pub(crate) state: Arc<Mutex<LspState>>,
 
   pending: HashMap<u64, Completer>,
 
@@ -82,8 +85,11 @@ impl LspClient {
 
     let (send_tx, send_rx) = crossbeam_channel::unbounded();
 
+    let state = Arc::new(Mutex::new(LspState::default()));
+
     let worker = LspWorker {
       rx:      send_rx,
+      state:   state.clone(),
       poller:  Arc::new(Poller::new().unwrap()),
       writer:  Writer::new(stdin),
       reader:  Reader::new(stdout),
@@ -98,7 +104,7 @@ impl LspClient {
       _child: child,
       worker_thread: ManuallyDrop::new(worker_thread),
       next_id: 1,
-      state: Default::default(),
+      state,
       poller,
       tx: ManuallyDrop::new(send_tx),
     };
@@ -218,7 +224,9 @@ impl LspWorker {
             while let Some(msg) = self.reader.recv() {
               match msg {
                 Message::Request { method, .. } => info!("unhandled request: {}", method),
-                Message::Notification { method, .. } => info!("unhandled notification: {}", method),
+                Message::Notification { method, params } => {
+                  self.handle_notification(&method, params);
+                }
                 Message::Response { id, result, .. } => {
                   if let Some(completer) = self.pending.remove(&id) {
                     completer(&result);
