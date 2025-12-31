@@ -169,15 +169,21 @@ impl EditorState {
 
     if m == Mode::Normal {
       if let Some(edit) = self.current_edit.take() {
-        if self.history_position > 0 {
-          self.history.drain(self.history.len() - self.history_position..);
-        }
-        self.history_position = 0;
-        self.history.push(edit);
+        self.add_to_history(edit);
       }
     } else if m == Mode::Insert {
       self.current_edit = Some(Edit::empty());
     }
+  }
+
+  /// Should only be called after calling `current_edit.take()` or when applying
+  /// a change.
+  fn add_to_history(&mut self, edit: Edit) {
+    if self.history_position > 0 {
+      self.history.drain(self.history.len() - self.history_position..);
+    }
+    self.history_position = 0;
+    self.history.push(edit);
   }
 
   pub fn perform_action(&mut self, action: Action) {
@@ -311,11 +317,7 @@ impl EditorState {
     if let Some(edit) = &mut self.current_edit {
       edit.push(&change, &self.doc);
     } else {
-      if self.history_position > 0 {
-        self.history.drain(self.history.len() - self.history_position..);
-      }
-      self.history_position = 0;
-      self.history.push(Edit::new(&change, &self.doc));
+      self.add_to_history(Edit::new(&change, &self.doc));
     }
 
     self.change_no_history(change);
