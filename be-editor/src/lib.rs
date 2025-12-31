@@ -125,11 +125,15 @@ impl EditorState {
   /// visual column of the cursor after clamping to the maximum column in the
   /// current mode.
   fn move_to_col(&mut self, col: Column) {
-    self.cursor.column = col.clamp(self.max_column());
-    if col.0 == usize::MAX {
-      self.cursor.target_column = be_doc::VisualColumn(usize::MAX);
-    } else {
-      self.cursor.target_column = self.doc.visual_column(self.cursor);
+    let target = col.clamp(self.max_column());
+    let changed = self.cursor.column != target;
+    self.cursor.column = target;
+    if changed {
+      if col.0 == usize::MAX {
+        self.cursor.target_column = be_doc::VisualColumn(usize::MAX);
+      } else {
+        self.cursor.target_column = self.doc.visual_column(self.cursor);
+      }
     }
   }
 
