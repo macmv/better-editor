@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc, str::FromStr};
 
 use be_lsp::{
-  LanguageClientState, command,
+  LanguageClientState, LanguageServerKey, command,
   types::{self, Uri},
 };
 use be_task::Task;
@@ -36,8 +36,16 @@ impl EditorState {
     let Some(language) = config.language.get(ft.name()) else { return };
     let Some(lsp) = &language.lsp else { return };
 
-    let server = self.lsp.store.borrow_mut().spawn(&lsp.command);
-    self.lsp.client.add(server);
+    let key = LanguageServerKey::Language(ft.name().into());
+
+    let server = {
+      let mut store = self.lsp.store.borrow_mut();
+      match store.get(&key) {
+        Some(server) => server,
+        None => store.spawn(key.clone(), &lsp.command),
+      }
+    };
+    self.lsp.client.set(key, server);
 
     self.lsp.text_document = Some(types::TextDocumentIdentifier {
       uri: Uri::from_str(&format!(
