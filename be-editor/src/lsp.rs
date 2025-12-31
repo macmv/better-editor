@@ -23,7 +23,7 @@ pub struct LspState {
 
 #[derive(Default)]
 pub struct CompletionsState {
-  task:        Option<Task<Option<types::CompletionResponse>>>,
+  task:        Vec<Task<Option<types::CompletionResponse>>>,
   completions: Option<types::CompletionList>,
   show:        bool,
 }
@@ -46,7 +46,7 @@ impl EditorState {
       .unwrap(),
     });
 
-    self.lsp.client.notify(&command::DidOpenTextDocument {
+    self.lsp.client.send(&command::DidOpenTextDocument {
       uri:         self.lsp.text_document.clone().unwrap().uri.clone(),
       text:        self.doc.rope.to_string(),
       language_id: "rust".into(),
@@ -84,29 +84,10 @@ impl EditorState {
   pub(crate) fn lsp_request_completions(&mut self) {
     let cursor = self.cursor_to_lsp();
 
-    /*
-    let Some(lsp) = &mut self.lsp else { return };
-    if lsp.server_caps.completion_provider.is_none() {
-      return;
-    }
+    let Some(doc) = &self.lsp.text_document else { return };
 
-    let Some(doc) = &lsp.text_document else { return };
-
-    let task = lsp.client.request::<types::request::Completion>(types::CompletionParams {
-      text_document_position:    types::TextDocumentPositionParams {
-        text_document: doc.clone(),
-        position:      cursor,
-      },
-      context:                   Some(types::CompletionContext {
-        trigger_kind:      types::CompletionTriggerKind::INVOKED,
-        trigger_character: None,
-      }),
-      work_done_progress_params: types::WorkDoneProgressParams::default(),
-      partial_result_params:     types::PartialResultParams::default(),
-    });
-
-    lsp.completions.task = Some(task);
-    */
+    let tasks = self.lsp.client.send(&command::Completion { uri: doc.uri.clone() });
+    self.lsp.completions.task = tasks;
   }
 
   pub fn completions(&mut self) -> Option<Vec<String>> {

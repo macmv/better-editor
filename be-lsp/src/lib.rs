@@ -9,6 +9,7 @@ extern crate log;
 
 pub extern crate lsp_types as types;
 
+use be_task::Task;
 pub use client::LspClient;
 
 pub struct LanguageServerStore {
@@ -44,11 +45,15 @@ impl LanguageServerStore {
 impl LanguageClientState {
   pub fn add(&mut self, server: Weak<LanguageServerState>) { self.servers.push(server); }
 
-  pub fn notify<T: command::LspCommand>(&mut self, command: &T) {
+  pub fn send<T: command::LspCommand>(&mut self, command: &T) -> Vec<Task<T::Result>> {
+    let mut tasks = vec![];
+
     for server in &self.servers {
       if let Some(server) = server.upgrade() {
         // server.client.request::<T::Request>(command.params());
       }
     }
+
+    tasks
   }
 }
