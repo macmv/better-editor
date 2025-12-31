@@ -85,6 +85,8 @@ impl EditorState {
   }
 
   pub(crate) fn lsp_notify_change(&mut self, change: crate::Change) {
+    let Some(file) = &self.file else { return };
+
     let range = types::Range {
       start: self.offset_to_lsp(change.range.start),
       end:   self.offset_to_lsp(change.range.end),
@@ -93,7 +95,7 @@ impl EditorState {
     self.lsp.document_version += 1;
 
     self.lsp.client.send(&command::DidChangeTextDocument {
-      path:    self.file.as_ref().unwrap().path().to_path_buf(),
+      path:    file.path().to_path_buf(),
       version: self.lsp.document_version,
       changes: vec![(range, change.text)],
     });
