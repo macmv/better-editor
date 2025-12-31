@@ -134,7 +134,6 @@ impl Render<'_> {
         let baseline = (rect.y0 as f32 + glyph_run.baseline()).round();
 
         if let Some(underline) = &style.underline {
-          let underline_brush = &style.brush;
           let run_metrics = glyph_run.run().metrics();
           let offset = match underline.offset {
             Some(offset) => offset,
@@ -155,7 +154,7 @@ impl Render<'_> {
             (glyph_run.offset() as f64, y as f64),
             ((glyph_run.offset() + glyph_run.advance()) as f64, y as f64),
           );
-          self.scene.stroke(&Stroke::new(width.into()), transform, underline_brush, None, &line);
+          self.scene.stroke(&Stroke::new(width.into()), transform, &underline.brush, None, &line);
         }
 
         let font_data = run.font();
