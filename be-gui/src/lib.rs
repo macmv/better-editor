@@ -93,6 +93,25 @@ impl State {
   fn open(&mut self, path: &std::path::Path) {
     if let ViewContent::Editor(e) = &mut self.active_view_mut().content {
       let _ = e.editor.open(path);
+    } else if let Some(e) =
+      self.views.values_mut().filter(|v| v.visible()).find_map(|v| match &mut v.content {
+        ViewContent::Editor(e) => Some(e),
+        _ => None,
+      })
+    {
+      let _ = e.editor.open(path);
+
+      let prev_focus = self.active_tab().content.active();
+      // FIXME: Need some way of focusing a particular view id.
+      match &mut self.active_tab_mut().content {
+        Pane::Split(s) => s.active = 1,
+        _ => {}
+      }
+
+      let new_focus = self.active_tab().content.active();
+
+      self.views.get_mut(&prev_focus).unwrap().on_focus(false);
+      self.views.get_mut(&new_focus).unwrap().on_focus(true);
     }
   }
 
