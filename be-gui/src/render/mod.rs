@@ -19,6 +19,7 @@ pub use text::TextLayout;
 pub enum Event {
   Refresh,
   OpenFile(PathBuf),
+  Exit,
 }
 
 pub struct RenderStore {
@@ -432,6 +433,8 @@ impl Notify {
   pub fn wake(&self) { self.proxy.send_event(Event::Refresh).unwrap(); }
 
   pub fn open_file(&self, path: PathBuf) { self.proxy.send_event(Event::OpenFile(path)).unwrap(); }
+
+  pub fn exit(&self) { self.proxy.send_event(Event::Exit).unwrap(); }
 }
 
 #[derive(Debug, Copy, Clone)]

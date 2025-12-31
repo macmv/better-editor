@@ -208,6 +208,7 @@ impl State {
     match event {
       Event::Refresh => {}
       Event::OpenFile(path) => self.open(&path),
+      Event::Exit => {} // Handled by `window`
     }
   }
 }

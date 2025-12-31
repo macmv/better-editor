@@ -36,8 +36,9 @@ pub struct EditorState {
   history_position: usize,
   history:          Vec<Edit>,
 
-  pub config: Rc<RefCell<Config>>,
-  pub lsp:    lsp::LspState,
+  pub config:   Rc<RefCell<Config>>,
+  pub lsp:      lsp::LspState,
+  pub exit_cmd: Option<Box<dyn Fn()>>,
 }
 
 #[derive(Default)]
@@ -372,7 +373,12 @@ impl EditorState {
       "w" => {
         self.save().map(|()| format!("{}: written", self.file.as_ref().unwrap().path().display()))
       }
-      "q" => std::process::exit(0), // TODO: Send an exit request, just to drop everything.
+      "q" => {
+        if let Some(cmd) = &self.exit_cmd {
+          cmd();
+        }
+        Ok("exiting".to_string())
+      }
       "e" => self
         .open(Path::new(args))
         .map(|()| format!("{}: opened", self.file.as_ref().unwrap().path().display())),
