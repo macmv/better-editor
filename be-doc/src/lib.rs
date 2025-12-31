@@ -1,4 +1,7 @@
-use std::ops::{Add, Range};
+use std::{
+  fmt,
+  ops::{Add, Range},
+};
 
 use crop::{Rope, RopeSlice};
 use unicode_width::UnicodeWidthStr;
@@ -61,6 +64,9 @@ impl PartialEq<usize> for Column {
   fn eq(&self, other: &usize) -> bool { self.0 == *other }
 }
 
+impl fmt::Debug for Document {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{:?}", self.rope) }
+}
 impl Document {
   pub fn new() -> Document { Document { rope: Rope::new() } }
 
@@ -155,6 +161,10 @@ impl Add<i32> for Line {
   type Output = Line;
 
   fn add(self, rhs: i32) -> Line { Line((self.0 as isize + rhs as isize).max(0) as usize) }
+}
+
+impl PartialEq<&str> for Document {
+  fn eq(&self, other: &&str) -> bool { self.rope == *other }
 }
 
 #[cfg(test)]

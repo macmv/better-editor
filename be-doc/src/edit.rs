@@ -24,6 +24,18 @@ impl Edit {
     self.backward.push(change.reverse(doc));
     self.forward.push(change.clone());
   }
+
+  pub fn redo(&self, doc: &mut Document) {
+    for change in self.forward.iter() {
+      doc.apply(&change);
+    }
+  }
+
+  pub fn undo(&self, doc: &mut Document) {
+    for change in self.backward.iter().rev() {
+      doc.apply(&change);
+    }
+  }
 }
 
 impl Change {
@@ -44,5 +56,56 @@ impl Change {
 impl Document {
   pub fn apply(&mut self, change: &Change) {
     self.rope.replace(change.range.clone(), &change.text);
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn edit_works() {
+    let mut doc = Document::new();
+
+    let change = Change::insert(0, "hello");
+    let edit_1 = Edit::new(&change, &doc);
+    doc.apply(&change);
+
+    let change = Change::replace(1..2, "a");
+    let edit_2 = Edit::new(&change, &doc);
+    doc.apply(&change);
+    assert_eq!(doc, "hallo");
+
+    edit_2.undo(&mut doc);
+    assert_eq!(doc, "hello");
+
+    edit_1.undo(&mut doc);
+    assert_eq!(doc, "");
+
+    edit_1.redo(&mut doc);
+    assert_eq!(doc, "hello");
+
+    edit_2.redo(&mut doc);
+    assert_eq!(doc, "hallo");
+  }
+
+  #[test]
+  fn multiple_changes() {
+    let mut doc = Document::new();
+
+    let change = Change::insert(0, "hello");
+    let mut edit = Edit::new(&change, &doc);
+    doc.apply(&change);
+
+    let change = Change::replace(1..2, "a");
+    edit.push(&change, &doc);
+    doc.apply(&change);
+    assert_eq!(doc, "hallo");
+
+    edit.undo(&mut doc);
+    assert_eq!(doc, "");
+
+    edit.redo(&mut doc);
+    assert_eq!(doc, "hallo");
   }
 }
