@@ -4,7 +4,7 @@ use std::{
   ops::Range,
 };
 
-use crate::{EditorState, lsp::DiagnosticLevel, treesitter::CapturesIter};
+use crate::{Diagnostic, EditorState, lsp::DiagnosticLevel, treesitter::CapturesIter};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Highlight<'a> {
@@ -28,7 +28,7 @@ pub enum HighlightKey<'a> {
 
 enum HighlightIter<'a> {
   TreeSitter(CapturesIter<'a>),
-  Diagnostics(std::slice::Iter<'a, crate::lsp::Diagnostic>),
+  Diagnostics(DiagnosticIter<'a>),
 
   #[cfg(test)]
   Slice(std::slice::Iter<'a, Highlight<'a>>),
@@ -38,6 +38,11 @@ enum HighlightIter<'a> {
 struct StartNode<'a> {
   highlight: Highlight<'a>,
   src:       usize,
+}
+
+struct DiagnosticIter<'a> {
+  iter:  std::slice::Iter<'a, Diagnostic>,
+  range: Range<usize>,
 }
 
 impl Ord for StartNode<'_> {
@@ -82,7 +87,10 @@ impl EditorState {
       iterators.push(HighlightIter::TreeSitter(highlights));
     }
 
-    iterators.push(HighlightIter::Diagnostics(self.lsp.diagnostics.iter()));
+    iterators.push(HighlightIter::Diagnostics(DiagnosticIter {
+      iter:  self.lsp.diagnostics.iter(),
+      range: range.clone(),
+    }));
 
     MergeIterator::new(iterators, range.start)
   }
@@ -94,10 +102,23 @@ impl<'a> Iterator for HighlightIter<'a> {
   fn next(&mut self) -> Option<Self::Item> {
     match self {
       HighlightIter::TreeSitter(iter) => iter.next(),
-      HighlightIter::Diagnostics(iter) => iter.next().map(|d| d.highlight()),
+      HighlightIter::Diagnostics(iter) => iter.next(),
 
       #[cfg(test)]
       HighlightIter::Slice(iter) => iter.next().copied(),
+    }
+  }
+}
+
+impl<'a> Iterator for DiagnosticIter<'a> {
+  type Item = Highlight<'a>;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    loop {
+      let it = self.iter.next()?;
+      if self.range.contains(&it.range.start) || self.range.contains(&it.range.end) {
+        return Some(it.highlight());
+      }
     }
   }
 }
