@@ -129,8 +129,8 @@ impl EditorState {
     let changed = self.cursor.column != target;
     self.cursor.column = target;
     if changed {
-      if col.0 == usize::MAX {
-        self.cursor.target_column = be_doc::VisualColumn(usize::MAX);
+      if col == Column::MAX {
+        self.cursor.target_column = be_doc::VisualColumn::MAX;
       } else {
         self.cursor.target_column = self.doc.visual_column(self.cursor);
       }
