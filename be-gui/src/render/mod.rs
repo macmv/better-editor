@@ -24,6 +24,7 @@ pub enum Event {
 pub struct RenderStore {
   proxy: winit::event_loop::EventLoopProxy<Event>,
 
+  pub lsp:    Rc<RefCell<be_lsp::LanguageServerStore>>,
   pub config: Rc<RefCell<Config>>,
   pub text:   TextStore,
   pub theme:  Theme,
@@ -115,6 +116,7 @@ pub fn run() {
 
     let store = RenderStore {
       proxy,
+      lsp: Rc::new(RefCell::new(be_lsp::LanguageServerStore::default())),
       text: TextStore::new(&config),
       config,
       render: vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),

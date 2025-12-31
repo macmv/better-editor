@@ -32,8 +32,9 @@ pub struct EditorState {
   damages:    HashSet<Line>,
   damage_all: bool,
 
-  pub config: Rc<RefCell<Config>>,
-  pub lsp:    LanguageClientState,
+  pub config:     Rc<RefCell<Config>>,
+  pub lsp_store:  Rc<RefCell<be_lsp::LanguageServerStore>>,
+  pub lsp_client: LanguageClientState,
 }
 
 struct Change {

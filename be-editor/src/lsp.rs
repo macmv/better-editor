@@ -29,7 +29,7 @@ impl EditorState {
     let Some(language) = config.language.get(ft.name()) else { return };
     let Some(lsp) = &language.lsp else { return };
 
-    self.lsp.spawn(&lsp.command);
+    self.lsp_client.spawn(&lsp.command);
 
     /*
     lsp.text_document = Some(types::TextDocumentIdentifier {

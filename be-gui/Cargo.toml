@@ -16,6 +16,7 @@ skrifa = { version = "0.37", default-features = false }
 be-doc = { path = "../be-doc" }
 be-config = { path = "../be-config" }
 be-input = { path = "../be-input" }
+be-lsp = { path = "../be-lsp" }
 be-editor = { path = "../be-editor" }
 be-terminal = { path = "../be-terminal" }
 bytemuck = "1.24.0"
