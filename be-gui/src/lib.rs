@@ -184,4 +184,11 @@ impl State {
       x += 6.0;
     }
   }
+
+  fn on_event(&mut self, event: Event) {
+    match event {
+      Event::Refresh => {}
+      Event::OpenFile(path) => self.open(&path),
+    }
+  }
 }

@@ -94,10 +94,7 @@ impl winit::application::ApplicationHandler<Event> for App {
 
   fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: Event) {
     if let Some(init) = &mut self.init {
-      match event {
-        Event::Refresh => {}
-        Event::OpenFile(path) => init.app.state.open(&path),
-      }
+      init.app.state.on_event(event);
 
       init.window.request_redraw();
     }
