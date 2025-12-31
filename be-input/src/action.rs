@@ -13,6 +13,7 @@ pub enum Action {
 }
 
 pub enum Navigation {
+  OpenSearch,
   Direction(Direction),
   Tab(u8),
 }
@@ -87,6 +88,13 @@ impl Action {
           Key::Char(c @ '0'..='9') => Ok(Action::Navigate { nav: Navigation::Tab(c as u8 - b'0') }),
           _ => Err(ActionError::Unrecognized),
         },
+
+        (Mode::Normal, Key::Char(' ')) if !key.control => {
+          match iter.next().ok_or(ActionError::Incomplete)?.key {
+            Key::Char('s') => Ok(Action::Navigate { nav: Navigation::OpenSearch }),
+            _ => Err(ActionError::Unrecognized),
+          }
+        }
 
         (Mode::Insert, Key::Char(' ')) if key.control => Ok(Action::Autocomplete),
         (Mode::Insert, Key::Char(c)) if key.control => Ok(Action::Control { char: c }),
