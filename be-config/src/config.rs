@@ -95,6 +95,7 @@ config!(
   #[derive(Clone)]
   pub struct EditorSettings {
     pub scroll_offset: u32,
+    pub indent_width:  u32,
   }
 );
 
