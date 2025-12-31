@@ -60,6 +60,12 @@ pub enum Direction {
   Right,
 }
 
+#[derive(Copy, Clone)]
+pub enum VerticalDirection {
+  Up,
+  Down,
+}
+
 impl Action {
   pub fn from_input(mode: Mode, input: &[KeyStroke]) -> Result<Action, ActionError> {
     let mut count = 0;

@@ -2,7 +2,7 @@ use std::{io, path::PathBuf};
 
 mod config;
 
-pub use config::Config;
+pub use config::*;
 
 fn config_root() -> io::Result<PathBuf> {
   #[cfg(unix)]

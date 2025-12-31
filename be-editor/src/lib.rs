@@ -1,8 +1,8 @@
 use std::{cell::RefCell, collections::HashSet, path::Path, rc::Rc};
 
 use be_config::Config;
-use be_doc::{Change, Column, Cursor, Document, Edit, Line};
-use be_input::{Action, Direction, Mode, Move};
+use be_doc::{Change, Column, Cursor, Document, Edit, Line, crop::RopeSlice};
+use be_input::{Action, Direction, Mode, Move, VerticalDirection};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{fs::OpenedFile, status::Status};
@@ -45,6 +45,13 @@ pub struct EditorState {
 pub struct CommandState {
   pub text:   String,
   pub cursor: usize, // in bytes
+}
+
+#[derive(Copy, Clone)]
+pub struct IndentLevel(pub usize);
+
+impl IndentLevel {
+  pub const ZERO: IndentLevel = IndentLevel(0);
 }
 
 impl From<&str> for EditorState {
@@ -393,6 +400,78 @@ impl EditorState {
       Ok(m) => self.status = Some(Status::for_success(m)),
       Err(e) => self.status = Some(Status::for_error(e)),
     }
+  }
+
+  pub fn guess_indent(&self, line: Line, direction: VerticalDirection) -> IndentLevel {
+    match direction {
+      VerticalDirection::Up => {
+        if let Some(prev) = self.prev_non_empty_line(line) {
+          let mut level = IndentLevel::guess(&self.config.borrow().editor, prev);
+          for c in prev.chars().rev() {
+            match c {
+              '{' | '(' | '[' => level.0 += 1,
+              ' ' => {}
+              _ => break,
+            }
+          }
+          level
+        } else {
+          IndentLevel::ZERO
+        }
+      }
+      VerticalDirection::Down => {
+        if let Some(next) = self.next_non_empty_line(line) {
+          let mut level = IndentLevel::guess(&self.config.borrow().editor, next);
+          for c in next.chars().rev() {
+            match c {
+              '}' | ')' | ']' => level.0 += 1,
+              ' ' => {}
+              _ => break,
+            }
+          }
+          level
+        } else {
+          IndentLevel::ZERO
+        }
+      }
+    }
+  }
+
+  fn prev_non_empty_line(&self, mut line: Line) -> Option<RopeSlice<'_>> {
+    while line.0 > 0 {
+      line.0 -= 1;
+      let line = self.doc.line(line);
+      if !line.chars().all(|c| c.is_whitespace()) {
+        return Some(line);
+      }
+    }
+    None
+  }
+
+  fn next_non_empty_line(&self, mut line: Line) -> Option<RopeSlice<'_>> {
+    while line.0 < self.doc.len_lines() {
+      line.0 += 1;
+      let line = self.doc.line(line);
+      if !line.chars().all(|c| c.is_whitespace()) {
+        return Some(line);
+      }
+    }
+    None
+  }
+}
+
+impl IndentLevel {
+  pub fn guess(config: &be_config::EditorSettings, line: RopeSlice<'_>) -> IndentLevel {
+    let mut width = 0;
+    for c in line.chars() {
+      match c {
+        '\t' => {} // TODO
+        ' ' => width += 1,
+        _ => break,
+      }
+    }
+
+    IndentLevel(width / config.indent_width as usize)
   }
 }
 
