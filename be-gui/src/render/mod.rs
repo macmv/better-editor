@@ -114,9 +114,19 @@ pub fn run() {
 
     let config = Rc::new(RefCell::new(Config::load()));
 
+    let mut lsp_store = be_lsp::LanguageServerStore::default();
+
+    {
+      let waker = Waker { proxy: proxy.clone() };
+      lsp_store.set_on_message(move || {
+        println!("WAKING");
+        waker.wake()
+      });
+    }
+
     let store = RenderStore {
       proxy,
-      lsp: Rc::new(RefCell::new(be_lsp::LanguageServerStore::default())),
+      lsp: Rc::new(RefCell::new(lsp_store)),
       text: TextStore::new(&config),
       config,
       render: vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),

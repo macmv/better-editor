@@ -19,8 +19,6 @@ pub struct LspClient {
 
   poller: Arc<Poller>,
   tx:     ManuallyDrop<crossbeam_channel::Sender<LspRequest>>,
-
-  on_message: Arc<Mutex<Box<dyn Fn() + Send>>>,
 }
 
 enum LspRequest {
@@ -63,7 +61,10 @@ struct Reader {
 }
 
 impl LspClient {
-  pub fn spawn(cmd: &str) -> (LspClient, lsp_types::ServerCapabilities) {
+  pub fn spawn(
+    cmd: &str,
+    on_message: Arc<Mutex<Box<dyn Fn() + Send>>>,
+  ) -> (LspClient, lsp_types::ServerCapabilities) {
     let mut child =
       std::process::Command::new(cmd).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
 
@@ -71,8 +72,6 @@ impl LspClient {
     let stdout = child.stdout.take().unwrap();
 
     let (send_tx, send_rx) = crossbeam_channel::unbounded();
-
-    let on_message: Arc<Mutex<Box<dyn Fn() + Send>>> = Arc::new(Mutex::new(Box::new(|| {})));
 
     let worker = LspWorker {
       rx:      send_rx,
@@ -92,7 +91,6 @@ impl LspClient {
       next_id: 1,
       poller,
       tx: ManuallyDrop::new(send_tx),
-      on_message,
     };
 
     let init = lsp_types::InitializeParams {
@@ -173,10 +171,6 @@ impl LspClient {
 
     let thread = unsafe { ManuallyDrop::take(&mut self.worker_thread) };
     thread.join().unwrap();
-  }
-
-  pub fn set_on_message(&self, wake: impl Fn() + Send + 'static) {
-    *self.on_message.lock() = Box::new(wake);
   }
 }
 
@@ -512,7 +506,7 @@ mod tests {
 
   #[test]
   fn spawn_client() {
-    let (mut client, _) = LspClient::spawn("rust-analyzer");
+    let (mut client, _) = LspClient::spawn("rust-analyzer", Arc::new(Mutex::new(Box::new(|| {}))));
 
     let path = std::path::Path::new("./src/lib.rs").canonicalize().unwrap();
     let uri = Uri::from_str(&format!("file://{}", path.to_str().unwrap())).unwrap();

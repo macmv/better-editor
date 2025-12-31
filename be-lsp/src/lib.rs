@@ -14,7 +14,8 @@ pub extern crate lsp_types as types;
 pub use client::LspClient;
 
 pub struct LanguageServerStore {
-  servers: Vec<Arc<LanguageServerState>>,
+  servers:    Vec<Arc<LanguageServerState>>,
+  on_message: Arc<Mutex<Box<dyn Fn() + Send>>>,
 }
 
 #[derive(Default)]
@@ -28,12 +29,18 @@ pub struct LanguageServerState {
 }
 
 impl Default for LanguageServerStore {
-  fn default() -> Self { LanguageServerStore { servers: vec![] } }
+  fn default() -> Self {
+    LanguageServerStore { servers: vec![], on_message: Arc::new(Mutex::new(Box::new(|| {}))) }
+  }
 }
 
 impl LanguageServerStore {
+  pub fn set_on_message<F: Fn() + Send + 'static>(&mut self, f: F) {
+    *self.on_message.lock() = Box::new(f);
+  }
+
   pub fn spawn(&mut self, cmd: &str) -> Weak<LanguageServerState> {
-    let (client, server_caps) = LspClient::spawn(cmd);
+    let (client, server_caps) = LspClient::spawn(cmd, self.on_message.clone());
 
     let state = Arc::new(LanguageServerState { client: Mutex::new(client), caps: server_caps });
     let weak = Arc::downgrade(&state);
