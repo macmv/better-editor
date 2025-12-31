@@ -4,10 +4,11 @@ use polling::{Events, Poller};
 use serde::de;
 use serde_json::value::RawValue;
 use std::{
-  collections::{HashMap, VecDeque},
+  collections::{HashMap, HashSet, VecDeque},
   fmt,
   io::{self, Read, Write},
   mem::ManuallyDrop,
+  path::PathBuf,
   process::{Child, ChildStdin, ChildStdout, Stdio},
   sync::Arc,
 };
@@ -19,6 +20,14 @@ pub struct LspClient {
 
   poller: Arc<Poller>,
   tx:     ManuallyDrop<crossbeam_channel::Sender<LspRequest>>,
+
+  pub state: LspState,
+}
+
+/// This is all the state we've sent to a particular server.
+#[derive(Default)]
+pub(crate) struct LspState {
+  pub opened_files: HashSet<PathBuf>,
 }
 
 enum LspRequest {
@@ -89,6 +98,7 @@ impl LspClient {
       _child: child,
       worker_thread: ManuallyDrop::new(worker_thread),
       next_id: 1,
+      state: Default::default(),
       poller,
       tx: ManuallyDrop::new(send_tx),
     };

@@ -1,9 +1,6 @@
-use std::{cell::RefCell, rc::Rc, str::FromStr};
+use std::{cell::RefCell, rc::Rc};
 
-use be_lsp::{
-  LanguageClientState, LanguageServerKey, command,
-  types::{self, Uri},
-};
+use be_lsp::{LanguageClientState, LanguageServerKey, command, types};
 use be_task::Task;
 
 use crate::EditorState;
@@ -13,7 +10,6 @@ pub struct LspState {
   pub store:  Rc<RefCell<be_lsp::LanguageServerStore>>,
   pub client: LanguageClientState,
 
-  text_document:    Option<types::TextDocumentIdentifier>,
   document_version: i32,
   pub completions:  CompletionsState,
 
@@ -47,16 +43,8 @@ impl EditorState {
     };
     self.lsp.client.set(key, server);
 
-    self.lsp.text_document = Some(types::TextDocumentIdentifier {
-      uri: Uri::from_str(&format!(
-        "file://{}",
-        self.file.as_ref().unwrap().path().to_string_lossy()
-      ))
-      .unwrap(),
-    });
-
     self.lsp.client.send(&command::DidOpenTextDocument {
-      uri:         self.lsp.text_document.clone().unwrap().uri.clone(),
+      path:        self.file.as_ref().unwrap().path().to_path_buf(),
       text:        self.doc.rope.to_string(),
       language_id: "rust".into(),
     });
@@ -68,12 +56,10 @@ impl EditorState {
       end:   self.offset_to_lsp(change.range.end),
     };
 
-    let Some(doc) = &self.lsp.text_document else { return };
-
     self.lsp.document_version += 1;
 
     self.lsp.client.send(&command::DidChangeTextDocument {
-      uri:     doc.uri.clone(),
+      path:    self.file.as_ref().unwrap().path().to_path_buf(),
       version: self.lsp.document_version,
       changes: vec![(range, change.text)],
     });
@@ -82,9 +68,10 @@ impl EditorState {
   pub(crate) fn lsp_request_completions(&mut self) {
     let cursor = self.cursor_to_lsp();
 
-    let Some(doc) = &self.lsp.text_document else { return };
-
-    let tasks = self.lsp.client.send(&command::Completion { uri: doc.uri.clone(), cursor });
+    let tasks = self.lsp.client.send(&command::Completion {
+      path: self.file.as_ref().unwrap().path().to_path_buf(),
+      cursor,
+    });
     self.lsp.completions.clear_on_message = true;
     self.lsp.completions.tasks = tasks;
   }
