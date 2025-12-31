@@ -86,20 +86,24 @@ impl EditorView {
       self.scroll.y = (target_line as f64 * line_height) - render.size().height;
     }
 
-    let min_line = ((self.scroll.y / line_height).floor() as usize)
-      .clamp(0, self.editor.doc().rope.lines().len());
-    let max_line = (((self.scroll.y + render.size().height) / line_height).ceil() as usize)
-      .clamp(0, self.editor.doc().rope.lines().len());
+    let min_line = be_doc::Line(
+      ((self.scroll.y / line_height).floor() as usize)
+        .clamp(0, self.editor.doc().rope.lines().len()),
+    );
+    let max_line = be_doc::Line(
+      (((self.scroll.y + render.size().height) / line_height).ceil() as usize)
+        .clamp(0, self.editor.doc().rope.lines().len()),
+    );
 
-    let start = self.editor.doc().rope.byte_of_line(min_line);
-    let end = if max_line >= self.editor.doc().rope.line_len() {
+    let start = self.editor.doc().byte_of_line(min_line);
+    let end = if max_line.as_usize() >= self.editor.doc().len_lines() {
       self.editor.doc().rope.byte_len()
     } else {
-      self.editor.doc().rope.byte_of_line(max_line + 1)
+      self.editor.doc().byte_of_line(max_line + 1)
     };
 
     let mut index = start;
-    let mut i = min_line;
+    let mut i = min_line.as_usize();
 
     let start_y = -(self.scroll.y % line_height);
     let mut y = start_y;
@@ -140,7 +144,7 @@ impl EditorView {
 
         let cursor = layout
           .cursor(self.editor.doc().cursor_column_offset(self.editor.cursor()), mode)
-          + Vec2::new(20.0, start_y + (line - min_line) as f64 * line_height);
+          + Vec2::new(20.0, start_y + (line - min_line.as_usize()) as f64 * line_height);
         render.fill(&cursor, render.theme().text);
 
         if let Some(completions) = self.editor.completions() {

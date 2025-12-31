@@ -74,6 +74,7 @@ impl Document {
   pub fn line_with_terminator(&self, line: Line) -> RopeSlice<'_> {
     self.rope.line_slice(line.0..line.0 + 1)
   }
+  pub fn byte_of_line(&self, line: Line) -> usize { self.rope.byte_of_line(line.0) }
   pub fn len_lines(&self) -> usize { self.rope.line_len() }
 
   pub fn visual_column(&self, cursor: Cursor) -> VisualColumn {

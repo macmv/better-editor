@@ -79,7 +79,7 @@ impl EditorState {
 
   pub(crate) fn offset_to_ts_point(&mut self, offset: usize) -> tree_sitter::Point {
     let row = self.doc.rope.line_of_byte(offset);
-    let column = offset - self.doc.rope.byte_of_line(row);
+    let column = offset - self.doc.byte_of_line(be_doc::Line(row));
 
     tree_sitter::Point { row, column }
   }

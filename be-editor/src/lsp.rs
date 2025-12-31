@@ -149,13 +149,13 @@ impl EditorState {
 
   fn offset_to_lsp(&self, offset: usize) -> types::Position {
     let line = self.doc.rope.line_of_byte(offset);
-    let column = offset - self.doc.rope.byte_of_line(line);
+    let column = offset - self.doc.byte_of_line(be_doc::Line(line));
     types::Position { line: line as u32, character: column as u32 }
   }
 }
 
 fn lsp_to_offset(doc: &be_doc::Document, position: types::Position) -> usize {
-  doc.rope.byte_of_line(position.line as usize) + position.character as usize
+  doc.byte_of_line(be_doc::Line(position.line as usize)) + position.character as usize
 }
 
 impl Diagnostic {

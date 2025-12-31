@@ -201,11 +201,11 @@ impl EditorState {
         self.set_mode(Mode::Insert);
 
         if after {
-          let target = self.doc.rope.byte_of_line(self.cursor().line.as_usize() + 1);
+          let target = self.doc.byte_of_line(self.cursor().line + 1);
           self.change(Change::insert(target, "\n"));
           self.move_to_line(self.cursor.line + 1);
         } else {
-          let target = self.doc.rope.byte_of_line(self.cursor().line.as_usize());
+          let target = self.doc.byte_of_line(self.cursor().line);
           self.change(Change::insert(target, "\n"));
         }
 
@@ -272,17 +272,14 @@ impl EditorState {
       }
       Edit::DeleteLine => {
         self.change(Change::remove(
-          self.doc.rope.byte_of_line(self.cursor.line.as_usize())
-            ..self.doc.rope.byte_of_line(self.cursor.line.as_usize() + 1),
+          self.doc.byte_of_line(self.cursor.line)..self.doc.byte_of_line(self.cursor.line + 1),
         ));
         self.clamp_column();
       }
       Edit::DeleteRestOfLine => {
         self.change(Change::remove(
           self.doc.cursor_offset(self.cursor)
-            ..self
-              .doc
-              .offset_by_graphemes(self.doc.rope.byte_of_line(self.cursor.line.as_usize() + 1), -1),
+            ..self.doc.offset_by_graphemes(self.doc.byte_of_line(self.cursor.line + 1), -1),
         ));
         self.clamp_column();
       }
