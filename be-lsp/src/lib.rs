@@ -103,3 +103,12 @@ impl LanguageClientState {
     tasks
   }
 }
+
+impl Drop for LanguageServerStore {
+  fn drop(&mut self) {
+    for (_, server) in self.servers.drain() {
+      let server = Arc::into_inner(server).expect("server should not have multiple references");
+      server.client.into_inner().shutdown();
+    }
+  }
+}
