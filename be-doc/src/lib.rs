@@ -3,9 +3,11 @@ use std::ops::{Add, Range};
 use crop::{Rope, RopeSlice};
 use unicode_width::UnicodeWidthStr;
 
+mod edit;
 mod fs;
 
 pub use crop;
+pub use edit::{Change, Edit};
 
 #[derive(Default)]
 pub struct Document {
@@ -131,10 +133,6 @@ impl Document {
   }
 
   pub fn range(&self, range: Range<usize>) -> RopeSlice<'_> { self.rope.byte_slice(range) }
-
-  pub fn replace_range(&mut self, range: Range<usize>, text: &str) {
-    self.rope.replace(range, text);
-  }
 }
 
 impl Column {
@@ -166,14 +164,14 @@ mod tests {
   #[test]
   fn delete_graphemes() {
     let mut doc = Document::from("abc");
-    doc.replace_range(doc.grapheme_slice(Cursor::START, 2), "");
+    doc.rope.replace(doc.grapheme_slice(Cursor::START, 2), "");
     assert_eq!(doc.rope, "c");
   }
 
   #[test]
   fn delete_graphemes_handles_emojis() {
     let mut doc = Document::from("💖a💖");
-    doc.replace_range(doc.grapheme_slice(Cursor::START, 2), "");
+    doc.rope.replace(doc.grapheme_slice(Cursor::START, 2), "");
     assert_eq!(doc.rope, "💖");
   }
 }

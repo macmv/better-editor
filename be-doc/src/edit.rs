@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use be_doc::Document;
+use crate::Document;
 
 pub struct Edit {
   forward:  Vec<Change>,
@@ -8,8 +8,8 @@ pub struct Edit {
 }
 
 pub struct Change {
-  pub(crate) range: Range<usize>,
-  pub(crate) text:  String,
+  pub range: Range<usize>,
+  pub text:  String,
 }
 
 impl Edit {
@@ -32,5 +32,11 @@ impl Change {
       range: self.range.start..self.text.len() + self.range.start,
       text:  doc.rope.byte_slice(self.range.clone()).to_string(),
     }
+  }
+}
+
+impl Document {
+  pub fn apply(&mut self, change: &Change) {
+    self.rope.replace(change.range.clone(), &change.text);
   }
 }

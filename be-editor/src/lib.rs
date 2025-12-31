@@ -1,17 +1,12 @@
 use std::{cell::RefCell, collections::HashSet, path::Path, rc::Rc};
 
 use be_config::Config;
-use be_doc::{Column, Cursor, Document, Line};
+use be_doc::{Change, Column, Cursor, Document, Edit, Line};
 use be_input::{Action, Direction, Mode, Move};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{
-  edit::{Change, Edit},
-  fs::OpenedFile,
-  status::Status,
-};
+use crate::{fs::OpenedFile, status::Status};
 
-mod edit;
 mod filetype;
 mod fs;
 mod highlight;
@@ -295,7 +290,7 @@ impl EditorState {
       self.damage_all = true;
     }
 
-    self.doc.replace_range(change.range.clone(), &change.text);
+    self.doc.apply(&change);
 
     self.on_change_highlight(&change, start_pos, end_pos);
 
