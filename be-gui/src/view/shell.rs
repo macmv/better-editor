@@ -53,7 +53,7 @@ impl Shell {
 
     if !self.set_waker {
       self.set_waker = true;
-      let waker = render.waker();
+      let waker = render.notifier();
       // SAFETY: This isn't safe. Need to join the thread on drop.
       let poller = unsafe { self.terminal.make_poller() };
       std::thread::spawn(move || {

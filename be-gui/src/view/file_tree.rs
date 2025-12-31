@@ -6,14 +6,14 @@ use std::{
 use be_input::{Action, Direction, Mode, Move};
 use kurbo::{Point, Rect, Vec2};
 
-use crate::{Render, Waker};
+use crate::{Notify, Render};
 
 pub struct FileTree {
   tree:    Directory,
   focused: bool,
   active:  usize,
 
-  waker: Waker,
+  notify: Notify,
 }
 
 #[derive(PartialOrd, PartialEq, Eq, Ord)]
@@ -60,16 +60,16 @@ impl Ord for Directory {
 }
 
 impl FileTree {
-  pub fn current_directory(waker: Waker) -> Self { FileTree::new(Path::new("."), waker) }
+  pub fn current_directory(notify: Notify) -> Self { FileTree::new(Path::new("."), notify) }
 
   pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
 
-  pub fn new(path: &Path, waker: Waker) -> Self {
+  pub fn new(path: &Path, notify: Notify) -> Self {
     let path = path.canonicalize().unwrap();
     let mut tree = Directory::new(path);
     tree.expand();
 
-    FileTree { tree, focused: false, active: 0, waker }
+    FileTree { tree, focused: false, active: 0, notify }
   }
 
   fn active_mut(&mut self) -> Option<&mut Item> {
@@ -113,7 +113,7 @@ impl FileTree {
           Some(Item::Directory(dir)) => dir.toggle_expanded(),
           Some(Item::File(file)) => {
             let path = file.path.clone();
-            self.waker.open_file(path);
+            self.notify.open_file(path);
           }
           None => {}
         }

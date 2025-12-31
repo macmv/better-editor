@@ -33,7 +33,7 @@ pub struct RenderStore {
 }
 
 #[derive(Clone)]
-pub struct Waker {
+pub struct Notify {
   proxy: winit::event_loop::EventLoopProxy<Event>,
 }
 
@@ -117,8 +117,8 @@ pub fn run() {
     let mut lsp_store = be_lsp::LanguageServerStore::default();
 
     {
-      let waker = Waker { proxy: proxy.clone() };
-      lsp_store.set_on_message(move || waker.wake());
+      let notifier = Notify { proxy: proxy.clone() };
+      lsp_store.set_on_message(move || notifier.wake());
     }
 
     let store = RenderStore {
@@ -262,7 +262,7 @@ impl Brush {
 impl RenderStore {
   pub fn theme(&self) -> &Theme { &self.theme }
 
-  pub fn waker(&self) -> Waker { Waker { proxy: self.proxy.clone() } }
+  pub fn notifier(&self) -> Notify { Notify { proxy: self.proxy.clone() } }
 }
 
 impl<'a> Render<'a> {
@@ -275,7 +275,7 @@ impl<'a> Render<'a> {
 
   pub fn theme(&self) -> &Theme { &self.store.theme }
 
-  pub fn waker(&self) -> Waker { Waker { proxy: self.store.proxy.clone() } }
+  pub fn notifier(&self) -> Notify { Notify { proxy: self.store.proxy.clone() } }
 
   pub fn split<S>(
     &mut self,
@@ -374,7 +374,7 @@ impl<'a> Layout<'a> {
     if let Some(top) = self.stack.last() { top.origin().to_vec2() } else { Vec2::ZERO }
   }
 
-  pub fn waker(&self) -> Waker { Waker { proxy: self.store.proxy.clone() } }
+  pub fn notifier(&self) -> Notify { Notify { proxy: self.store.proxy.clone() } }
 
   pub fn current_bounds(&self) -> Rect {
     Rect::from_origin_size(self.offset().to_point(), self.size())
@@ -428,7 +428,7 @@ impl<'a> Layout<'a> {
   }
 }
 
-impl Waker {
+impl Notify {
   pub fn wake(&self) { self.proxy.send_event(Event::Refresh).unwrap(); }
 
   pub fn open_file(&self, path: PathBuf) { self.proxy.send_event(Event::OpenFile(path)).unwrap(); }

@@ -45,7 +45,7 @@ impl State {
     let shell = state.new_view(view::Shell::new());
     state.tabs.push(Tab { title: "zsh".to_owned(), content: pane::Pane::View(shell) });
 
-    let file_tree = state.new_view(view::FileTree::current_directory(store.waker()));
+    let file_tree = state.new_view(view::FileTree::current_directory(store.notifier()));
     let editor = state.new_view(view::EditorView::new(store));
     state.tabs.push(Tab {
       title:   "editor".to_owned(),
