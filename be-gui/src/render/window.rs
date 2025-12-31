@@ -44,7 +44,10 @@ impl winit::application::ApplicationHandler<Event> for App {
       .create_window(winit::window::WindowAttributes::default().with_title("Better Editor"))
       .unwrap();
 
-    let instance = wgpu::Instance::new(&Default::default());
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+      flags: wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL, // disable validation.
+      ..Default::default()
+    });
     let surface = instance.create_surface(&window).unwrap();
 
     // SAFETY: `window` is kept alive for the duration of `surface`.
