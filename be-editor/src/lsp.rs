@@ -3,16 +3,16 @@ use std::{cell::RefCell, ops::Range, rc::Rc};
 use be_lsp::{LanguageClientState, LanguageServerKey, command, types};
 use be_task::Task;
 
-use crate::EditorState;
+use crate::{EditorState, HighlightKey, highlight::Highlight};
 
 #[derive(Default)]
 pub struct LspState {
   pub store:  Rc<RefCell<be_lsp::LanguageServerStore>>,
   pub client: LanguageClientState,
 
-  document_version: i32,
-  pub completions:  CompletionsState,
-  diagnostics:      Vec<Diagnostic>,
+  document_version:       i32,
+  pub completions:        CompletionsState,
+  pub(crate) diagnostics: Vec<Diagnostic>,
 
   // FIXME: ew.
   pub set_waker: bool,
@@ -26,12 +26,13 @@ pub struct CompletionsState {
   clear_on_message: bool,
 }
 
-struct Diagnostic {
-  range:   Range<usize>,
-  message: String,
-  level:   DiagnosticLevel,
+pub struct Diagnostic {
+  pub range:   Range<usize>,
+  pub message: String,
+  pub level:   DiagnosticLevel,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DiagnosticLevel {
   Error,
   Warning,
@@ -79,6 +80,8 @@ impl EditorState {
         }));
       }
     });
+
+    self.lsp.diagnostics.sort_by_key(|d| d.range.start);
   }
 
   pub(crate) fn lsp_notify_change(&mut self, change: crate::Change) {
@@ -151,4 +154,14 @@ impl EditorState {
 
 fn lsp_to_offset(doc: &be_doc::Document, position: types::Position) -> usize {
   doc.rope.byte_of_line(position.line as usize) + position.character as usize
+}
+
+impl Diagnostic {
+  pub fn highlight(&self) -> Highlight<'_> {
+    Highlight {
+      start: self.range.start,
+      end:   self.range.end,
+      key:   HighlightKey::Diagnostic(self.level),
+    }
+  }
 }

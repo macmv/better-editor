@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use be_editor::HighlightKey;
+use be_editor::{DiagnosticLevel, HighlightKey};
 
 use crate::{Color, oklch};
 
@@ -79,6 +79,8 @@ impl Theme {
         ("type", oklch(0.8, 0.12, 170.0).into()),
         ("variable.builtin", oklch(0.8, 0.13, 50.0).into()),
         ("variable.parameter", oklch(0.8, 0.14, 20.0).into()),
+        ("error", Highlight::from(oklch(0.8, 0.12, 30.0))),
+        ("warning", Highlight::from(oklch(0.8, 0.12, 120.0))),
       ]),
     }
   }
@@ -169,18 +171,33 @@ impl SyntaxTheme {
     let mut highlight = Highlight::empty();
 
     for key in keys {
-      if let HighlightKey::TreeSitter(key) = key {
-        let mut cur = *key;
+      match key {
+        HighlightKey::TreeSitter(key) => {
+          let mut cur = *key;
 
-        loop {
-          if let Some(v) = self.entries.get(cur) {
-            highlight.merge_from(v);
-            break;
+          loop {
+            if let Some(v) = self.entries.get(cur) {
+              highlight.merge_from(v);
+              break;
+            }
+
+            match cur.rfind('.') {
+              Some(idx) => cur = &cur[..idx],
+              None => break,
+            }
           }
+        }
 
-          match cur.rfind('.') {
-            Some(idx) => cur = &cur[..idx],
-            None => break,
+        HighlightKey::SemanticToken(_) => {}
+
+        HighlightKey::Diagnostic(level) => {
+          let key = match level {
+            DiagnosticLevel::Error => "error",
+            DiagnosticLevel::Warning => "warning",
+          };
+
+          if let Some(v) = self.entries.get(key) {
+            highlight.merge_from(v);
           }
         }
       }

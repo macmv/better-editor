@@ -15,6 +15,7 @@ mod status;
 mod treesitter;
 
 pub use highlight::HighlightKey;
+pub use lsp::{Diagnostic, DiagnosticLevel};
 
 #[derive(Default)]
 pub struct EditorState {

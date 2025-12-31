@@ -4,10 +4,10 @@ use std::{
   ops::Range,
 };
 
-use crate::{EditorState, treesitter::CapturesIter};
+use crate::{EditorState, lsp::DiagnosticLevel, treesitter::CapturesIter};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub(crate) struct Highlight<'a> {
+pub struct Highlight<'a> {
   pub start: usize,
   pub end:   usize,
   pub key:   HighlightKey<'a>,
@@ -21,12 +21,14 @@ pub struct HighlightStack<'a> {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum HighlightKey<'a> {
+  Diagnostic(DiagnosticLevel),
   TreeSitter(&'a str),
   SemanticToken(&'a str),
 }
 
 enum HighlightIter<'a> {
   TreeSitter(CapturesIter<'a>),
+  Diagnostics(std::slice::Iter<'a, crate::lsp::Diagnostic>),
 
   #[cfg(test)]
   Slice(std::slice::Iter<'a, Highlight<'a>>),
@@ -80,6 +82,8 @@ impl EditorState {
       iterators.push(HighlightIter::TreeSitter(highlights));
     }
 
+    iterators.push(HighlightIter::Diagnostics(self.lsp.diagnostics.iter()));
+
     MergeIterator::new(iterators, range.start)
   }
 }
@@ -90,6 +94,7 @@ impl<'a> Iterator for HighlightIter<'a> {
   fn next(&mut self) -> Option<Self::Item> {
     match self {
       HighlightIter::TreeSitter(iter) => iter.next(),
+      HighlightIter::Diagnostics(iter) => iter.next().map(|d| d.highlight()),
 
       #[cfg(test)]
       HighlightIter::Slice(iter) => iter.next().copied(),
