@@ -157,6 +157,27 @@ impl EditorState {
     Column(max_col)
   }
 
+  fn keep_cursor_for_change(&mut self, change: &Change) {
+    let current_offset = self.doc.cursor_offset(self.cursor);
+    if current_offset >= change.range.end {
+      let line_delta = change.text.chars().filter(|c| *c == '\n').count() as isize
+        - self.doc.range(change.range.clone()).chars().filter(|c| *c == '\n').count() as isize;
+
+      if line_delta == 0 {
+        let target_line = be_doc::Line(self.doc.rope.line_of_byte(change.range.end));
+        if self.cursor.line == target_line {
+          let column_delta = change.text.graphemes(true).count() as isize
+            - self.doc.range(change.range.clone()).graphemes().count() as isize;
+          self.move_col_rel(column_delta as i32);
+        }
+      } else {
+        self.move_line_rel(line_delta as i32);
+      }
+    } else if current_offset >= change.range.start {
+      self.cursor = self.doc.offset_to_cursor(change.range.start);
+    }
+  }
+
   pub fn set_mode(&mut self, m: Mode) {
     self.mode = m;
     self.move_to_col(self.cursor.column.clamp(self.max_column()));
@@ -291,6 +312,7 @@ impl EditorState {
         if self.history_position < self.history.len() {
           self.history_position += 1;
           for change in self.history[self.history.len() - self.history_position].clone().undo() {
+            self.keep_cursor_for_change(change);
             self.change_no_history(change.clone());
           }
           self.clamp_cursor();
@@ -299,6 +321,7 @@ impl EditorState {
       Edit::Redo => {
         if self.history_position > 0 {
           for change in self.history[self.history.len() - self.history_position].clone().redo() {
+            self.keep_cursor_for_change(change);
             self.change_no_history(change.clone());
           }
           self.history_position -= 1;

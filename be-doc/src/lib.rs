@@ -104,6 +104,14 @@ impl Document {
     self.rope.byte_of_line(cursor.line.0) + self.cursor_column_offset(cursor)
   }
 
+  pub fn offset_to_cursor(&self, offset: usize) -> Cursor {
+    let line = Line(self.rope.line_of_byte(offset));
+    let column = Column(self.range(self.byte_of_line(line)..offset).graphemes().count());
+    let mut cursor = Cursor { line, column, target_column: VisualColumn(0) };
+    cursor.target_column = self.visual_column(cursor);
+    cursor
+  }
+
   pub fn cursor_column_offset(&self, cursor: Cursor) -> usize {
     let line = self.line(cursor.line);
     line.graphemes().take(cursor.column.0).map(|g| g.len()).sum()
