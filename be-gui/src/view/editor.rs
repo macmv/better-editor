@@ -101,7 +101,8 @@ impl EditorView {
 
     let start_y = -(self.scroll.y % line_height);
     let mut y = start_y;
-    let mut indent_guides = IndentGuides::new(y);
+    let mut indent_guides =
+      IndentGuides::new(self.editor.config.borrow().editor.indent_width as usize, y);
     loop {
       if self.layout_line(render, i, index).is_none() {
         break;
@@ -299,9 +300,8 @@ struct IndentGuides {
 }
 
 impl IndentGuides {
-  pub fn new(scroll_offset: f64) -> Self {
-    const INDENT_WIDTH: usize = 2; // TODO
-    IndentGuides { indent_width: INDENT_WIDTH, scroll_offset, starts: vec![], current_line: 0 }
+  pub fn new(indent_width: usize, scroll_offset: f64) -> Self {
+    IndentGuides { indent_width, scroll_offset, starts: vec![], current_line: 0 }
   }
 
   pub fn visit(&mut self, line: RopeSlice, render: &mut Render) {
