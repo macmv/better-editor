@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-use be_doc::crop::RopeSlice;
-use be_editor::EditorState;
+use be_editor::{EditorState, IndentLevel};
 use be_input::Mode;
 use kurbo::{Line, Point, Rect, RoundedRect, Stroke, Vec2};
 
@@ -118,7 +117,7 @@ impl EditorView {
         break;
       };
       indent_guides
-        .visit(self.editor.doc().rope.byte_slice(index..).raw_lines().next().unwrap(), render);
+        .visit(self.editor.guess_indent(be_doc::Line(i), be_input::VerticalDirection::Up), render);
 
       let layout = self.cached_layouts.get(&i).unwrap();
 
@@ -325,20 +324,13 @@ impl IndentGuides {
     IndentGuides { indent_width, scroll_offset, starts: vec![], current_line: 0 }
   }
 
-  pub fn visit(&mut self, line: RopeSlice, render: &mut Render) {
-    if line.chars().all(|c| c.is_whitespace()) {
-      self.current_line += 1;
-      return;
-    }
-
-    let indent = line.chars().take_while(|c| *c == ' ').count() / self.indent_width;
-
-    while self.starts.len() > indent {
+  pub fn visit(&mut self, level: IndentLevel, render: &mut Render) {
+    while self.starts.len() > level.0 {
       let start = self.starts.pop().unwrap();
       self.draw_line(start, self.current_line, render);
     }
 
-    while self.starts.len() < indent {
+    while self.starts.len() < level.0 {
       self.starts.push(self.current_line);
     }
 
