@@ -75,6 +75,20 @@ impl Document {
     self.rope.line_slice(line.0..line.0 + 1)
   }
   pub fn byte_of_line(&self, line: Line) -> usize { self.rope.byte_of_line(line.0) }
+  /// Returns the byte of the end of the line. This byte points to the first
+  /// character in the line terminator.
+  pub fn byte_of_line_end(&self, line: Line) -> usize {
+    let terminator = self.line_with_terminator(line).graphemes().rev().next();
+
+    if let Some(term) = terminator
+      && term.chars().all(|c| c.is_whitespace())
+    {
+      self.byte_of_line(line + 1) - term.len()
+    } else {
+      // If there is no terminator, we're at the end of the file.
+      self.rope.byte_len()
+    }
+  }
   pub fn len_lines(&self) -> usize { self.rope.line_len() }
 
   pub fn visual_column(&self, cursor: Cursor) -> VisualColumn {
@@ -204,5 +218,22 @@ mod tests {
     let mut doc = Document::from("💖a💖");
     doc.rope.replace(doc.grapheme_slice(Cursor::START, 2), "");
     assert_eq!(doc.rope, "💖");
+  }
+
+  #[test]
+  fn byte_of_line_end() {
+    for doc in ["abc\ndef", "abc\r\ndef", "abc\ndef\n", "abc\r\ndef\n", "abc\r\ndef\r\n"] {
+      let doc = Document::from(doc);
+      assert_eq!(
+        doc.range(doc.byte_of_line(Line(0))..doc.byte_of_line_end(Line(0))),
+        "abc",
+        "in doc {doc:?}"
+      );
+      assert_eq!(
+        doc.range(doc.byte_of_line(Line(1))..doc.byte_of_line_end(Line(1))),
+        "def",
+        "in doc {doc:?}"
+      );
+    }
   }
 }
