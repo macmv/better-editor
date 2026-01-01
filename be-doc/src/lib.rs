@@ -1,6 +1,6 @@
 use std::{
   fmt,
-  ops::{Add, Range},
+  ops::{Add, Range, Sub},
 };
 
 use crop::{Rope, RopeSlice};
@@ -166,10 +166,22 @@ impl Add<i32> for Column {
   fn add(self, rhs: i32) -> Column { Column((self.0 as isize + rhs as isize).max(0) as usize) }
 }
 
+impl Sub<i32> for Column {
+  type Output = Column;
+
+  fn sub(self, rhs: i32) -> Column { Column((self.0 as isize - rhs as isize).max(0) as usize) }
+}
+
 impl Add<i32> for Line {
   type Output = Line;
 
   fn add(self, rhs: i32) -> Line { Line((self.0 as isize + rhs as isize).max(0) as usize) }
+}
+
+impl Sub<i32> for Line {
+  type Output = Line;
+
+  fn sub(self, rhs: i32) -> Line { Line((self.0 as isize - rhs as isize).max(0) as usize) }
 }
 
 impl PartialEq<&str> for Document {
