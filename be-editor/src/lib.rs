@@ -197,6 +197,7 @@ impl EditorState {
     }
 
     if m == Mode::Normal {
+      self.trim_line(self.cursor.line);
       if let Some(edit) = self.current_edit.take() {
         self.add_to_history(edit);
       }
@@ -294,7 +295,10 @@ impl EditorState {
         self.move_graphemes(1);
 
         match c {
-          '\n' => self.auto_indent(VerticalDirection::Up),
+          '\n' => {
+            self.trim_line(self.cursor.line - 1);
+            self.auto_indent(VerticalDirection::Up)
+          }
           '}' | ']' | ')' => self.fix_indent(),
           _ => {}
         }
@@ -407,6 +411,20 @@ impl EditorState {
     match res {
       Ok(m) => self.status = Some(Status::for_success(m)),
       Err(e) => self.status = Some(Status::for_error(e)),
+    }
+  }
+
+  pub fn trim_line(&mut self, line: Line) {
+    let slice = self.doc.line(line);
+    let whitespace =
+      slice.chars().rev().take_while(|c| c.is_whitespace()).map(|c| c.len_utf8()).sum::<usize>();
+
+    if whitespace != 0 {
+      let end = self.doc.byte_of_line_end(line);
+      self.change(Change::remove(end - whitespace..end));
+    }
+    if line == self.cursor.line {
+      self.clamp_column();
     }
   }
 
