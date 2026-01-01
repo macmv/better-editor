@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use be_editor::{EditorState, IndentLevel};
 use be_input::Mode;
-use kurbo::{Line, Point, Rect, RoundedRect, Stroke, Vec2};
+use kurbo::{Circle, Line, Point, Rect, RoundedRect, Stroke, Vec2};
 
 use crate::{CursorMode, Render, RenderStore, TextLayout, theme::Underline};
 
@@ -123,8 +123,20 @@ impl EditorView {
         .visit(self.editor.guess_indent(be_doc::Line(i), be_input::VerticalDirection::Up), render);
 
       let layout = self.cached_layouts.get(&i).unwrap();
-
       render.draw_text(&layout, Point::new(20.0, y));
+
+      let mut shape =
+        Circle::new((0.0, y + render.store.text.font_metrics().line_height / 2.0), 1.5);
+      for (i, c) in self.editor.doc().line(be_doc::Line(i)).chars().rev().enumerate() {
+        if c == ' ' {
+          shape.center.x = 20.0 + layout.size().width
+            - (i as f64 * render.store.text.font_metrics().character_width)
+            - render.store.text.font_metrics().character_width / 2.0;
+          render.fill(&shape, render.theme().background_raised);
+        } else {
+          break;
+        }
+      }
 
       y += line_height;
       i += 1;
