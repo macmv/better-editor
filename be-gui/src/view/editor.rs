@@ -138,7 +138,7 @@ impl EditorView {
 
     if self.focused {
       let mode = match self.editor.mode() {
-        _ if self.temporary_replace_mode => Some(CursorMode::Underline),
+        Mode::Normal if self.temporary_replace_mode => Some(CursorMode::Underline),
         Mode::Normal | Mode::Visual => Some(CursorMode::Block),
         Mode::Insert => Some(CursorMode::Line),
         Mode::Replace => Some(CursorMode::Underline),
