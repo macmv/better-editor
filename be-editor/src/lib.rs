@@ -422,7 +422,7 @@ impl EditorState {
       VerticalDirection::Down => {
         if let Some(next) = self.next_non_empty_line(line) {
           let mut level = IndentLevel::guess(&self.config.borrow().editor, next);
-          for c in next.chars().rev() {
+          for c in next.chars() {
             match c {
               '}' | ')' | ']' => level.0 += 1,
               ' ' => {}
