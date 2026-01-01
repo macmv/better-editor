@@ -345,14 +345,18 @@ impl IndentGuides {
 
   fn draw_line(&self, start: usize, end: usize, render: &mut Render) {
     const INDENT_GUIDE_WIDTH: f64 = 1.0;
-    const INDENT_GUIDE_END_OFFSET: f64 = 2.0;
+    const INDENT_GUIDE_START_OFFSET: f64 = 5.0;
+    const INDENT_GUIDE_END_OFFSET: f64 = 0.0;
 
-    let x = self.starts.len() as f64
+    let x = (self.starts.len() as f64
       * render.store.text.font_metrics().character_width
-      * self.indent_width as f64
+      * self.indent_width as f64)
+      .round()
       + 20.0
       + INDENT_GUIDE_WIDTH / 2.0;
-    let min_y = start as f64 * render.store.text.font_metrics().line_height + self.scroll_offset;
+    let min_y = start as f64 * render.store.text.font_metrics().line_height
+      + self.scroll_offset
+      + INDENT_GUIDE_START_OFFSET;
     let max_y = end as f64 * render.store.text.font_metrics().line_height + self.scroll_offset
       - INDENT_GUIDE_END_OFFSET;
 
