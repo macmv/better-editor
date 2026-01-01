@@ -443,6 +443,13 @@ impl EditorState {
   }
 
   pub fn guess_indent(&self, line: Line, direction: VerticalDirection) -> IndentLevel {
+    {
+      let line = self.doc.line(line);
+      if !line.chars().all(|c| c.is_whitespace()) {
+        return IndentLevel::guess(&self.config.borrow().editor, line);
+      }
+    }
+
     match direction {
       VerticalDirection::Up => {
         if let Some(prev) = self.prev_non_empty_line(line) {
