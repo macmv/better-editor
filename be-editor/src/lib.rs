@@ -233,12 +233,14 @@ impl EditorState {
           let target = self.doc.byte_of_line(self.cursor().line + 1);
           self.change(Change::insert(target, "\n"));
           self.move_to_line(self.cursor.line + 1);
+          self.move_to_col(Column(0));
+          self.auto_indent(VerticalDirection::Up);
         } else {
           let target = self.doc.byte_of_line(self.cursor().line);
           self.change(Change::insert(target, "\n"));
+          self.move_to_col(Column(0));
+          self.auto_indent(VerticalDirection::Down);
         }
-
-        self.move_to_col(Column(0));
       }
       Action::Move { count: _, m } => self.perform_move(m),
       Action::Edit { count: _, e } => self.perform_edit(e),
@@ -290,6 +292,10 @@ impl EditorState {
         let s = c.encode_utf8(&mut bytes);
         self.change(Change::insert(self.doc.cursor_offset(self.cursor), s));
         self.move_graphemes(1);
+
+        if c == '\n' {
+          self.auto_indent(VerticalDirection::Up);
+        }
       }
       Edit::Replace(c) => {
         let mut bytes = [0; 4];
@@ -400,6 +406,15 @@ impl EditorState {
       Ok(m) => self.status = Some(Status::for_success(m)),
       Err(e) => self.status = Some(Status::for_error(e)),
     }
+  }
+
+  pub fn auto_indent(&mut self, direction: VerticalDirection) {
+    let line = self.cursor.line;
+    let indent = self.guess_indent(line, direction);
+    let columns = indent.0 * self.config.borrow().editor.indent_width as usize;
+    let indent_str = " ".repeat(columns);
+    self.change(Change::insert(self.doc.byte_of_line(line), &indent_str));
+    self.move_col_rel(columns as i32);
   }
 
   pub fn guess_indent(&self, line: Line, direction: VerticalDirection) -> IndentLevel {
