@@ -277,6 +277,10 @@ impl EditorView {
     for highlight in highlights {
       let pos = if highlight.pos > max_index { max_index } else { highlight.pos };
 
+      if pos < index {
+        continue;
+      }
+
       if let Some(highlight) = theme.syntax.lookup(&highlight.highlights) {
         let range = prev - index..pos - index;
         if let Some(foreground) = highlight.foreground {
