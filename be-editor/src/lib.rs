@@ -293,8 +293,10 @@ impl EditorState {
         self.change(Change::insert(self.doc.cursor_offset(self.cursor), s));
         self.move_graphemes(1);
 
-        if c == '\n' {
-          self.auto_indent(VerticalDirection::Up);
+        match c {
+          '\n' => self.auto_indent(VerticalDirection::Up),
+          '}' | ']' | ')' => self.fix_indent(),
+          _ => {}
         }
       }
       Edit::Replace(c) => {
@@ -415,6 +417,29 @@ impl EditorState {
     let indent_str = " ".repeat(columns);
     self.change(Change::insert(self.doc.byte_of_line(line), &indent_str));
     self.move_col_rel(columns as i32);
+  }
+
+  pub fn fix_indent(&mut self) {
+    let line = self.doc.line(self.cursor.line);
+    let mut iter = line.bytes().rev();
+    if !matches!(iter.next(), Some(b'}' | b']' | b')')) {
+      return;
+    }
+    let whitespace = iter.len();
+    if !iter.all(|c| c.is_ascii_whitespace()) {
+      return;
+    }
+
+    let mut indent = self.guess_indent(self.cursor.line, VerticalDirection::Up);
+    indent.0 = indent.0.saturating_sub(1);
+
+    let columns = indent.0 * self.config.borrow().editor.indent_width as usize;
+    let indent_str = " ".repeat(columns);
+    self.change(Change::replace(
+      self.doc.byte_of_line(self.cursor.line)..self.doc.byte_of_line(self.cursor.line) + whitespace,
+      &indent_str,
+    ));
+    self.move_to_col(be_doc::Column(columns + 1));
   }
 
   pub fn guess_indent(&self, line: Line, direction: VerticalDirection) -> IndentLevel {
