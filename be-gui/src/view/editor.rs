@@ -12,18 +12,21 @@ pub struct EditorView {
   scroll:  Point,
   focused: bool,
 
-  cached_layouts: HashMap<usize, TextLayout>,
-  cached_scale:   f64,
+  // This is kinda hacky but ah well.
+  pub(crate) temporary_replace_mode: bool,
+  cached_layouts:                    HashMap<usize, TextLayout>,
+  cached_scale:                      f64,
 }
 
 impl EditorView {
   pub fn new(store: &RenderStore) -> Self {
     let mut view = EditorView {
-      editor:         EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n"),
-      scroll:         Point::ZERO,
-      focused:        true,
-      cached_layouts: HashMap::new(),
-      cached_scale:   0.0,
+      editor:                 EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n"),
+      scroll:                 Point::ZERO,
+      focused:                true,
+      temporary_replace_mode: false,
+      cached_layouts:         HashMap::new(),
+      cached_scale:           0.0,
     };
 
     view.editor.config = store.config.clone();
@@ -135,6 +138,7 @@ impl EditorView {
 
     if self.focused {
       let mode = match self.editor.mode() {
+        _ if self.temporary_replace_mode => Some(CursorMode::Underline),
         Mode::Normal | Mode::Visual => Some(CursorMode::Block),
         Mode::Insert => Some(CursorMode::Line),
         Mode::Replace => Some(CursorMode::Underline),

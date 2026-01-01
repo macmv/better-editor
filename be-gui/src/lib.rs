@@ -123,6 +123,12 @@ impl State {
   fn on_key(&mut self, key: KeyStroke) {
     self.keys.push(key);
 
+    let temporary_replace_mode =
+      self.keys.len() == 1 && self.keys[0].key == be_input::Key::Char('r') && !self.keys[0].control;
+    if let ViewContent::Editor(e) = &mut self.active_view_mut().content {
+      e.temporary_replace_mode = temporary_replace_mode;
+    }
+
     match Action::from_input(self.active_view().mode(), &self.keys) {
       Ok(action) => {
         self.perform_action(action);
