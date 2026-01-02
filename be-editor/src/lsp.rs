@@ -84,7 +84,7 @@ impl EditorState {
     self.lsp.diagnostics.sort_by_key(|d| d.range.start);
   }
 
-  pub(crate) fn lsp_notify_change(&mut self, change: crate::Change) {
+  pub(crate) fn lsp_notify_change(&mut self, change: &crate::Change) {
     let Some(file) = &self.file else { return };
 
     let range = types::Range {
@@ -97,7 +97,7 @@ impl EditorState {
     self.lsp.client.send(&command::DidChangeTextDocument {
       path:    file.path().to_path_buf(),
       version: self.lsp.document_version,
-      changes: vec![(range, change.text)],
+      changes: vec![(range, change.text.clone())],
     });
   }
 

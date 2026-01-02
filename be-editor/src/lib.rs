@@ -376,11 +376,11 @@ impl EditorState {
       self.damage_all = true;
     }
 
+    self.lsp_notify_change(&change);
+
     self.doc.apply(&change);
 
     self.on_change_highlight(&change, start_pos, end_pos);
-
-    self.lsp_notify_change(change);
   }
 
   fn run_command(&mut self) {
