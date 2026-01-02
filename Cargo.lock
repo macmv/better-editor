@@ -191,6 +191,7 @@ dependencies = [
  "be-doc",
  "git2",
  "imara-diff",
+ "log",
 ]
 
 [[package]]
