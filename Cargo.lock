@@ -177,6 +177,7 @@ dependencies = [
  "be-lsp",
  "be-task",
  "libc",
+ "log",
  "serde",
  "serde_json",
  "tree-sitter",

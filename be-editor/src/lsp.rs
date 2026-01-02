@@ -18,7 +18,7 @@ pub struct LspState {
   // FIXME: ew.
   pub set_waker: bool,
 
-  pub save_task: Option<Task<Option<Vec<types::TextEdit>>>>,
+  pub save_task: Option<SaveTask>,
 }
 
 #[derive(Default)]
@@ -27,6 +27,11 @@ pub struct CompletionsState {
   completions:      types::CompletionList,
   show:             bool,
   clear_on_message: bool,
+}
+
+pub struct SaveTask {
+  task:    Task<Option<Vec<types::TextEdit>>>,
+  started: std::time::Instant,
 }
 
 pub struct Diagnostic {
@@ -111,15 +116,19 @@ impl EditorState {
       .lsp
       .client
       .send_first_capable(&command::DocumentFormat { path: file.path().to_path_buf() });
-    self.lsp.save_task = task;
+    self.lsp.save_task = task.map(|t| SaveTask { task: t, started: std::time::Instant::now() });
   }
 
   pub(crate) fn lsp_finish_on_save(&mut self) {
     if let Some(task) = &self.lsp.save_task {
-      if let Some(completed) = task.completed() {
+      if let Some(completed) = task.task.completed() {
         if let Some(edits) = completed {
           self.apply_bulk_lsp_edits(edits);
         }
+        self.lsp.save_task = None;
+      } else if task.started.elapsed() > std::time::Duration::from_millis(500) {
+        // TODO: User-visible warning.
+        log::warn!("LSP format on save timed out");
         self.lsp.save_task = None;
       }
     }
