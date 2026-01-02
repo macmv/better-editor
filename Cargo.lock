@@ -188,6 +188,7 @@ dependencies = [
 name = "be-git"
 version = "0.1.0"
 dependencies = [
+ "be-doc",
  "git2",
  "imara-diff",
 ]

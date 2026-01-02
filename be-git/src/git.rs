@@ -2,6 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
+use be_doc::Document;
 use git2::Repository;
 
 pub struct GitRepo {
@@ -13,6 +14,14 @@ impl GitRepo {
   pub fn open(path: &Path) -> Result<Self, git2::Error> {
     let path = path.canonicalize().unwrap();
     Ok(GitRepo { repo: Repository::open(&path)?, root: path })
+  }
+
+  pub fn apply_work_to_head(&self, path: &Path, _doc: &mut Document) {
+    let mut opts = git2::DiffOptions::new();
+    opts.include_untracked(true).recurse_untracked_dirs(true).pathspec(&path);
+
+    let head = self.repo.head().unwrap().peel_to_tree().unwrap();
+    let _diff = self.repo.diff_tree_to_workdir(Some(&head), Some(&mut opts)).unwrap();
   }
 
   pub fn changes_in(&self, path: &Path) -> Option<Changes> {
