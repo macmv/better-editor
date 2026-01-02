@@ -1,9 +1,10 @@
 #![allow(dead_code)]
 
+use be_doc::Document;
 use imara_diff::{Algorithm, Diff, InternedInput, TokenSource};
 
 struct ColorLinePrinter<'a>(&'a imara_diff::Interner<&'a str>);
-use std::fmt;
+use std::{fmt, hash::Hash, ops::Range};
 
 struct CharTokens<'a>(&'a str);
 
@@ -14,6 +15,53 @@ impl<'a> TokenSource for CharTokens<'a> {
   fn tokenize(&self) -> Self::Tokenizer { self.0.chars() }
 
   fn estimate_tokens(&self) -> u32 { self.0.len() as u32 }
+}
+
+pub struct LineDiff {
+  diff: Diff,
+}
+
+pub fn line_diff<'a>(before: &Document, after: &Document) -> LineDiff {
+  let input = InternedInput::new(DocLines(before), DocLines(after));
+  let mut diff = Diff::compute(Algorithm::Histogram, &input);
+  diff.postprocess_no_heuristic(&input);
+
+  LineDiff { diff }
+}
+
+impl LineDiff {
+  fn changes(&self) -> impl Iterator<Item = Range<usize>> {
+    self.diff.hunks().map(|hunk| hunk.before.start as usize..hunk.before.end as usize)
+  }
+}
+
+struct DocLines<'a>(&'a Document);
+#[derive(PartialEq, Eq)]
+struct RopeSliceHash<'a>(be_doc::crop::RopeSlice<'a>);
+
+impl Hash for RopeSliceHash<'_> {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    // Like `state.write_str`.
+    for chunk in self.0.chunks() {
+      state.write(chunk.as_bytes());
+    }
+    state.write_u8(0xff);
+  }
+}
+
+impl<'a> TokenSource for DocLines<'a> {
+  type Token = RopeSliceHash<'a>;
+  type Tokenizer = std::iter::Map<
+    be_doc::crop::iter::Lines<'a>,
+    fn(be_doc::crop::RopeSlice<'a>) -> RopeSliceHash<'a>,
+  >;
+
+  fn tokenize(&self) -> Self::Tokenizer { self.0.rope.lines().map(|l| RopeSliceHash(l)) }
+
+  fn estimate_tokens(&self) -> u32 {
+    // Like imara_diff::ByteLines, but we don't actually read anything.
+    100
+  }
 }
 
 impl imara_diff::UnifiedDiffPrinter for ColorLinePrinter<'_> {
@@ -150,5 +198,23 @@ fn foo() -> Bar {
       diff.unified_diff(&ColorLinePrinter(&input.interner), UnifiedDiffConfig::default(), &input,)
     );
     panic!();
+  }
+
+  #[test]
+  fn line_diff_works() {
+    let before = r#"
+fn foo() -> Bar {
+  let a = 3;
+}
+"#;
+
+    let after = r#"
+fn foo() -> Bar {
+  let b = 3;
+}
+"#;
+
+    let diff = line_diff(&Document::from(before), &Document::from(after));
+    assert_eq!(diff.changes().collect::<Vec<_>>(), [2..3]);
   }
 }
