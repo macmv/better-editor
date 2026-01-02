@@ -1,5 +1,6 @@
 use std::{cell::RefCell, ops::Range, rc::Rc};
 
+use be_doc::{Change, Edit};
 use be_lsp::{LanguageClientState, LanguageServerKey, command, types};
 use be_task::Task;
 
@@ -99,6 +100,42 @@ impl EditorState {
       version: self.lsp.document_version,
       changes: vec![(range, change.text.clone())],
     });
+  }
+
+  pub(crate) fn lsp_on_save(&mut self) {
+    let Some(file) = &self.file else { return };
+
+    let tasks = self.lsp.client.send(&command::DocumentFormat { path: file.path().to_path_buf() });
+    std::thread::sleep(std::time::Duration::from_millis(50)); // TODO: This sucks.
+    for task in tasks {
+      if let Some(Some(completed)) = task.completed() {
+        self.apply_bulk_lsp_edits(completed);
+        break;
+      }
+    }
+  }
+
+  fn apply_bulk_lsp_edits(&mut self, edits: Vec<types::TextEdit>) {
+    let single_edit = self.current_edit.is_none();
+    if single_edit {
+      self.current_edit = Some(Edit::empty());
+    }
+
+    // See https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textEditArray
+    //
+    // What I gather from this very overly-explained paragraph is, just iterate
+    // in reverse.
+    for edit in edits.into_iter().rev() {
+      let start = lsp_to_offset(&self.doc, edit.range.start);
+      let end = lsp_to_offset(&self.doc, edit.range.end);
+      let change = Change { range: start..end, text: edit.new_text };
+      self.keep_cursor_for_change(&change);
+      self.change(change);
+    }
+
+    if single_edit {
+      self.remove_current_edit();
+    }
   }
 
   pub(crate) fn lsp_request_completions(&mut self) {

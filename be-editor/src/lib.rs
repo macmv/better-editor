@@ -394,6 +394,8 @@ impl EditorState {
 
     let res = match cmd {
       "w" => {
+        self.lsp_on_save();
+
         self.save().map(|()| format!("{}: written", self.file.as_ref().unwrap().path().display()))
       }
       "q" => {
