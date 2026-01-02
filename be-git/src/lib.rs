@@ -6,7 +6,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use be_doc::{Change, Document};
+use be_doc::Document;
 use git::GitRepo;
 
 #[macro_use]
@@ -20,7 +20,18 @@ pub struct Repo {
   root: PathBuf,
   git:  Option<GitRepo>,
 
-  files: HashMap<PathBuf, Document>,
+  files: HashMap<PathBuf, ChangedFile>,
+}
+
+struct ChangedFile {
+  original: Document,
+  current:  Document,
+}
+
+impl ChangedFile {
+  fn new(doc: Document) -> Self {
+    ChangedFile { original: be_doc::Document { rope: doc.rope.clone() }, current: doc }
+  }
 }
 
 impl Repo {
@@ -39,16 +50,16 @@ impl Repo {
         Document::read(&path).unwrap()
       };
 
-      self.files.insert(rel.to_path_buf(), doc);
+      self.files.insert(rel.to_path_buf(), ChangedFile::new(doc));
     }
   }
 
-  pub fn update(&mut self, path: &Path, change: &Change) {
+  pub fn update_file(&mut self, path: &Path, doc: &Document) {
     let path = path.canonicalize().unwrap();
 
     if let Ok(rel) = path.strip_prefix(&self.root) {
-      if let Some(doc) = self.files.get_mut(rel) {
-        doc.apply(&change);
+      if let Some(file) = self.files.get_mut(rel) {
+        file.current = be_doc::Document { rope: doc.rope.clone() };
       } else {
         error!("unknown path: {}", path.display());
       }

@@ -414,6 +414,12 @@ impl EditorState {
     self.doc.apply(&change);
 
     self.on_change_highlight(&change, start_pos, end_pos);
+
+    if let Some(repo) = &mut self.repo {
+      if let Some(file) = &self.file.as_ref() {
+        repo.update_file(file.path(), &self.doc);
+      }
+    }
   }
 
   fn run_command(&mut self) {
