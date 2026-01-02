@@ -17,6 +17,9 @@ mod treesitter;
 pub use highlight::HighlightKey;
 pub use lsp::{Diagnostic, DiagnosticLevel};
 
+#[macro_use]
+extern crate log;
+
 #[derive(Default)]
 pub struct EditorState {
   doc:    Document,
@@ -255,7 +258,7 @@ impl EditorState {
       Action::Move { count: _, m } => self.perform_move(m),
       Action::Edit { count: _, e } => self.perform_edit(e),
       Action::Autocomplete => self.perform_autocomplete(),
-      Action::Navigate { .. } => unreachable!(),
+      Action::Navigate { nav } => error!("unhandled navigate passed to editor: {nav:?}"),
       Action::Control { .. } => {} // only really used for the shell
     }
   }

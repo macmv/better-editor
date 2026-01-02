@@ -12,6 +12,7 @@ pub enum Action {
   Autocomplete,
 }
 
+#[derive(Debug)]
 pub enum Navigation {
   OpenSearch,
   Direction(Direction),
@@ -52,7 +53,7 @@ pub enum ActionError {
   Incomplete,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Direction {
   Up,
   Down,
