@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 git2 = { version = "0.20.3", default-features = false }
+imara-diff = "0.2.0"
