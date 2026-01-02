@@ -198,11 +198,15 @@ impl EditorState {
 
     if m == Mode::Normal {
       self.trim_line(self.cursor.line);
-      if let Some(edit) = self.current_edit.take() {
-        self.add_to_history(edit);
-      }
+      self.remove_current_edit();
     } else if m == Mode::Insert {
       self.current_edit = Some(Edit::empty());
+    }
+  }
+
+  fn remove_current_edit(&mut self) {
+    if let Some(edit) = self.current_edit.take() {
+      self.add_to_history(edit);
     }
   }
 
