@@ -32,11 +32,11 @@ impl Repo {
     let path = path.canonicalize().unwrap();
 
     if let Ok(rel) = path.strip_prefix(&self.root) {
-      let mut doc = Document::read(&path).unwrap();
-
-      if let Some(git) = &self.git {
-        git.apply_work_to_head(&path, &mut doc);
-      }
+      let doc = if let Some(git) = &self.git {
+        git.lookup_in_head(&path)
+      } else {
+        Document::read(&path).unwrap()
+      };
 
       self.files.insert(rel.to_path_buf(), doc);
     }

@@ -16,12 +16,12 @@ impl GitRepo {
     Ok(GitRepo { repo: Repository::open(&path)?, root: path })
   }
 
-  pub fn apply_work_to_head(&self, path: &Path, _doc: &mut Document) {
-    let mut opts = git2::DiffOptions::new();
-    opts.include_untracked(true).recurse_untracked_dirs(true).pathspec(&path);
-
+  pub fn lookup_in_head(&self, path: &Path) -> Document {
     let head = self.repo.head().unwrap().peel_to_tree().unwrap();
-    let _diff = self.repo.diff_tree_to_workdir(Some(&head), Some(&mut opts)).unwrap();
+    let entry = head.get_path(path).unwrap();
+    let blob = self.repo.find_blob(entry.id()).unwrap();
+
+    Document { rope: be_doc::crop::Rope::from(String::from_utf8_lossy(blob.content())) }
   }
 
   pub fn changes_in(&self, path: &Path) -> Option<Changes> {
