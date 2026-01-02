@@ -74,6 +74,11 @@ impl EditorState {
   pub fn take_damage_all(&mut self) -> bool { std::mem::take(&mut self.damage_all) }
   pub fn take_damages(&mut self) -> impl Iterator<Item = Line> { self.damages.drain() }
 
+  pub fn update(&mut self) {
+    self.lsp_update_diagnostics();
+    self.update_save_task();
+  }
+
   fn on_open_file(&mut self) {
     let Some(_) = self.file.as_ref() else { return };
 
@@ -396,7 +401,11 @@ impl EditorState {
       "w" => {
         self.lsp_on_save();
 
-        self.save().map(|()| format!("{}: written", self.file.as_ref().unwrap().path().display()))
+        if self.lsp.save_task.is_none() {
+          self.save().map(|()| format!("{}: written", self.file.as_ref().unwrap().path().display()))
+        } else {
+          Ok("saving...".to_string())
+        }
       }
       "q" => {
         if let Some(cmd) = &self.exit_cmd {
@@ -417,6 +426,19 @@ impl EditorState {
     match res {
       Ok(m) => self.status = Some(Status::for_success(m)),
       Err(e) => self.status = Some(Status::for_error(e)),
+    }
+  }
+
+  fn update_save_task(&mut self) {
+    if self.lsp.save_task.is_some() {
+      self.lsp_finish_on_save();
+
+      if self.lsp.save_task.is_none() {
+        self.status = Some(Status::for_success(format!(
+          "{}: written",
+          self.file.as_ref().unwrap().path().display()
+        )));
+      }
     }
   }
 

@@ -42,6 +42,8 @@ impl EditorView {
   pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
 
   pub fn draw(&mut self, render: &mut Render) {
+    self.editor.update();
+
     if self.cached_scale != render.scale() {
       self.cached_layouts.clear();
       self.cached_scale = render.scale();
@@ -54,8 +56,6 @@ impl EditorView {
     for line in self.editor.take_damages() {
       self.cached_layouts.remove(&line.as_usize());
     }
-
-    self.editor.update_diagnostics();
 
     render.fill(
       &Rect::new(0.0, 0.0, render.size().width, render.size().height),

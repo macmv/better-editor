@@ -17,6 +17,8 @@ pub struct LspState {
 
   // FIXME: ew.
   pub set_waker: bool,
+
+  pub save_task: Option<Task<Option<Vec<types::TextEdit>>>>,
 }
 
 #[derive(Default)]
@@ -64,7 +66,7 @@ impl EditorState {
     });
   }
 
-  pub fn update_diagnostics(&mut self) {
+  pub(crate) fn lsp_update_diagnostics(&mut self) {
     let Some(file) = &self.file else { return };
 
     self.lsp.diagnostics.clear();
@@ -105,12 +107,20 @@ impl EditorState {
   pub(crate) fn lsp_on_save(&mut self) {
     let Some(file) = &self.file else { return };
 
-    let tasks = self.lsp.client.send(&command::DocumentFormat { path: file.path().to_path_buf() });
-    std::thread::sleep(std::time::Duration::from_millis(50)); // TODO: This sucks.
-    for task in tasks {
-      if let Some(Some(completed)) = task.completed() {
-        self.apply_bulk_lsp_edits(completed);
-        break;
+    let task = self
+      .lsp
+      .client
+      .send_first_capable(&command::DocumentFormat { path: file.path().to_path_buf() });
+    self.lsp.save_task = task;
+  }
+
+  pub(crate) fn lsp_finish_on_save(&mut self) {
+    if let Some(task) = &self.lsp.save_task {
+      if let Some(completed) = task.completed() {
+        if let Some(edits) = completed {
+          self.apply_bulk_lsp_edits(edits);
+        }
+        self.lsp.save_task = None;
       }
     }
   }
