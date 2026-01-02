@@ -56,4 +56,16 @@ impl Repo {
       error!("unknown path: {}", path.display());
     }
   }
+
+  pub fn changes_in(&self, path: &Path) -> Vec<String> {
+    let path = path.canonicalize().unwrap();
+
+    if let Ok(rel) = path.strip_prefix(&self.root) {
+      if let Some(_) = self.files.get(rel) {
+        return vec!["the file exists".to_string()];
+      }
+    }
+
+    vec![]
+  }
 }

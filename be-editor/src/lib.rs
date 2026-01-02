@@ -2,6 +2,7 @@ use std::{cell::RefCell, collections::HashSet, path::Path, rc::Rc};
 
 use be_config::Config;
 use be_doc::{Change, Column, Cursor, Document, Edit, Line, crop::RopeSlice};
+use be_git::Repo;
 use be_input::{Action, Direction, Mode, Move, VerticalDirection};
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -42,6 +43,9 @@ pub struct EditorState {
   pub config:   Rc<RefCell<Config>>,
   pub lsp:      lsp::LspState,
   pub exit_cmd: Option<Box<dyn Fn()>>,
+
+  // TODO: Share this
+  repo: Option<Repo>,
 }
 
 #[derive(Default)]
@@ -78,6 +82,16 @@ impl EditorState {
   pub fn take_damages(&mut self) -> impl Iterator<Item = Line> { self.damages.drain() }
 
   pub fn update(&mut self) {
+    if self.repo.is_none() {
+      self.repo = Some(Repo::open(std::path::Path::new(".")));
+    }
+
+    if let Some(repo) = &self.repo {
+      if let Some(file) = &self.file.as_ref() {
+        dbg!(repo.changes_in(file.path()));
+      }
+    }
+
     self.lsp_update_diagnostics();
     self.update_save_task();
   }
@@ -91,6 +105,13 @@ impl EditorState {
     self.detect_filetype();
     self.on_open_file_highlight();
     self.connect_to_lsp();
+
+    if self.repo.is_none() {
+      self.repo = Some(Repo::open(std::path::Path::new(".")));
+    }
+    if let Some(repo) = &mut self.repo {
+      repo.open_file(self.file.as_ref().unwrap().path());
+    }
   }
 
   pub fn move_line_rel(&mut self, dist: i32) { self.move_to_line(self.cursor.line + dist); }

@@ -17,8 +17,10 @@ impl GitRepo {
   }
 
   pub fn lookup_in_head(&self, path: &Path) -> Document {
+    let rel = path.strip_prefix(&self.root).unwrap();
+
     let head = self.repo.head().unwrap().peel_to_tree().unwrap();
-    let entry = head.get_path(path).unwrap();
+    let entry = head.get_path(rel).unwrap();
     let blob = self.repo.find_blob(entry.id()).unwrap();
 
     Document { rope: be_doc::crop::Rope::from(String::from_utf8_lossy(blob.content())) }

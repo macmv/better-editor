@@ -9,6 +9,7 @@ be-input = { path = "../be-input" }
 be-config = { path = "../be-config" }
 be-task = { path = "../be-task" }
 be-lsp = { path = "../be-lsp" }
+be-git = { path = "../be-git" }
 
 libc = "0.2.178"
 serde = { version = "1.0.228", features = ["derive"] }
