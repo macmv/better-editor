@@ -122,6 +122,30 @@ impl LspCommand for Completion {
   }
 }
 
+pub struct DocumentFormat {
+  pub path: PathBuf,
+}
+
+impl LspCommand for DocumentFormat {
+  type Result = Option<Vec<types::TextEdit>>;
+
+  fn is_capable(&self, caps: &types::ServerCapabilities) -> bool {
+    caps.document_formatting_provider.is_some()
+  }
+
+  fn send(&self, client: &mut LspClient) -> Option<Task<Option<Vec<types::TextEdit>>>> {
+    Some(client.request::<types::request::Formatting>(types::DocumentFormattingParams {
+      text_document:             doc_id(&self.path),
+      options:                   types::FormattingOptions {
+        tab_size: 2,
+        insert_spaces: true,
+        ..Default::default()
+      },
+      work_done_progress_params: types::WorkDoneProgressParams::default(),
+    }))
+  }
+}
+
 impl LspWorker {
   pub fn handle_notification(&self, method: &str, params: Option<Box<RawValue>>) {
     if method == "textDocument/publishDiagnostics" {
