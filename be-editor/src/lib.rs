@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashSet, path::Path, rc::Rc};
 
 use be_config::Config;
 use be_doc::{Change, Column, Cursor, Document, Edit, Line, crop::RopeSlice};
-use be_git::Repo;
+use be_git::{LineDiff, Repo};
 use be_input::{Action, Direction, Mode, Move, VerticalDirection};
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -45,7 +45,8 @@ pub struct EditorState {
   pub exit_cmd: Option<Box<dyn Fn()>>,
 
   // TODO: Share this
-  repo: Option<Repo>,
+  repo:    Option<Repo>,
+  changes: Option<LineDiff>,
 }
 
 #[derive(Default)]
@@ -89,9 +90,7 @@ impl EditorState {
     if let Some(repo) = &self.repo {
       if let Some(file) = &self.file.as_ref() {
         if let Some(diff) = repo.changes_in(file.path()) {
-          for change in diff.changes() {
-            dbg!(&change);
-          }
+          self.changes = Some(diff);
         }
       }
     }

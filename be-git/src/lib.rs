@@ -1,6 +1,3 @@
-mod diff;
-mod git;
-
 use std::{
   collections::HashMap,
   path::{Path, PathBuf},
@@ -9,10 +6,13 @@ use std::{
 use be_doc::Document;
 use git::GitRepo;
 
-use crate::diff::LineDiff;
-
 #[macro_use]
 extern crate log;
+
+mod diff;
+mod git;
+
+pub use diff::LineDiff;
 
 /// This acts like a store for modified files in the editor.
 ///
