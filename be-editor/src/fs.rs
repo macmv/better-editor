@@ -34,7 +34,7 @@ impl EditorState {
   }
 
   pub fn save(&mut self) -> io::Result<()> {
-    if let Some(file) = &self.file {
+    if let Some(file) = &mut self.file {
       file.save(&self.doc)
     } else {
       Err(io::Error::new(io::ErrorKind::NotFound, "no file open"))
@@ -55,13 +55,18 @@ impl OpenedFile {
     Ok((file, doc))
   }
 
-  pub fn save(&self, doc: &Document) -> io::Result<()> {
+  pub fn save(&mut self, doc: &Document) -> io::Result<()> {
     let stat = self.path.metadata()?;
     if stat.mtime() > self.mtime {
       return Err(io::Error::new(io::ErrorKind::Other, "file has been modified"));
     }
 
     let mut file = std::fs::OpenOptions::new().write(true).truncate(true).open(&self.path)?;
-    doc.write(&mut file)
+    doc.write(&mut file)?;
+    drop(file);
+
+    let stat = self.path.metadata()?;
+    self.mtime = stat.mtime();
+    Ok(())
   }
 }
