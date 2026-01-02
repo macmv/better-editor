@@ -88,7 +88,11 @@ impl EditorState {
 
     if let Some(repo) = &self.repo {
       if let Some(file) = &self.file.as_ref() {
-        dbg!(repo.changes_in(file.path()));
+        if let Some(diff) = repo.changes_in(file.path()) {
+          for change in diff.changes() {
+            dbg!(&change);
+          }
+        }
       }
     }
 

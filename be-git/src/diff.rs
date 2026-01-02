@@ -30,7 +30,7 @@ pub fn line_diff<'a>(before: &Document, after: &Document) -> LineDiff {
 }
 
 impl LineDiff {
-  fn changes(&self) -> impl Iterator<Item = Range<usize>> {
+  pub fn changes(&self) -> impl Iterator<Item = Range<usize>> {
     self.diff.hunks().map(|hunk| hunk.before.start as usize..hunk.before.end as usize)
   }
 }

@@ -9,6 +9,8 @@ use std::{
 use be_doc::Document;
 use git::GitRepo;
 
+use crate::diff::LineDiff;
+
 #[macro_use]
 extern crate log;
 
@@ -26,12 +28,6 @@ pub struct Repo {
 struct ChangedFile {
   original: Document,
   current:  Document,
-}
-
-impl ChangedFile {
-  fn new(doc: Document) -> Self {
-    ChangedFile { original: be_doc::Document { rope: doc.rope.clone() }, current: doc }
-  }
 }
 
 impl Repo {
@@ -68,15 +64,23 @@ impl Repo {
     }
   }
 
-  pub fn changes_in(&self, path: &Path) -> Vec<String> {
+  pub fn changes_in(&self, path: &Path) -> Option<LineDiff> {
     let path = path.canonicalize().unwrap();
 
-    if let Ok(rel) = path.strip_prefix(&self.root) {
-      if let Some(_) = self.files.get(rel) {
-        return vec!["the file exists".to_string()];
-      }
+    if let Ok(rel) = path.strip_prefix(&self.root)
+      && let Some(file) = self.files.get(rel)
+    {
+      return Some(file.changes());
     }
 
-    vec![]
+    None
   }
+}
+
+impl ChangedFile {
+  fn new(doc: Document) -> Self {
+    ChangedFile { original: be_doc::Document { rope: doc.rope.clone() }, current: doc }
+  }
+
+  fn changes(&self) -> diff::LineDiff { diff::line_diff(&self.original, &self.current) }
 }
