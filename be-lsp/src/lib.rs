@@ -102,6 +102,25 @@ impl LanguageClientState {
 
     tasks
   }
+
+  pub fn send_first_capable<T: command::LspCommand>(
+    &mut self,
+    command: &T,
+  ) -> Option<Task<T::Result>> {
+    for server in self.servers.values().filter_map(|s| s.upgrade()) {
+      if command.is_capable(&server.caps) {
+        if let Some(t) = command.send(&mut server.client.lock()) {
+          return Some(t);
+        } else {
+          // This function shouldn't be called for notifications.
+          warn!("no task returned for `send_first_capable`");
+          return None;
+        }
+      }
+    }
+
+    None
+  }
 }
 
 impl Drop for LanguageServerStore {
