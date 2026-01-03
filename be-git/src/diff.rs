@@ -4,13 +4,13 @@ use be_doc::Document;
 use imara_diff::{Algorithm, Diff, InternedInput, TokenSource};
 use siphasher::sip::SipHasher;
 
-struct ColorLinePrinter<'a>(&'a imara_diff::Interner<&'a str>);
 use std::{
   fmt,
   hash::{Hash, Hasher},
   ops::Range,
 };
 
+struct ColorLinePrinter<'a>(&'a imara_diff::Interner<RopeSliceHash<'a>>);
 struct CharTokens<'a>(&'a str);
 
 impl<'a> TokenSource for CharTokens<'a> {
@@ -30,7 +30,7 @@ pub struct LineHunk {
   pub range: Range<usize>,
 }
 
-pub fn line_diff<'a>(before: &Document, after: &Document) -> LineDiff {
+pub fn line_diff(before: &Document, after: &Document) -> LineDiff {
   let input = InternedInput::new(DocLines(before), DocLines(after));
   let mut diff = Diff::compute(Algorithm::Histogram, &input);
   diff.postprocess_no_heuristic(&input);
@@ -39,7 +39,7 @@ pub fn line_diff<'a>(before: &Document, after: &Document) -> LineDiff {
 }
 
 impl LineDiff {
-  pub fn changes(&self) -> impl Iterator<Item = LineHunk> {
+  pub fn changes(&'_ self) -> impl Iterator<Item = LineHunk> + use<'_> {
     self.diff.hunks().map(|hunk| LineHunk::new(&hunk))
   }
 }
@@ -94,8 +94,8 @@ impl imara_diff::UnifiedDiffPrinter for ColorLinePrinter<'_> {
   }
 
   fn display_context_token(&self, mut f: impl fmt::Write, token: imara_diff::Token) -> fmt::Result {
-    write!(f, " {}", &self.0[token])?;
-    if !&self.0[token].ends_with('\n') {
+    write!(f, " {}", &self.0[token].0)?;
+    if !&self.0[token].0.chunks().last().is_some_and(|c| c.ends_with('\n')) {
       writeln!(f)?;
     }
     Ok(())
@@ -108,6 +108,7 @@ impl imara_diff::UnifiedDiffPrinter for ColorLinePrinter<'_> {
     after: &[imara_diff::Token],
   ) -> fmt::Result {
     if before.len() == 1 && after.len() == 1 {
+      /*
       let before = self.0[before[0]];
       let after = self.0[after[0]];
 
@@ -159,26 +160,27 @@ impl imara_diff::UnifiedDiffPrinter for ColorLinePrinter<'_> {
         }
       }
       write!(f, "\x1b[0m")?;
+      */
 
       return Ok(());
     }
 
     if let Some(&last) = before.last() {
       for &token in before {
-        let token = self.0[token];
-        write!(f, "\x1b[31m-{token}")?;
+        let token = &self.0[token];
+        write!(f, "\x1b[31m-{}", token.0)?;
       }
-      if !self.0[last].ends_with('\n') {
+      if !self.0[last].0.chunks().last().is_some_and(|c| c.ends_with('\n')) {
         writeln!(f)?;
       }
       write!(f, "\x1b[0m")?;
     }
     if let Some(&last) = after.last() {
       for &token in after {
-        let token = self.0[token];
-        write!(f, "\x1b[32m+{token}")?;
+        let token = &self.0[token];
+        write!(f, "\x1b[32m+{}", token.0)?;
       }
-      if !self.0[last].ends_with('\n') {
+      if !self.0[last].0.chunks().last().is_some_and(|c| c.ends_with('\n')) {
         writeln!(f)?;
       }
       write!(f, "\x1b[0m")?;
@@ -210,10 +212,12 @@ fn foo() -> Bar {
     let mut diff = Diff::compute(Algorithm::Histogram, &input);
     diff.postprocess_lines(&input);
 
+    /*
     println!(
       "{}",
       diff.unified_diff(&ColorLinePrinter(&input.interner), UnifiedDiffConfig::default(), &input,)
     );
+    */
     panic!();
   }
 
@@ -231,7 +235,32 @@ fn foo() -> Bar {
 }
 "#;
 
-    let diff = line_diff(&Document::from(before), &Document::from(after));
+    let before = Document::from(before);
+    let after = Document::from(after);
+    let diff = line_diff(&before, &after);
     assert_eq!(diff.changes().collect::<Vec<_>>()[0].range, 2..3);
+  }
+
+  #[test]
+  fn line_diff_changes() {
+    let before = r#"
+fn foo() -> Bar {
+  let aaa = 3;
+  let ccc = 3;
+}
+"#;
+
+    let after = r#"
+fn foo() -> Bar {
+  let aba = 3;
+  let b = 3;
+  let cbc = 3;
+}
+"#;
+
+    let before = Document::from(before);
+    let after = Document::from(after);
+    let diff = line_diff(&before, &after);
+    assert_eq!(diff.changes().collect::<Vec<_>>()[0].range, 2..5);
   }
 }
