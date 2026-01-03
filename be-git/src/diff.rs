@@ -42,7 +42,7 @@ impl LineHunk {
 }
 
 struct DocLines<'a>(&'a Document);
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 struct RopeSliceHash<'a>(be_doc::crop::RopeSlice<'a>);
 
 impl Hash for RopeSliceHash<'_> {
@@ -60,11 +60,11 @@ impl Hash for RopeSliceHash<'_> {
 impl<'a> TokenSource for DocLines<'a> {
   type Token = RopeSliceHash<'a>;
   type Tokenizer = std::iter::Map<
-    be_doc::crop::iter::Lines<'a>,
+    be_doc::crop::iter::RawLines<'a>,
     fn(be_doc::crop::RopeSlice<'a>) -> RopeSliceHash<'a>,
   >;
 
-  fn tokenize(&self) -> Self::Tokenizer { self.0.rope.lines().map(|l| RopeSliceHash(l)) }
+  fn tokenize(&self) -> Self::Tokenizer { self.0.rope.raw_lines().map(|l| RopeSliceHash(l)) }
 
   fn estimate_tokens(&self) -> u32 {
     // Like imara_diff::ByteLines, but we don't actually read anything.
@@ -108,11 +108,10 @@ impl imara_diff::UnifiedDiffPrinter for ColorLinePrinter<'_> {
     after: &[imara_diff::Token],
   ) -> fmt::Result {
     if before.len() == 1 && after.len() == 1 {
-      /*
-      let before = self.0[before[0]];
-      let after = self.0[after[0]];
+      let before_slice = self.0[before[0]];
+      let after_slice = self.0[after[0]];
 
-      let input = InternedInput::new(CharTokens(before), CharTokens(after));
+      let input = InternedInput::new(CharTokens(before_slice), CharTokens(after_slice));
       let mut diff = Diff::compute(Algorithm::Histogram, &input);
       diff.postprocess_no_heuristic(&input);
 
@@ -132,7 +131,7 @@ impl imara_diff::UnifiedDiffPrinter for ColorLinePrinter<'_> {
         write!(f, "\x1b[49m")?;
         prev = hunk.before.end as usize;
       }
-      if prev < after.len() {
+      if prev < input.after.len() {
         for &c in &input.before[prev as usize..] {
           write!(f, "{}", input.interner[c])?;
         }
@@ -154,13 +153,12 @@ impl imara_diff::UnifiedDiffPrinter for ColorLinePrinter<'_> {
         write!(f, "\x1b[49m")?;
         prev = hunk.after.end as usize;
       }
-      if prev < after.len() {
+      if prev < input.after.len() {
         for &c in &input.after[prev as usize..] {
           write!(f, "{}", input.interner[c])?;
         }
       }
       write!(f, "\x1b[0m")?;
-      */
 
       return Ok(());
     }
