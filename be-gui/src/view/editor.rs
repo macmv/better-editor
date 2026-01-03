@@ -147,13 +147,13 @@ impl EditorView {
     }
 
     if let Some(changes) = &self.editor.changes {
-      for change in changes.changes() {
-        if be_doc::Line(change.end) < min_line || be_doc::Line(change.start) > max_line {
+      for hunk in changes.changes() {
+        if be_doc::Line(hunk.range.end) < min_line || be_doc::Line(hunk.range.start) > max_line {
           continue;
         }
 
-        let min_y = start_y + (change.start - min_line.as_usize()) as f64 * line_height;
-        let max_y = start_y + (change.end - min_line.as_usize()) as f64 * line_height;
+        let min_y = start_y + (hunk.range.start - min_line.as_usize()) as f64 * line_height;
+        let max_y = start_y + (hunk.range.end - min_line.as_usize()) as f64 * line_height;
 
         let shape = Rect::new(0.0, min_y, 4.0, max_y);
         render.fill(&shape, render.theme().diff_add);

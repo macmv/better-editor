@@ -26,6 +26,10 @@ pub struct LineDiff {
   diff: Diff,
 }
 
+pub struct LineHunk {
+  pub range: Range<usize>,
+}
+
 pub fn line_diff<'a>(before: &Document, after: &Document) -> LineDiff {
   let input = InternedInput::new(DocLines(before), DocLines(after));
   let mut diff = Diff::compute(Algorithm::Histogram, &input);
@@ -35,8 +39,14 @@ pub fn line_diff<'a>(before: &Document, after: &Document) -> LineDiff {
 }
 
 impl LineDiff {
-  pub fn changes(&self) -> impl Iterator<Item = Range<usize>> {
-    self.diff.hunks().map(|hunk| hunk.after.start as usize..hunk.after.end as usize)
+  pub fn changes(&self) -> impl Iterator<Item = LineHunk> {
+    self.diff.hunks().map(|hunk| LineHunk::new(&hunk))
+  }
+}
+
+impl LineHunk {
+  pub fn new(hunk: &imara_diff::Hunk) -> Self {
+    LineHunk { range: hunk.after.start as usize..hunk.after.end as usize }
   }
 }
 
@@ -222,6 +232,6 @@ fn foo() -> Bar {
 "#;
 
     let diff = line_diff(&Document::from(before), &Document::from(after));
-    assert_eq!(diff.changes().collect::<Vec<_>>(), [2..3]);
+    assert_eq!(diff.changes().collect::<Vec<_>>()[0].range, 2..3);
   }
 }
