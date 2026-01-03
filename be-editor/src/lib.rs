@@ -45,8 +45,8 @@ pub struct EditorState {
   pub exit_cmd: Option<Box<dyn Fn()>>,
 
   // TODO: Share this
-  repo:    Option<Repo>,
-  changes: Option<LineDiff>,
+  repo:        Option<Repo>,
+  pub changes: Option<LineDiff>,
 }
 
 #[derive(Default)]
