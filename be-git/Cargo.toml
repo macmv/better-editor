@@ -9,3 +9,4 @@ be-doc = { path = "../be-doc" }
 git2 = { version = "0.20.3", default-features = false }
 imara-diff = "0.2.0"
 log = "0.4.29"
+siphasher = "1.0.1"

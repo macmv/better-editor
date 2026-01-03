@@ -2,9 +2,14 @@
 
 use be_doc::Document;
 use imara_diff::{Algorithm, Diff, InternedInput, TokenSource};
+use siphasher::sip::SipHasher;
 
 struct ColorLinePrinter<'a>(&'a imara_diff::Interner<&'a str>);
-use std::{fmt, hash::Hash, ops::Range};
+use std::{
+  fmt,
+  hash::{Hash, Hasher},
+  ops::Range,
+};
 
 struct CharTokens<'a>(&'a str);
 
@@ -41,11 +46,13 @@ struct RopeSliceHash<'a>(be_doc::crop::RopeSlice<'a>);
 
 impl Hash for RopeSliceHash<'_> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    // Like `state.write_str`.
+    // The hasher used by `imara_diff` is sequence dependent (it's foldhash). So, we
+    // use siphasher, which handles different chunk boundaries correctly.
+    let mut hasher = SipHasher::new();
     for chunk in self.0.chunks() {
-      state.write(chunk.as_bytes());
+      hasher.write(chunk.as_bytes());
     }
-    state.write_u8(0xff);
+    state.write_u64(hasher.finish());
   }
 }
 
