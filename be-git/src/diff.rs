@@ -11,16 +11,7 @@ use std::{
 };
 
 struct ColorLinePrinter<'a>(&'a imara_diff::Interner<RopeSliceHash<'a>>);
-struct CharTokens<'a>(&'a str);
-
-impl<'a> TokenSource for CharTokens<'a> {
-  type Token = char;
-  type Tokenizer = std::str::Chars<'a>;
-
-  fn tokenize(&self) -> Self::Tokenizer { self.0.chars() }
-
-  fn estimate_tokens(&self) -> u32 { self.0.len() as u32 }
-}
+struct CharTokens<'a>(RopeSliceHash<'a>);
 
 pub struct LineDiff {
   diff: Diff,
@@ -79,6 +70,15 @@ impl<'a> TokenSource for DocLines<'a> {
     // Like imara_diff::ByteLines, but we don't actually read anything.
     100
   }
+}
+
+impl<'a> TokenSource for CharTokens<'a> {
+  type Token = char;
+  type Tokenizer = be_doc::crop::iter::Chars<'a>;
+
+  fn tokenize(&self) -> Self::Tokenizer { self.0.0.chars() }
+
+  fn estimate_tokens(&self) -> u32 { self.0.0.byte_len() as u32 }
 }
 
 impl imara_diff::UnifiedDiffPrinter for ColorLinePrinter<'_> {
@@ -191,33 +191,37 @@ impl imara_diff::UnifiedDiffPrinter for ColorLinePrinter<'_> {
 
 #[cfg(test)]
 mod tests {
+  use imara_diff::UnifiedDiffConfig;
+
   use super::*;
 
   #[test]
   fn bar() {
-    use imara_diff::{Algorithm, Diff, InternedInput, UnifiedDiffConfig};
+    use imara_diff::{Algorithm, Diff, InternedInput};
 
-    let before = r#"
+    let before = Document::from(
+      r#"
 fn foo() -> Bar {
   let a = 3;
 }
-"#;
+"#,
+    );
 
-    let after = r#"
+    let after = Document::from(
+      r#"
 fn foo() -> Bar {
   let b = 3;
 }
-"#;
-    let input = InternedInput::new(before, after);
+"#,
+    );
+    let input = InternedInput::new(DocLines(&before), DocLines(&after));
     let mut diff = Diff::compute(Algorithm::Histogram, &input);
-    diff.postprocess_lines(&input);
+    diff.postprocess_no_heuristic(&input);
 
-    /*
     println!(
       "{}",
       diff.unified_diff(&ColorLinePrinter(&input.interner), UnifiedDiffConfig::default(), &input,)
     );
-    */
     panic!();
   }
 
