@@ -194,7 +194,7 @@ impl imara_diff::UnifiedDiffPrinter for ColorLinePrinter<'_> {
   }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum ChangeKind {
   Modify,
   Add,
@@ -245,26 +245,19 @@ fn foo<'a>(before: &[RopeSlice<'a>], after: &[RopeSlice<'a>]) -> Vec<Change> {
     }
   }
 
-  #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-  enum Step {
-    Sub,
-    Del,
-    Ins,
-  }
-
   // DP tables: costs and backpointers.
   let idx = |i: usize, j: usize, m: usize| -> usize { i * (m + 1) + j };
   let mut dp = vec![INFINITY; (before.len() + 1) * (after.len() + 1)];
-  let mut back = vec![Step::Sub; (before.len() + 1) * (after.len() + 1)];
+  let mut back = vec![ChangeKind::Modify; (before.len() + 1) * (after.len() + 1)];
 
   dp[idx(0, 0, after.len())] = 0.0;
   for i in 1..=before.len() {
     dp[idx(i, 0, after.len())] = dp[idx(i - 1, 0, after.len())] + COST_DEL;
-    back[idx(i, 0, after.len())] = Step::Del;
+    back[idx(i, 0, after.len())] = ChangeKind::Remove;
   }
   for j in 1..=after.len() {
     dp[idx(0, j, after.len())] = dp[idx(0, j - 1, after.len())] + COST_INS;
-    back[idx(0, j, after.len())] = Step::Ins;
+    back[idx(0, j, after.len())] = ChangeKind::Add;
   }
 
   // Fill DP with deterministic tie-breaks:
@@ -282,20 +275,20 @@ fn foo<'a>(before: &[RopeSlice<'a>], after: &[RopeSlice<'a>]) -> Vec<Change> {
 
       // Choose best with stable tie-breaking.
       let mut best_cost = sub_cost;
-      let mut best_step = Step::Sub;
+      let mut best_step = ChangeKind::Modify;
 
       if del_cost + EPSILON < best_cost
-        || ((del_cost - best_cost).abs() <= EPSILON && Step::Del < best_step)
+        || ((del_cost - best_cost).abs() <= EPSILON && ChangeKind::Remove < best_step)
       {
         best_cost = del_cost;
-        best_step = Step::Del;
+        best_step = ChangeKind::Remove;
       }
 
       if ins_cost + EPSILON < best_cost
-        || ((ins_cost - best_cost).abs() <= EPSILON && Step::Ins < best_step)
+        || ((ins_cost - best_cost).abs() <= EPSILON && ChangeKind::Add < best_step)
       {
         best_cost = ins_cost;
-        best_step = Step::Ins;
+        best_step = ChangeKind::Add;
       }
 
       dp[idx(i, j, after.len())] = best_cost;
@@ -303,46 +296,35 @@ fn foo<'a>(before: &[RopeSlice<'a>], after: &[RopeSlice<'a>]) -> Vec<Change> {
     }
   }
 
-  let mut ops_rev: Vec<Change> = Vec::with_capacity(before.len() + after.len());
+  let mut changes: Vec<Change> = Vec::with_capacity(before.len() + after.len());
   let mut i = before.len();
   let mut j = after.len();
   while i > 0 || j > 0 {
-    let step = back[idx(i, j, after.len())];
-    let kind = match step {
-      Step::Sub => {
+    let kind = back[idx(i, j, after.len())];
+    match kind {
+      ChangeKind::Modify => {
         i -= 1;
         j -= 1;
-        ChangeKind::Modify
       }
-      Step::Ins => {
-        j -= 1;
-        ChangeKind::Add
-      }
-      Step::Del => {
-        i -= 1;
-        ChangeKind::Remove
-      }
+      ChangeKind::Add => j -= 1,
+      ChangeKind::Remove => i -= 1,
     };
-    ops_rev.push(Change { after_start: j, before_start: i, length: 1, kind });
-  }
-  ops_rev.reverse();
 
-  // Merge adjacent Add/Modify ranges for nicer output.
-  let mut out: Vec<Change> = vec![];
-  for op in ops_rev {
-    if let Some(last_change) = out.last_mut() {
-      let mergeable = last_change.kind == op.kind
+    if let Some(last_change) = changes.last_mut() {
+      if last_change.kind == kind
         && last_change.kind != ChangeKind::Remove
-        && last_change.after().end == op.after_start;
-      if mergeable {
-        last_change.length += op.length;
+        && last_change.after_start == j + 1
+      {
+        last_change.length += 1;
         continue;
       }
     }
-    out.push(op);
+
+    changes.push(Change { after_start: j, before_start: i, length: 1, kind });
   }
 
-  out
+  changes.reverse();
+  changes
 }
 
 fn line_similarity<'a>(a: RopeSlice<'a>, b: RopeSlice<'a>) -> f32 {
@@ -462,6 +444,7 @@ fn foo() -> Bar {
 fn foo() -> Bar {
   let aaa = 3;
   let ccc = 3;
+  let ccc = 3;
 }
 "#;
 
@@ -469,6 +452,7 @@ fn foo() -> Bar {
 fn foo() -> Bar {
   let aba = 3;
   let b = 3;
+  let cbc = 3;
   let cbc = 3;
 }
 "#;
@@ -493,11 +477,16 @@ fn foo() -> Bar {
     compare(3, 4);
 
     let changes = foo(
-      &[input.interner[input.before[2]].0, input.interner[input.before[3]].0],
+      &[
+        input.interner[input.before[2]].0,
+        input.interner[input.before[3]].0,
+        input.interner[input.before[4]].0,
+      ],
       &[
         input.interner[input.after[2]].0,
         input.interner[input.after[3]].0,
         input.interner[input.after[4]].0,
+        input.interner[input.after[5]].0,
       ],
     );
 
