@@ -46,7 +46,7 @@ fn line_diff_inner<'a>(
   (LineDiff { diff }, input)
 }
 
-fn line_diff_similarity<'a>(before: &'a Document, after: &'a Document) -> LineDiffSimilarity {
+pub fn line_diff_similarity<'a>(before: &'a Document, after: &'a Document) -> LineDiffSimilarity {
   let input = InternedInput::new(DocLines(before), DocLines(after));
   let mut diff = Diff::compute(Algorithm::Histogram, &input);
   diff.postprocess_no_heuristic(&input);
@@ -354,14 +354,19 @@ fn similarity_diff<'a>(
     if let Some(last_change) = changes.last_mut() {
       if last_change.kind == kind
         && last_change.kind != ChangeKind::Remove
-        && last_change.after_start == j + 1
+        && last_change.after_start - after.start == j + 1
       {
         last_change.length += 1;
         continue;
       }
     }
 
-    changes.push(Change { after_start: j, before_start: i, length: 1, kind });
+    changes.push(Change {
+      after_start: after.start + j,
+      before_start: before.start + i,
+      length: 1,
+      kind,
+    });
   }
 
   changes.reverse();
@@ -505,15 +510,15 @@ fn foo() -> Bar {
     assert_eq!(diff.hunks[0].after, 2..6);
 
     // modify 1 line
-    assert_eq!(diff.hunks[0].changes[0].before(), 0..1);
-    assert_eq!(diff.hunks[0].changes[0].after(), 0..1);
+    assert_eq!(diff.hunks[0].changes[0].before(), 2..3);
+    assert_eq!(diff.hunks[0].changes[0].after(), 2..3);
 
     // add 1 line
-    assert_eq!(diff.hunks[0].changes[1].before(), 1..1);
-    assert_eq!(diff.hunks[0].changes[1].after(), 1..2);
+    assert_eq!(diff.hunks[0].changes[1].before(), 3..3);
+    assert_eq!(diff.hunks[0].changes[1].after(), 3..4);
 
     // modify 2 lines
-    assert_eq!(diff.hunks[0].changes[2].before(), 2..4);
-    assert_eq!(diff.hunks[0].changes[2].after(), 3..5);
+    assert_eq!(diff.hunks[0].changes[2].before(), 4..6);
+    assert_eq!(diff.hunks[0].changes[2].after(), 5..7);
   }
 }
