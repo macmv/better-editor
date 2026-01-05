@@ -283,32 +283,19 @@ fn foo<'a>(before: &[RopeSlice<'a>], after: &[RopeSlice<'a>]) -> Vec<Change> {
       // Choose best with stable tie-breaking.
       let mut best_cost = sub_cost;
       let mut best_step = Step::Sub;
-      let mut best_sim = s;
 
-      // Compare DEL
       if del_cost + EPSILON < best_cost
         || ((del_cost - best_cost).abs() <= EPSILON && Step::Del < best_step)
       {
         best_cost = del_cost;
         best_step = Step::Del;
-        best_sim = 0.0;
       }
 
-      // Compare INS
       if ins_cost + EPSILON < best_cost
         || ((ins_cost - best_cost).abs() <= EPSILON && Step::Ins < best_step)
       {
         best_cost = ins_cost;
         best_step = Step::Ins;
-        best_sim = 0.0;
-      }
-
-      // If SUB ties exactly with current best cost and both are SUB, prefer higher
-      // sim. (This mostly matters if you later tweak costs.)
-      if best_step == Step::Sub && (sub_cost - best_cost).abs() <= EPSILON {
-        if s > best_sim + EPSILON {
-          best_sim = s;
-        }
       }
 
       dp[idx(i, j, after.len())] = best_cost;
