@@ -246,18 +246,20 @@ fn foo<'a>(before: &[RopeSlice<'a>], after: &[RopeSlice<'a>]) -> Vec<Change> {
   }
 
   // DP tables: costs and backpointers.
-  let idx = |i: usize, j: usize, m: usize| -> usize { i * (m + 1) + j };
+  macro_rules! idx {
+    ($i:expr, $j:expr) => {{ $i * (after.len() + 1) + $j }};
+  }
   let mut dp = vec![INFINITY; (before.len() + 1) * (after.len() + 1)];
   let mut back = vec![ChangeKind::Modify; (before.len() + 1) * (after.len() + 1)];
 
-  dp[idx(0, 0, after.len())] = 0.0;
+  dp[idx!(0, 0)] = 0.0;
   for i in 1..=before.len() {
-    dp[idx(i, 0, after.len())] = dp[idx(i - 1, 0, after.len())] + COST_DEL;
-    back[idx(i, 0, after.len())] = ChangeKind::Remove;
+    dp[idx!(i, 0)] = dp[idx!(i - 1, 0)] + COST_DEL;
+    back[idx!(i, 0)] = ChangeKind::Remove;
   }
   for j in 1..=after.len() {
-    dp[idx(0, j, after.len())] = dp[idx(0, j - 1, after.len())] + COST_INS;
-    back[idx(0, j, after.len())] = ChangeKind::Add;
+    dp[idx!(0, j)] = dp[idx!(0, j - 1)] + COST_INS;
+    back[idx!(0, j)] = ChangeKind::Add;
   }
 
   // Fill DP with deterministic tie-breaks:
@@ -266,12 +268,11 @@ fn foo<'a>(before: &[RopeSlice<'a>], after: &[RopeSlice<'a>]) -> Vec<Change> {
   // 3) if Sub ties, prefer higher sim
   for i in 1..=before.len() {
     for j in 1..=after.len() {
-      let del_cost = dp[idx(i - 1, j, after.len())] + COST_DEL;
-      let ins_cost = dp[idx(i, j - 1, after.len())] + COST_INS;
+      let del_cost = dp[idx!(i - 1, j)] + COST_DEL;
+      let ins_cost = dp[idx!(i, j - 1)] + COST_INS;
 
       let s = sim[(i - 1) * after.len() + (j - 1)];
-      let sub_cost =
-        if s >= SIM_THRESHOLD { dp[idx(i - 1, j - 1, after.len())] + (1.0 - s) } else { INFINITY };
+      let sub_cost = if s >= SIM_THRESHOLD { dp[idx!(i - 1, j - 1)] + (1.0 - s) } else { INFINITY };
 
       // Choose best with stable tie-breaking.
       let mut best_cost = sub_cost;
@@ -291,8 +292,8 @@ fn foo<'a>(before: &[RopeSlice<'a>], after: &[RopeSlice<'a>]) -> Vec<Change> {
         best_step = ChangeKind::Add;
       }
 
-      dp[idx(i, j, after.len())] = best_cost;
-      back[idx(i, j, after.len())] = best_step;
+      dp[idx!(i, j)] = best_cost;
+      back[idx!(i, j)] = best_step;
     }
   }
 
@@ -300,7 +301,7 @@ fn foo<'a>(before: &[RopeSlice<'a>], after: &[RopeSlice<'a>]) -> Vec<Change> {
   let mut i = before.len();
   let mut j = after.len();
   while i > 0 || j > 0 {
-    let kind = back[idx(i, j, after.len())];
+    let kind = back[idx!(i, j)];
     match kind {
       ChangeKind::Modify => {
         i -= 1;
