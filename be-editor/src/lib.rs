@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashSet, path::Path, rc::Rc};
 
 use be_config::Config;
 use be_doc::{Change, Column, Cursor, Document, Edit, Line, crop::RopeSlice};
-use be_git::{LineDiff, Repo};
+use be_git::{LineDiffSimilarity, Repo};
 use be_input::{Action, Direction, Mode, Move, VerticalDirection};
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -46,7 +46,7 @@ pub struct EditorState {
 
   // TODO: Share this
   repo:        Option<Repo>,
-  pub changes: Option<LineDiff>,
+  pub changes: Option<LineDiffSimilarity>,
 }
 
 #[derive(Default)]

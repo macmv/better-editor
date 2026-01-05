@@ -12,7 +12,7 @@ extern crate log;
 mod diff;
 mod git;
 
-pub use diff::LineDiff;
+pub use diff::{Change, LineDiff, LineDiffSimilarity};
 
 /// This acts like a store for modified files in the editor.
 ///
@@ -64,7 +64,7 @@ impl Repo {
     }
   }
 
-  pub fn changes_in(&self, path: &Path) -> Option<LineDiff> {
+  pub fn changes_in(&self, path: &Path) -> Option<LineDiffSimilarity> {
     let path = path.canonicalize().unwrap();
 
     if let Ok(rel) = path.strip_prefix(&self.root)
@@ -82,5 +82,7 @@ impl ChangedFile {
     ChangedFile { original: be_doc::Document { rope: doc.rope.clone() }, current: doc }
   }
 
-  fn changes(&self) -> diff::LineDiff { diff::line_diff(&self.original, &self.current) }
+  fn changes(&self) -> diff::LineDiffSimilarity {
+    diff::line_diff_similarity(&self.original, &self.current)
+  }
 }

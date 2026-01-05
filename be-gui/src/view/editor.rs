@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use be_editor::{EditorState, IndentLevel};
 use be_input::Mode;
-use kurbo::{Circle, Line, Point, Rect, RoundedRect, Stroke, Vec2};
+use kurbo::{Circle, Line, Point, Rect, RoundedRect, Stroke, Triangle, Vec2};
 
 use crate::{CursorMode, Render, RenderStore, TextLayout, theme::Underline};
 
@@ -148,15 +148,37 @@ impl EditorView {
 
     if let Some(changes) = &self.editor.changes {
       for hunk in changes.changes() {
-        if be_doc::Line(hunk.range.end) < min_line || be_doc::Line(hunk.range.start) > max_line {
+        if be_doc::Line(hunk.after.end) < min_line || be_doc::Line(hunk.after.start) > max_line {
           continue;
         }
 
-        let min_y = start_y + (hunk.range.start - min_line.as_usize()) as f64 * line_height;
-        let max_y = start_y + (hunk.range.end - min_line.as_usize()) as f64 * line_height;
+        for change in hunk.changes.iter().rev() {
+          if be_doc::Line(change.after().end) < min_line
+            || be_doc::Line(change.after().start) > max_line
+          {
+            continue;
+          }
 
-        let shape = Rect::new(0.0, min_y, 4.0, max_y);
-        render.fill(&shape, render.theme().diff_add);
+          if change.after().is_empty() {
+            let y = start_y + (change.after().start - min_line.as_usize()) as f64 * line_height;
+
+            let shape = Triangle::new((0.0, y - 4.0), (0.0, y + 4.0), (4.0, y));
+            render.fill(&shape, render.theme().diff_remove);
+          } else {
+            let min_y = start_y + (change.after().start - min_line.as_usize()) as f64 * line_height;
+            let max_y = start_y + (change.after().end - min_line.as_usize()) as f64 * line_height;
+
+            let shape = Rect::new(0.0, min_y, 4.0, max_y);
+            render.fill(
+              &shape,
+              if change.before().is_empty() {
+                render.theme().diff_add
+              } else {
+                render.theme().diff_change
+              },
+            );
+          }
+        }
       }
     }
 
