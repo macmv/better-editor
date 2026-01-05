@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use be_doc::Document;
+use be_doc::{Document, crop::RopeSlice};
 use imara_diff::{Algorithm, Diff, InternedInput, TokenSource};
 use siphasher::sip::SipHasher;
 
@@ -22,11 +22,18 @@ pub struct LineHunk {
 }
 
 pub fn line_diff(before: &Document, after: &Document) -> LineDiff {
+  line_diff_inner(before, after).0
+}
+
+fn line_diff_inner<'a>(
+  before: &'a Document,
+  after: &'a Document,
+) -> (LineDiff, InternedInput<RopeSliceHash<'a>>) {
   let input = InternedInput::new(DocLines(before), DocLines(after));
   let mut diff = Diff::compute(Algorithm::Histogram, &input);
   diff.postprocess_no_heuristic(&input);
 
-  LineDiff { diff }
+  (LineDiff { diff }, input)
 }
 
 impl LineDiff {
@@ -187,6 +194,225 @@ impl imara_diff::UnifiedDiffPrinter for ColorLinePrinter<'_> {
   }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ChangeKind {
+  Modify,
+  Add,
+  Remove,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Change {
+  before_start: usize,
+  after_start:  usize,
+  length:       usize,
+  kind:         ChangeKind,
+}
+
+impl Change {
+  pub fn before(&self) -> Range<usize> {
+    match self.kind {
+      ChangeKind::Modify => self.before_start..(self.before_start + self.length),
+      ChangeKind::Add => self.before_start..self.before_start,
+      ChangeKind::Remove => self.before_start..(self.before_start + self.length),
+    }
+  }
+
+  pub fn after(&self) -> Range<usize> {
+    match self.kind {
+      ChangeKind::Modify => self.after_start..(self.after_start + self.length),
+      ChangeKind::Add => self.after_start..(self.after_start + self.length),
+      ChangeKind::Remove => self.after_start..self.after_start,
+    }
+  }
+
+  pub fn length(&self) -> usize { self.length }
+}
+
+fn foo<'a>(before: &[RopeSlice<'a>], after: &[RopeSlice<'a>]) -> Vec<Change> {
+  // --- Tunables ---
+  const COST_DEL: f32 = 1.0;
+  const COST_INS: f32 = 1.0;
+  const SIM_THRESHOLD: f32 = 0.30; // don't match "garbage"
+  const INFINITY: f32 = 1.0e30;
+  const EPSILON: f32 = 1.0e-6;
+
+  // Precomputed similarities
+  let mut sim = vec![0.0; before.len() * after.len()];
+  for i in 0..before.len() {
+    for j in 0..after.len() {
+      sim[i * after.len() + j] = line_similarity(before[i], after[j]);
+    }
+  }
+
+  #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+  enum Step {
+    Sub,
+    Del,
+    Ins,
+  }
+
+  // DP tables: costs and backpointers.
+  let idx = |i: usize, j: usize, m: usize| -> usize { i * (m + 1) + j };
+  let mut dp = vec![INFINITY; (before.len() + 1) * (after.len() + 1)];
+  let mut back = vec![Step::Sub; (before.len() + 1) * (after.len() + 1)];
+
+  dp[idx(0, 0, after.len())] = 0.0;
+  for i in 1..=before.len() {
+    dp[idx(i, 0, after.len())] = dp[idx(i - 1, 0, after.len())] + COST_DEL;
+    back[idx(i, 0, after.len())] = Step::Del;
+  }
+  for j in 1..=after.len() {
+    dp[idx(0, j, after.len())] = dp[idx(0, j - 1, after.len())] + COST_INS;
+    back[idx(0, j, after.len())] = Step::Ins;
+  }
+
+  // Fill DP with deterministic tie-breaks:
+  // 1) lower cost
+  // 2) prefer Sub over Del over Ins (but Sub is only allowed if sim >= threshold)
+  // 3) if Sub ties, prefer higher sim
+  for i in 1..=before.len() {
+    for j in 1..=after.len() {
+      let del_cost = dp[idx(i - 1, j, after.len())] + COST_DEL;
+      let ins_cost = dp[idx(i, j - 1, after.len())] + COST_INS;
+
+      let s = sim[(i - 1) * after.len() + (j - 1)];
+      let sub_cost =
+        if s >= SIM_THRESHOLD { dp[idx(i - 1, j - 1, after.len())] + (1.0 - s) } else { INFINITY };
+
+      // Choose best with stable tie-breaking.
+      let mut best_cost = sub_cost;
+      let mut best_step = Step::Sub;
+      let mut best_sim = s;
+
+      // Compare DEL
+      if del_cost + EPSILON < best_cost
+        || ((del_cost - best_cost).abs() <= EPSILON && Step::Del < best_step)
+      {
+        best_cost = del_cost;
+        best_step = Step::Del;
+        best_sim = 0.0;
+      }
+
+      // Compare INS
+      if ins_cost + EPSILON < best_cost
+        || ((ins_cost - best_cost).abs() <= EPSILON && Step::Ins < best_step)
+      {
+        best_cost = ins_cost;
+        best_step = Step::Ins;
+        best_sim = 0.0;
+      }
+
+      // If SUB ties exactly with current best cost and both are SUB, prefer higher
+      // sim. (This mostly matters if you later tweak costs.)
+      if best_step == Step::Sub && (sub_cost - best_cost).abs() <= EPSILON {
+        if s > best_sim + EPSILON {
+          best_sim = s;
+        }
+      }
+
+      dp[idx(i, j, after.len())] = best_cost;
+      back[idx(i, j, after.len())] = best_step;
+    }
+  }
+
+  let mut ops_rev: Vec<Change> = Vec::with_capacity(before.len() + after.len());
+  let mut i = before.len();
+  let mut j = after.len();
+  while i > 0 || j > 0 {
+    let step = back[idx(i, j, after.len())];
+    let kind = match step {
+      Step::Sub => {
+        i -= 1;
+        j -= 1;
+        ChangeKind::Modify
+      }
+      Step::Ins => {
+        j -= 1;
+        ChangeKind::Add
+      }
+      Step::Del => {
+        i -= 1;
+        ChangeKind::Remove
+      }
+    };
+    ops_rev.push(Change { after_start: j, before_start: i, length: 1, kind });
+  }
+  ops_rev.reverse();
+
+  // Merge adjacent Add/Modify ranges for nicer output.
+  let mut out: Vec<Change> = vec![];
+  for op in ops_rev {
+    if let Some(last_change) = out.last_mut() {
+      let mergeable = last_change.kind == op.kind
+        && last_change.kind != ChangeKind::Remove
+        && last_change.after().end == op.after_start;
+      if mergeable {
+        last_change.length += op.length;
+        continue;
+      }
+    }
+    out.push(op);
+  }
+
+  out
+}
+
+fn line_similarity<'a>(a: RopeSlice<'a>, b: RopeSlice<'a>) -> f32 {
+  if a == b {
+    return 1.0;
+  } else if a.is_empty() && b.is_empty() {
+    return 1.0;
+  }
+
+  let dist = levenshtein_distance(a, b) as f32;
+  let max_len = (a.chars().count().max(b.chars().count())) as f32;
+  let sim = 1.0 - (dist / max_len as f32);
+  sim.clamp(0.0, 1.0)
+}
+
+pub fn levenshtein_distance<'a>(mut a: RopeSlice<'a>, mut b: RopeSlice<'a>) -> usize {
+  if a.is_empty() {
+    return b.chars().count();
+  } else if b.is_empty() {
+    return a.chars().count();
+  }
+
+  let len_a = a.chars().count();
+  let mut len_b = b.chars().count();
+  if len_a < len_b {
+    std::mem::swap(&mut a, &mut b);
+    len_b = len_a;
+  }
+
+  let mut pre;
+  let mut tmp;
+  let mut curr = vec![0; len_b + 1];
+  for i in 1..=len_b {
+    curr[i] = i;
+  }
+
+  for (i, ca) in a.chars().enumerate() {
+    pre = curr[0];
+    curr[0] = i + 1;
+    for (j, cb) in b.chars().enumerate() {
+      tmp = curr[j + 1];
+      curr[j + 1] = std::cmp::min(
+        // deletion
+        tmp + 1,
+        std::cmp::min(
+          // insertion
+          curr[j] + 1,
+          // match or substitution
+          pre + if ca == cb { 0 } else { 1 },
+        ),
+      );
+      pre = tmp;
+    }
+  }
+  curr[len_b]
+}
+
 #[cfg(test)]
 mod tests {
   use imara_diff::UnifiedDiffConfig;
@@ -262,7 +488,45 @@ fn foo() -> Bar {
 
     let before = Document::from(before);
     let after = Document::from(after);
-    let diff = line_diff(&before, &after);
+    let (diff, input) = line_diff_inner(&before, &after);
+
+    let compare = |a: usize, b: usize| {
+      let before_line = input.interner[input.before[a]].0;
+      let after_line = input.interner[input.after[b]].0;
+
+      let dist = line_similarity(before_line, after_line);
+      println!("{a}/{b}: {dist}");
+    };
+
+    compare(2, 2);
+    compare(2, 3);
+    compare(2, 4);
+    compare(3, 2);
+    compare(3, 3);
+    compare(3, 4);
+
+    let changes = foo(
+      &[input.interner[input.before[2]].0, input.interner[input.before[3]].0],
+      &[
+        input.interner[input.after[2]].0,
+        input.interner[input.after[3]].0,
+        input.interner[input.after[4]].0,
+      ],
+    );
+
+    for change in changes {
+      println!("{:?}/{:?} {:?}", change.before(), change.after(), change.kind);
+    }
+
+    for line in 2..5 {
+      let before_line = input.interner[input.before[line]].0;
+      let after_line = input.interner[input.after[line]].0;
+
+      let dist = levenshtein_distance(before_line, after_line);
+      println!("{line}: {dist}");
+    }
+
     assert_eq!(diff.changes().collect::<Vec<_>>()[0].range, 2..5);
+    panic!();
   }
 }
