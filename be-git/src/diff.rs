@@ -72,7 +72,7 @@ impl LineDiff {
 }
 
 impl LineDiffSimilarity {
-  pub fn changes(&'_ self) -> impl Iterator<Item = &LineHunkSimilarity> + use<'_> {
+  pub fn hunks(&'_ self) -> impl Iterator<Item = &LineHunkSimilarity> + use<'_> {
     self.hunks.iter()
   }
 }

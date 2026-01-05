@@ -147,7 +147,7 @@ impl EditorView {
     }
 
     if let Some(changes) = &self.editor.changes {
-      for hunk in changes.changes() {
+      for hunk in changes.hunks() {
         if be_doc::Line(hunk.after.end) < min_line || be_doc::Line(hunk.after.start) > max_line {
           continue;
         }
