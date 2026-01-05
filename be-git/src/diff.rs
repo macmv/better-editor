@@ -229,7 +229,11 @@ impl Change {
   pub fn length(&self) -> usize { self.length }
 }
 
-fn foo<'a>(before: &[RopeSlice<'a>], after: &[RopeSlice<'a>]) -> Vec<Change> {
+fn similarity_diff<'a>(
+  input: &InternedInput<RopeSliceHash<'a>>,
+  before: Range<usize>,
+  after: Range<usize>,
+) -> Vec<Change> {
   // --- Tunables ---
   const COST_DEL: f32 = 1.0;
   const COST_INS: f32 = 1.0;
@@ -241,7 +245,10 @@ fn foo<'a>(before: &[RopeSlice<'a>], after: &[RopeSlice<'a>]) -> Vec<Change> {
   let mut sim = vec![0.0; before.len() * after.len()];
   for i in 0..before.len() {
     for j in 0..after.len() {
-      sim[i * after.len() + j] = line_similarity(before[i], after[j]);
+      sim[i * after.len() + j] = line_similarity(
+        input.interner[input.before[before.start + i]].0,
+        input.interner[input.after[after.start + j]].0,
+      );
     }
   }
 
@@ -477,33 +484,13 @@ fn foo() -> Bar {
     compare(3, 3);
     compare(3, 4);
 
-    let changes = foo(
-      &[
-        input.interner[input.before[2]].0,
-        input.interner[input.before[3]].0,
-        input.interner[input.before[4]].0,
-      ],
-      &[
-        input.interner[input.after[2]].0,
-        input.interner[input.after[3]].0,
-        input.interner[input.after[4]].0,
-        input.interner[input.after[5]].0,
-      ],
-    );
+    let changes = similarity_diff(&input, 2..4, 2..5);
 
     for change in changes {
       println!("{:?}/{:?} {:?}", change.before(), change.after(), change.kind);
     }
 
-    for line in 2..5 {
-      let before_line = input.interner[input.before[line]].0;
-      let after_line = input.interner[input.after[line]].0;
-
-      let dist = levenshtein_distance(before_line, after_line);
-      println!("{line}: {dist}");
-    }
-
-    assert_eq!(diff.changes().collect::<Vec<_>>()[0].range, 2..5);
+    assert_eq!(diff.changes().collect::<Vec<_>>()[0].range, 2..6);
     panic!();
   }
 }
