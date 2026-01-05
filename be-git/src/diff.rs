@@ -17,8 +17,18 @@ pub struct LineDiff {
   diff: Diff,
 }
 
+pub struct LineDiffSimilarity {
+  hunks: Vec<LineHunkSimilarity>,
+}
+
 pub struct LineHunk {
   pub range: Range<usize>,
+}
+
+pub struct LineHunkSimilarity {
+  pub before:  Range<usize>,
+  pub after:   Range<usize>,
+  pub changes: Vec<Change>,
 }
 
 pub fn line_diff(before: &Document, after: &Document) -> LineDiff {
@@ -36,9 +46,34 @@ fn line_diff_inner<'a>(
   (LineDiff { diff }, input)
 }
 
+fn line_diff_similarity<'a>(before: &'a Document, after: &'a Document) -> LineDiffSimilarity {
+  let input = InternedInput::new(DocLines(before), DocLines(after));
+  let mut diff = Diff::compute(Algorithm::Histogram, &input);
+  diff.postprocess_no_heuristic(&input);
+
+  let mut hunks = vec![];
+
+  for hunk in diff.hunks() {
+    let before = hunk.before.start as usize..hunk.before.end as usize;
+    let after = hunk.after.start as usize..hunk.after.end as usize;
+
+    let changes = similarity_diff(&input, before.clone(), after.clone());
+
+    hunks.push(LineHunkSimilarity { before, after, changes });
+  }
+
+  LineDiffSimilarity { hunks }
+}
+
 impl LineDiff {
   pub fn changes(&'_ self) -> impl Iterator<Item = LineHunk> + use<'_> {
     self.diff.hunks().map(|hunk| LineHunk::new(&hunk))
+  }
+}
+
+impl LineDiffSimilarity {
+  pub fn changes(&'_ self) -> impl Iterator<Item = &LineHunkSimilarity> + use<'_> {
+    self.hunks.iter()
   }
 }
 
@@ -202,7 +237,7 @@ enum ChangeKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Change {
+pub struct Change {
   before_start: usize,
   after_start:  usize,
   length:       usize,
@@ -225,8 +260,6 @@ impl Change {
       ChangeKind::Remove => self.after_start..self.after_start,
     }
   }
-
-  pub fn length(&self) -> usize { self.length }
 }
 
 fn similarity_diff<'a>(
@@ -467,30 +500,20 @@ fn foo() -> Bar {
 
     let before = Document::from(before);
     let after = Document::from(after);
-    let (diff, input) = line_diff_inner(&before, &after);
+    let diff = line_diff_similarity(&before, &after);
 
-    let compare = |a: usize, b: usize| {
-      let before_line = input.interner[input.before[a]].0;
-      let after_line = input.interner[input.after[b]].0;
+    assert_eq!(diff.hunks[0].after, 2..6);
 
-      let dist = line_similarity(before_line, after_line);
-      println!("{a}/{b}: {dist}");
-    };
+    // modify 1 line
+    assert_eq!(diff.hunks[0].changes[0].before(), 0..1);
+    assert_eq!(diff.hunks[0].changes[0].after(), 0..1);
 
-    compare(2, 2);
-    compare(2, 3);
-    compare(2, 4);
-    compare(3, 2);
-    compare(3, 3);
-    compare(3, 4);
+    // add 1 line
+    assert_eq!(diff.hunks[0].changes[1].before(), 1..1);
+    assert_eq!(diff.hunks[0].changes[1].after(), 1..2);
 
-    let changes = similarity_diff(&input, 2..4, 2..5);
-
-    for change in changes {
-      println!("{:?}/{:?} {:?}", change.before(), change.after(), change.kind);
-    }
-
-    assert_eq!(diff.changes().collect::<Vec<_>>()[0].range, 2..6);
-    panic!();
+    // modify 2 lines
+    assert_eq!(diff.hunks[0].changes[2].before(), 2..4);
+    assert_eq!(diff.hunks[0].changes[2].after(), 3..5);
   }
 }
