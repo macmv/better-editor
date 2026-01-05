@@ -357,6 +357,7 @@ fn similarity_diff<'a>(
         && last_change.after_start - after.start == j + 1
       {
         last_change.length += 1;
+        last_change.after_start -= 1;
         continue;
       }
     }
@@ -491,6 +492,8 @@ fn foo() -> Bar {
   let aaa = 3;
   let ccc = 3;
   let ccc = 3;
+
+  let a = 3;
 }
 "#;
 
@@ -500,6 +503,10 @@ fn foo() -> Bar {
   let b = 3;
   let cbc = 3;
   let cbc = 3;
+
+  let a = 3;
+  let foo = 4;
+  let bar = 5;
 }
 "#;
 
@@ -507,6 +514,7 @@ fn foo() -> Bar {
     let after = Document::from(after);
     let diff = line_diff_similarity(&before, &after);
 
+    assert_eq!(diff.hunks[0].before, 2..5);
     assert_eq!(diff.hunks[0].after, 2..6);
 
     // modify 1 line
@@ -519,6 +527,11 @@ fn foo() -> Bar {
 
     // modify 2 lines
     assert_eq!(diff.hunks[0].changes[2].before(), 4..6);
-    assert_eq!(diff.hunks[0].changes[2].after(), 5..7);
+    assert_eq!(diff.hunks[0].changes[2].after(), 4..6);
+
+    assert_eq!(diff.hunks[1].before, 7..7);
+    assert_eq!(diff.hunks[1].after, 8..10);
+    assert_eq!(diff.hunks[1].changes[0].before(), 7..7);
+    assert_eq!(diff.hunks[1].changes[0].after(), 8..10);
   }
 }
