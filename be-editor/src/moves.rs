@@ -37,15 +37,26 @@ impl EditorState {
 
       Move::EndWord => {
         self.move_graphemes(1);
-        while self.cursor_kind() == WordKind::Blank && !self.at_eof() {
+        let mut move_backward = true;
+        while self.cursor_kind() == WordKind::Blank {
+          if self.at_eof() {
+            move_backward = false;
+            break;
+          }
           self.move_graphemes(1);
         }
 
         let start = self.cursor_kind();
-        while self.cursor_kind() == start && !self.at_eof() {
+        while self.cursor_kind() == start {
+          if self.at_eof() {
+            move_backward = false;
+            break;
+          }
           self.move_graphemes(1);
         }
-        self.move_graphemes(-1);
+        if move_backward {
+          self.move_graphemes(-1);
+        }
       }
 
       Move::PrevWord => {
@@ -180,6 +191,36 @@ mod tests {
     editor.check(expect![@"fn foo() -> Self { bar ⟦}⟧"]);
 
     editor.perform_move(Move::NextWord);
+    editor.check(expect![@"fn foo() -> Self { bar ⟦}⟧"]);
+  }
+
+  #[test]
+  fn end_word_works() {
+    let mut editor = editor("fn foo() -> Self { bar }");
+    editor.check(expect![@"⟦f⟧n foo() -> Self { bar }"]);
+
+    editor.perform_move(Move::EndWord);
+    editor.check(expect![@"f⟦n⟧ foo() -> Self { bar }"]);
+
+    editor.perform_move(Move::EndWord);
+    editor.check(expect![@"fn fo⟦o⟧() -> Self { bar }"]);
+
+    editor.perform_move(Move::EndWord);
+    editor.check(expect![@"fn foo(⟦)⟧ -> Self { bar }"]);
+
+    editor.perform_move(Move::EndWord);
+    editor.check(expect![@"fn foo() -⟦>⟧ Self { bar }"]);
+
+    editor.perform_move(Move::EndWord);
+    editor.check(expect![@"fn foo() -> Sel⟦f⟧ { bar }"]);
+
+    editor.perform_move(Move::EndWord);
+    editor.check(expect![@"fn foo() -> Self ⟦{⟧ bar }"]);
+
+    editor.perform_move(Move::EndWord);
+    editor.check(expect![@"fn foo() -> Self { ba⟦r⟧ }"]);
+
+    editor.perform_move(Move::EndWord);
     editor.check(expect![@"fn foo() -> Self { bar ⟦}⟧"]);
   }
 
