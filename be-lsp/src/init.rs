@@ -12,6 +12,10 @@ pub fn client_capabilities() -> lsp_types::ClientCapabilities {
       formatting: Some(lsp_types::DocumentFormattingClientCapabilities { ..Default::default() }),
       ..Default::default()
     }),
+    window: Some(lsp_types::WindowClientCapabilities {
+      work_done_progress: Some(true),
+      ..Default::default()
+    }),
     ..Default::default()
   }
 }

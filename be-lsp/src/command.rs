@@ -11,7 +11,7 @@ use serde_json::value::RawValue;
 use types::Uri;
 
 use crate::{
-  Diagnostic, LspClient, TextEdit,
+  Diagnostic, LspClient, Progress, TextEdit,
   client::{LspState, LspWorker},
 };
 
@@ -288,6 +288,33 @@ impl LspCommand for DocumentFormat {
 }
 
 impl LspWorker {
+  pub fn handle_request(
+    &self,
+    method: &str,
+    params: Option<Box<RawValue>>,
+  ) -> Option<Box<RawValue>> {
+    if method == "window/workDoneProgress/create" {
+      let params =
+        serde_json::from_str::<lsp_types::WorkDoneProgressCreateParams>(params.unwrap().get())
+          .unwrap();
+
+      let token = match params.token {
+        lsp_types::ProgressToken::Number(n) => n.to_string(),
+        lsp_types::ProgressToken::String(s) => s,
+      };
+
+      self
+        .state
+        .lock()
+        .progress
+        .insert(token, Progress { title: "".into(), message: None, progress: 0.0 });
+
+      Some(RawValue::from_string(serde_json::to_string(&()).unwrap()).unwrap())
+    } else {
+      None
+    }
+  }
+
   pub fn handle_notification(&self, method: &str, params: Option<Box<RawValue>>) {
     if method == "textDocument/publishDiagnostics" {
       let params =
@@ -311,6 +338,38 @@ impl LspWorker {
         .collect();
 
       self.state.lock().diagnostics.insert(path, diagnostics);
+    } else if method == "$/progress" {
+      let params =
+        serde_json::from_str::<lsp_types::ProgressParams>(params.unwrap().get()).unwrap();
+
+      let lsp_types::ProgressParamsValue::WorkDone(work) = params.value;
+
+      let token = match params.token {
+        lsp_types::ProgressToken::Number(n) => n.to_string(),
+        lsp_types::ProgressToken::String(s) => s,
+      };
+
+      match work {
+        lsp_types::WorkDoneProgress::Begin(begin) => {
+          let mut state = self.state.lock();
+          if !state.progress.contains_key(&token) {
+            warn!("work done for unknown token: {}", token);
+          }
+
+          state
+            .progress
+            .insert(token, Progress { title: begin.title, message: begin.message, progress: 0.0 });
+        }
+        lsp_types::WorkDoneProgress::Report(report) => {
+          if let Some(progress) = self.state.lock().progress.get_mut(&token) {
+            progress.message = report.message;
+            progress.progress = report.percentage.unwrap_or(0) as f64 / 100.0;
+          }
+        }
+        lsp_types::WorkDoneProgress::End(_) => {
+          self.state.lock().progress.remove(&token);
+        }
+      }
     } else {
       info!("unhandled notification: {}", method);
     }

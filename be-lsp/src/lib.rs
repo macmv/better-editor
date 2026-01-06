@@ -35,6 +35,12 @@ pub struct TextEdit {
   pub new_text: String,
 }
 
+pub struct Progress {
+  pub title:    String,
+  pub message:  Option<String>,
+  pub progress: f64,
+}
+
 #[derive(Clone, Hash, Eq, PartialEq)]
 pub enum LanguageServerKey {
   /// The language server for a particular language. One will be spawned when a

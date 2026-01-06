@@ -14,7 +14,7 @@ use std::{
   sync::Arc,
 };
 
-use crate::Diagnostic;
+use crate::{Diagnostic, Progress};
 
 pub struct LspClient {
   _child:        Child,
@@ -33,6 +33,7 @@ pub struct LspState {
   pub caps:         types::ServerCapabilities,
   pub opened_files: HashMap<PathBuf, Document>,
   pub diagnostics:  HashMap<PathBuf, Vec<Diagnostic>>,
+  pub progress:     HashMap<String, Progress>,
 }
 
 enum LspRequest {
@@ -229,7 +230,12 @@ impl LspWorker {
           READ => {
             while let Some(msg) = self.reader.recv() {
               match msg {
-                Message::Request { method, .. } => info!("unhandled request: {}", method),
+                Message::Request { id, method, params } => {
+                  let res = self.handle_request(&method, params);
+                  if let Some(res) = res {
+                    self.writer.response(id, &res);
+                  }
+                }
                 Message::Notification { method, params } => {
                   self.handle_notification(&method, params);
                 }
@@ -293,6 +299,19 @@ impl Writer {
       params:  request.params,
     })
     .unwrap();
+
+    write!(self.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content).unwrap();
+  }
+
+  fn response(&mut self, id: u64, result: &RawValue) {
+    #[derive(serde::Serialize)]
+    struct Response<'a> {
+      jsonrpc: &'static str,
+      id:      u64,
+      result:  &'a RawValue,
+    }
+
+    let content = serde_json::to_string(&Response { jsonrpc: "2.0", id, result }).unwrap();
 
     write!(self.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content).unwrap();
   }
