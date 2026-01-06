@@ -13,3 +13,6 @@ members = [
   "be-terminal",
   "be-gui",
 ]
+
+[workspace.dependencies]
+expect-test = { version = "0.1.0", path = "../expect-test" }

@@ -103,6 +103,8 @@ mod tests {
     ops::{Deref, DerefMut},
   };
 
+  use expect_test::Expect;
+
   use super::*;
 
   struct TestEditor(EditorState);
@@ -114,6 +116,8 @@ mod tests {
       s.insert(self.0.doc.cursor_offset(self.0.cursor), '⟦');
       s
     }
+
+    fn check(&self, expect: Expect) { expect.assert_eq(&self.state()); }
   }
 
   impl Deref for TestEditor {
@@ -139,30 +143,30 @@ mod tests {
   #[test]
   fn next_word_works() {
     let mut editor = editor("fn foo() -> Self { bar }");
-    assert_eq!(editor, "⟦f⟧n foo() -> Self { bar }");
+    editor.check(expect![@"⟦f⟧n foo() -> Self { bar }"]);
 
     editor.perform_move(Move::NextWord);
-    assert_eq!(editor, "fn ⟦f⟧oo() -> Self { bar }");
+    editor.check(expect![@"fn ⟦f⟧oo() -> Self { bar }"]);
 
     editor.perform_move(Move::NextWord);
-    assert_eq!(editor, "fn foo⟦(⟧) -> Self { bar }");
+    editor.check(expect![@"fn foo⟦(⟧) -> Self { bar }"]);
 
     editor.perform_move(Move::NextWord);
-    assert_eq!(editor, "fn foo() ⟦-⟧> Self { bar }");
+    editor.check(expect![@"fn foo() ⟦-⟧> Self { bar }"]);
 
     editor.perform_move(Move::NextWord);
-    assert_eq!(editor, "fn foo() -> ⟦S⟧elf { bar }");
+    editor.check(expect![@"fn foo() -> ⟦S⟧elf { bar }"]);
 
     editor.perform_move(Move::NextWord);
-    assert_eq!(editor, "fn foo() -> Self ⟦{⟧ bar }");
+    editor.check(expect![@"fn foo() -> Self ⟦{⟧ bar }"]);
 
     editor.perform_move(Move::NextWord);
-    assert_eq!(editor, "fn foo() -> Self { ⟦b⟧ar }");
+    editor.check(expect![@"fn foo() -> Self { ⟦b⟧ar }"]);
 
     editor.perform_move(Move::NextWord);
-    assert_eq!(editor, "fn foo() -> Self { bar ⟦}⟧");
+    editor.check(expect![@"fn foo() -> Self { bar ⟦}⟧"]);
 
     editor.perform_move(Move::NextWord);
-    assert_eq!(editor, "fn foo() -> Self { bar ⟦}⟧");
+    editor.check(expect![@"fn foo() -> Self { bar ⟦}⟧"]);
   }
 }

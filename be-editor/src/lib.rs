@@ -22,6 +22,10 @@ pub use lsp::{Diagnostic, DiagnosticLevel};
 #[macro_use]
 extern crate log;
 
+#[cfg(test)]
+#[macro_use]
+extern crate expect_test;
+
 #[derive(Default)]
 pub struct EditorState {
   doc:    Document,
