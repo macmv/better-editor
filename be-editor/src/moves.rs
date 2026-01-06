@@ -50,20 +50,33 @@ impl EditorState {
 
       Move::PrevWord => {
         self.move_graphemes(-1);
-        while self.cursor_kind() == WordKind::Blank && !self.at_eof() {
+        let mut move_forward = true;
+        while self.cursor_kind() == WordKind::Blank {
+          if self.at_start() {
+            move_forward = false;
+            break;
+          }
           self.move_graphemes(-1);
         }
 
         let start = self.cursor_kind();
-        while self.cursor_kind() == start && !self.at_eof() {
+        while self.cursor_kind() == start {
+          if self.at_start() {
+            move_forward = false;
+            break;
+          }
           self.move_graphemes(-1);
         }
-        self.move_graphemes(1);
+        if move_forward {
+          self.move_graphemes(1);
+        }
       }
 
       _ => {}
     }
   }
+
+  fn at_start(&self) -> bool { self.cursor.line == 0 && self.cursor.column == 0 }
 
   fn at_eof(&self) -> bool {
     self.cursor.line > self.max_line()
@@ -168,5 +181,36 @@ mod tests {
 
     editor.perform_move(Move::NextWord);
     editor.check(expect![@"fn foo() -> Self { bar ⟦}⟧"]);
+  }
+
+  #[test]
+  fn prev_word_works() {
+    let mut editor = editor("fn foo() -> Self { bar }");
+    editor.perform_move(Move::LineEnd);
+    editor.check(expect![@"fn foo() -> Self { bar ⟦}⟧"]);
+
+    editor.perform_move(Move::PrevWord);
+    editor.check(expect![@"fn foo() -> Self { ⟦b⟧ar }"]);
+
+    editor.perform_move(Move::PrevWord);
+    editor.check(expect![@"fn foo() -> Self ⟦{⟧ bar }"]);
+
+    editor.perform_move(Move::PrevWord);
+    editor.check(expect![@"fn foo() -> ⟦S⟧elf { bar }"]);
+
+    editor.perform_move(Move::PrevWord);
+    editor.check(expect![@"fn foo() ⟦-⟧> Self { bar }"]);
+
+    editor.perform_move(Move::PrevWord);
+    editor.check(expect![@"fn foo⟦(⟧) -> Self { bar }"]);
+
+    editor.perform_move(Move::PrevWord);
+    editor.check(expect![@"fn ⟦f⟧oo() -> Self { bar }"]);
+
+    editor.perform_move(Move::PrevWord);
+    editor.check(expect![@"⟦f⟧n foo() -> Self { bar }"]);
+
+    editor.perform_move(Move::PrevWord);
+    editor.check(expect![@"⟦f⟧n foo() -> Self { bar }"]);
   }
 }
