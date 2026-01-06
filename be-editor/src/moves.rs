@@ -95,3 +95,74 @@ fn word_kind(c: char) -> WordKind {
     _ => WordKind::Punctuation,
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use std::{
+    fmt,
+    ops::{Deref, DerefMut},
+  };
+
+  use super::*;
+
+  struct TestEditor(EditorState);
+
+  impl TestEditor {
+    fn state(&self) -> String {
+      let mut s = self.0.doc.rope.to_string();
+      s.insert(self.0.doc.cursor_offset(self.0.cursor) + 1, '$');
+      s.insert(self.0.doc.cursor_offset(self.0.cursor), '$');
+      s
+    }
+  }
+
+  impl Deref for TestEditor {
+    type Target = EditorState;
+
+    fn deref(&self) -> &Self::Target { &self.0 }
+  }
+
+  impl DerefMut for TestEditor {
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
+  }
+
+  fn editor(src: &str) -> TestEditor { TestEditor(EditorState::from(src)) }
+
+  impl fmt::Debug for TestEditor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.state()) }
+  }
+
+  impl PartialEq<&str> for TestEditor {
+    fn eq(&self, other: &&str) -> bool { self.state() == *other }
+  }
+
+  #[test]
+  fn next_word_works() {
+    let mut editor = editor("fn foo() -> Self { bar }");
+    assert_eq!(editor, "$f$n foo() -> Self { bar }");
+
+    editor.perform_move(Move::NextWord);
+    assert_eq!(editor, "fn $f$oo() -> Self { bar }");
+
+    editor.perform_move(Move::NextWord);
+    assert_eq!(editor, "fn foo$($) -> Self { bar }");
+
+    editor.perform_move(Move::NextWord);
+    assert_eq!(editor, "fn foo() $-$> Self { bar }");
+
+    editor.perform_move(Move::NextWord);
+    assert_eq!(editor, "fn foo() -> $S$elf { bar }");
+
+    editor.perform_move(Move::NextWord);
+    assert_eq!(editor, "fn foo() -> Self ${$ bar }");
+
+    editor.perform_move(Move::NextWord);
+    assert_eq!(editor, "fn foo() -> Self { $b$ar }");
+
+    editor.perform_move(Move::NextWord);
+    assert_eq!(editor, "fn foo() -> Self { bar $}$");
+
+    editor.perform_move(Move::NextWord);
+    assert_eq!(editor, "fn foo() -> Self { bar $}$");
+  }
+}
