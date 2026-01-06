@@ -384,7 +384,8 @@ fn on_publish_diagnostics(state: &mut LspState, params: lsp_types::PublishDiagno
   let path = PathBuf::from(params.uri.path().as_str());
 
   let encoding = state.position_encoding();
-  let doc = state.opened_document(&path).unwrap().clone();
+  // TODO: Store these diagnostics somewhere
+  let Some(doc) = state.opened_files.get(&path).cloned() else { return };
 
   let diagnostics = params
     .diagnostics
