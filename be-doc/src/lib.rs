@@ -12,7 +12,7 @@ mod fs;
 pub use crop;
 pub use edit::{Change, Edit};
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Document {
   pub rope: Rope,
 }
