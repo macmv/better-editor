@@ -48,6 +48,19 @@ impl EditorState {
         self.move_graphemes(-1);
       }
 
+      Move::PrevWord => {
+        self.move_graphemes(-1);
+        while self.cursor_kind() == WordKind::Blank {
+          self.move_graphemes(-1);
+        }
+
+        let start = self.cursor_kind();
+        while self.cursor_kind() == start {
+          self.move_graphemes(-1);
+        }
+        self.move_graphemes(1);
+      }
+
       _ => {}
     }
   }
