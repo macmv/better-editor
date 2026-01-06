@@ -191,6 +191,10 @@ impl EditorState {
   }
 }
 
+impl CompletionsState {
+  pub fn hide(&mut self) { self.show = false; }
+}
+
 impl Diagnostic {
   pub fn highlight(&self) -> Highlight<'_> {
     Highlight {

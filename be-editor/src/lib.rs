@@ -239,6 +239,7 @@ impl EditorState {
     if m == Mode::Normal {
       self.trim_line(self.cursor.line);
       self.remove_current_edit();
+      self.lsp.completions.hide();
     } else if m == Mode::Insert {
       self.current_edit = Some(Edit::empty());
     }
