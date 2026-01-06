@@ -24,6 +24,18 @@ impl Document {
   }
 }
 
+impl<'a> FindIter<'a> {
+  pub fn needle(&self) -> &'a str {
+    match self {
+      FindIter(FindIterImpl::Empty) => "",
+      FindIter(FindIterImpl::TwoWay { two_way, .. }) => {
+        // SAFETY: `needle` is guaranteed to be valid UTF-8
+        unsafe { std::str::from_utf8_unchecked(two_way.needle) }
+      }
+    }
+  }
+}
+
 impl Iterator for FindIter<'_> {
   type Item = usize;
 

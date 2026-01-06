@@ -12,6 +12,7 @@ mod search;
 
 pub use crop;
 pub use edit::{Change, Edit};
+pub use search::FindIter;
 
 #[derive(Default, Clone)]
 pub struct Document {
