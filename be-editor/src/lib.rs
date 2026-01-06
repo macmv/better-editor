@@ -373,12 +373,12 @@ impl EditorState {
           "w" => {
             self.lsp_on_save();
 
-            if self.lsp.save_task.is_none() {
+            if self.lsp.save_task.is_some() {
+              Ok("saving...".to_string())
+            } else {
               self
                 .save()
                 .map(|()| format!("{}: written", self.file.as_ref().unwrap().path().display()))
-            } else {
-              Ok("saving...".to_string())
             }
           }
           "q" => {
