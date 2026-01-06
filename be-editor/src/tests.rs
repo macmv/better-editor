@@ -4,6 +4,7 @@ use std::{
   fmt,
   ops::{Deref, DerefMut},
 };
+use unicode_segmentation::UnicodeSegmentation;
 
 pub struct TestEditor(EditorState);
 
@@ -14,12 +15,12 @@ impl TestEditor {
     let mut s = self.0.doc.rope.to_string();
     let cursor_offset = self.0.doc.cursor_offset(self.0.cursor);
 
-    let c = s[cursor_offset..].chars().next().unwrap();
+    let g = s[cursor_offset..].graphemes(true).next().unwrap();
 
-    if c == '\n' {
+    if g == "\n" {
       s.insert_str(cursor_offset, "⟦ ⟧");
     } else {
-      s.insert(cursor_offset + c.len_utf8(), '⟧');
+      s.insert(cursor_offset + g.len(), '⟧');
       s.insert(cursor_offset, '⟦');
     }
 
@@ -77,6 +78,16 @@ fn move_col_handles_emojis() {
 }
 
 #[test]
+fn move_col_handles_graphemes() {
+  let str = "f\u{65}\u{301}o";
+  assert_eq!(str, "féo");
+  assert_eq!(str.chars().count(), 4);
+  let mut editor = editor(str);
+
+  editor.check_repeated(|e| e.move_col_rel(1), &[expect![@"f⟦é⟧o"], expect![@"fé⟦o⟧"]]);
+}
+
+#[test]
 fn move_graphemes_works() {
   let mut editor = editor("abc\ndef");
 
@@ -103,4 +114,13 @@ fn move_graphemes_works() {
     abc
     ⟦d⟧ef"#
   ]);
+}
+
+#[test]
+fn move_graphemes_handles_graphemes() {
+  let str = "féo";
+  assert_eq!(str.chars().count(), 4);
+  let mut editor = editor(str);
+
+  editor.check_repeated(|e| e.move_graphemes(1), &[expect![@"f⟦é⟧o"], expect![@"fé⟦o⟧"]]);
 }
