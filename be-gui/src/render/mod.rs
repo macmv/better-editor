@@ -175,6 +175,8 @@ impl App {
     queue: &wgpu::Queue,
     scale: f64,
   ) {
+    self.store.text.set_scale(scale);
+
     let mut layout = Layout {
       store: &mut self.store,
       scale,

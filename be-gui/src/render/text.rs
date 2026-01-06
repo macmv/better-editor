@@ -1,4 +1,4 @@
-use std::{cell::RefCell, ops::Range, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 use be_config::Config;
 use kurbo::{Affine, Line, Point, Rect, Size, Stroke, Vec2};
@@ -9,8 +9,7 @@ use peniko::{
 use png::{BitDepth, ColorType, Transformations};
 use skrifa::{
   GlyphId, MetadataProvider,
-  bitmap::{self, BitmapFormat},
-  color::ColorGlyph,
+  bitmap::{self, BitmapFormat, BitmapStrikes},
   raw::TableProvider,
 };
 
@@ -21,7 +20,14 @@ pub struct TextStore {
   layout:       parley::LayoutContext<peniko::Brush>,
   font_metrics: FontMetrics,
 
+  emoji_cache_scale: f64,
+  emoji_cache:       HashMap<GlyphId, Option<Emoji>>,
+
   config: Rc<RefCell<Config>>,
+}
+
+enum Emoji {
+  Bitmap { brush: ImageBrush, transform: Affine },
 }
 
 #[derive(Clone, Default)]
@@ -47,7 +53,11 @@ impl TextStore {
       font:         parley::FontContext::new(),
       layout:       parley::LayoutContext::new(),
       font_metrics: FontMetrics::default(),
-      config:       config.clone(),
+
+      emoji_cache_scale: 1.0,
+      emoji_cache:       HashMap::new(),
+
+      config: config.clone(),
     };
 
     store.update_metrics();
@@ -97,6 +107,13 @@ impl TextStore {
     ));
 
     LayoutBuilder { builder }
+  }
+
+  pub fn set_scale(&mut self, scale: f64) {
+    if self.emoji_cache_scale != scale {
+      self.emoji_cache.clear();
+      self.emoji_cache_scale = scale;
+    }
   }
 }
 
@@ -198,7 +215,7 @@ impl Render<'_> {
     glyph_run: &parley::GlyphRun<peniko::Brush>,
     transform: Affine,
     glyph_transform: Option<Affine>,
-    mut glyphs: impl Iterator<Item = vello::Glyph>,
+    glyphs: impl Iterator<Item = vello::Glyph>,
   ) {
     let run = glyph_run.run();
     let font = run.font();
@@ -207,182 +224,195 @@ impl Render<'_> {
     let blob = &font.data.clone();
     let font = skrifa::FontRef::from_index(blob.as_ref(), font.index).unwrap();
     let upem: f32 = font.head().map(|h| h.units_per_em()).unwrap().into();
-    let colr_scale =
-      Affine::scale_non_uniform((font_size / upem).into(), (-font_size / upem).into());
 
     let color_collection = font.color_glyphs();
     let bitmaps = font.bitmap_strikes();
     // Only used for COLR glyphs
     /*
+    let colr_scale =
+      Affine::scale_non_uniform((font_size / upem).into(), (-font_size / upem).into());
     let coords = run.normalized_coords();
     let location = LocationRef::new(&bytemuck::cast_slice(coords));
     */
 
-    loop {
-      let Some((emoji, glyph)) = (&mut glyphs).find_map(|glyph| {
-        let glyph_id = GlyphId::new(glyph.id);
-        if let Some(color) = color_collection.get(glyph_id) {
-          Some((EmojiLikeGlyph::Colr(color), glyph))
+    for glyph in glyphs {
+      let glyph_id = GlyphId::new(glyph.id);
+      if !self.store.text.emoji_cache.contains_key(&glyph_id) {
+        if let Some(_colr) = color_collection.get(glyph_id) {
+          self.render_colr_glyph();
         } else {
-          let bitmap = bitmaps.glyph_for_size(skrifa::instance::Size::new(font_size), glyph_id)?;
-          Some((EmojiLikeGlyph::Bitmap(bitmap), glyph))
-        }
-      }) else {
-        break;
-      };
-
-      match emoji {
-        EmojiLikeGlyph::Bitmap(bitmap) => {
-          let image = match bitmap.data {
-            bitmap::BitmapData::Bgra(data) => {
-              if bitmap.width * bitmap.height * 4 != u32::try_from(data.len()).unwrap() {
-                continue;
-              }
-
-              let data: Box<[u8]> = data
-                .chunks_exact(4)
-                .flat_map(|bytes| {
-                  let [b, g, r, a] = bytes.try_into().unwrap();
-
-                  let encoded = encode_color(AlphaColor::<Srgb>::from_rgba8(r, g, b, a).convert());
-                  encoded.to_rgba8().to_u8_array()
-                })
-                .collect();
-
-              ImageData {
-                data:       Blob::new(Arc::new(data)),
-                format:     peniko::ImageFormat::Rgba8,
-                alpha_type: peniko::ImageAlphaType::Alpha,
-                width:      bitmap.width,
-                height:     bitmap.height,
-              }
-            }
-            bitmap::BitmapData::Png(data) => {
-              let mut decoder = png::Decoder::new(data);
-              decoder.set_transformations(Transformations::ALPHA | Transformations::STRIP_16);
-              let Ok(mut reader) = decoder.read_info() else { continue };
-
-              if reader.output_color_type() != (ColorType::Rgba, BitDepth::Eight) {
-                continue;
-              }
-              let mut buf = vec![0; reader.output_buffer_size()].into_boxed_slice();
-
-              let info = reader.next_frame(&mut buf).unwrap();
-              if info.width != bitmap.width || info.height != bitmap.height {
-                continue;
-              }
-
-              let data: Box<[u8]> = buf
-                .chunks_exact(4)
-                .flat_map(|bytes| {
-                  let [r, g, b, a] = bytes.try_into().unwrap();
-
-                  let encoded = encode_color(AlphaColor::<Srgb>::from_rgba8(r, g, b, a).convert());
-                  encoded.to_rgba8().to_u8_array()
-                })
-                .collect();
-
-              ImageData {
-                data:       Blob::new(Arc::new(data)),
-                format:     peniko::ImageFormat::Rgba8,
-                alpha_type: peniko::ImageAlphaType::Alpha,
-                width:      bitmap.width,
-                height:     bitmap.height,
-              }
-            }
-
-            _ => continue,
-          };
-          let image = ImageBrush::new(image);
-          let transform = transform.then_translate(Vec2::new(glyph.x.into(), glyph.y.into()));
-
-          // Logic copied from Skia without examination or careful understanding:
-          // https://github.com/google/skia/blob/61ac357e8e3338b90fb84983100d90768230797f/src/ports/SkTypeface_fontations.cpp#L664
-
-          let image_scale_factor = font_size / bitmap.ppem_y;
-          let font_units_to_size = font_size / upem;
-
-          // CoreText appears to special case Apple Color Emoji, adding
-          // a 100 font unit vertical offset. We do the same but only
-          // when both vertical offsets are 0 to avoid incorrect
-          // rendering if Apple ever does encode the offset directly in
-          // the font.
-          let bearing_y = if bitmap.bearing_y == 0.0 && bitmaps.format() == Some(BitmapFormat::Sbix)
-          {
-            100.0
-          } else {
-            bitmap.bearing_y
-          };
-
-          let transform = transform
-            .pre_translate(Vec2 {
-              x: (-bitmap.bearing_x * font_units_to_size).into(),
-              y: (bearing_y * font_units_to_size).into(),
-            })
-            // Unclear why this isn't non-uniform
-            .pre_scale(image_scale_factor.into())
-            .pre_translate(Vec2 {
-              x: (-bitmap.inner_bearing_x).into(),
-              y: (-bitmap.inner_bearing_y).into(),
-            });
-          let mut transform = match bitmap.placement_origin {
-            bitmap::Origin::TopLeft => transform,
-            bitmap::Origin::BottomLeft => {
-              transform.pre_translate(Vec2 { x: 0., y: -f64::from(image.image.height) })
-            }
-          };
-          if let Some(glyph_transform) = glyph_transform {
-            transform *= glyph_transform;
-          }
-          self.scene.draw_image(image.as_ref(), transform);
-        }
-        EmojiLikeGlyph::Colr(_colr) => {
-          let _transform = transform
-            * Affine::translate(Vec2::new(glyph.x.into(), glyph.y.into()))
-            * colr_scale
-            * glyph_transform.unwrap_or(Affine::IDENTITY);
-          todo!("render colr glyphs");
-          /*
-          colr
-            .paint(
-              location,
-              &mut DrawColorGlyphs {
-                scene: self.scene,
-                cpal: &font.cpal().unwrap(),
-                outlines: &font.outline_glyphs(),
-                transform_stack: vec![Transform::from_kurbo(&transform)],
-                clip_box: DEFAULT_CLIP_RECT,
-                clip_depth: 0,
-                location,
-                foreground_brush: self.brush,
-              },
-            )
-            .unwrap();
-          */
+          self.render_bitmap_glyph(font_size, &bitmaps, glyph_id, upem);
         }
       }
-    }
 
+      self.draw_emoji_cached(glyph, transform, glyph_transform);
+    }
+  }
+
+  fn draw_emoji_cached(
+    &mut self,
+    glyph: vello::Glyph,
+    mut transform: Affine,
+    glyph_transform: Option<Affine>,
+  ) {
+    match self.store.text.emoji_cache.get(&GlyphId::new(glyph.id)).and_then(|o| o.as_ref()) {
+      Some(&Emoji::Bitmap { ref brush, transform: emoji_transform }) => {
+        transform = Affine::translate(Vec2::new(glyph.x.into(), glyph.y.into()))
+          * transform
+          * emoji_transform;
+        if let Some(glyph_transform) = glyph_transform {
+          transform *= glyph_transform;
+        }
+
+        self.scene.draw_image(brush.as_ref(), transform);
+      }
+
+      None => {}
+    }
+  }
+
+  fn render_colr_glyph(&self) {
+    todo!("render colr glyphs");
     /*
-    for g in glyph_run.glyphs() {
-      let r = Rect::new(
-        (x + g.x) as f64,
-        (baseline + g.y - run.metrics().ascent) as f64,
-        (x + g.x + g.advance) as f64,
-        (baseline + g.y + run.metrics().descent) as f64,
-      );
-
-      self.scene.fill(
-        Fill::NonZero,
-        transform,
-        &encode_color(super::oklch(1.0, 0.0, 0.0)),
-        None,
-        &r,
-      );
-
-      x += g.advance;
-    }
+    Some((self.render_colr_glyph(color), glyph))
+    let _transform = transform
+      * Affine::translate(Vec2::new(glyph.x.into(), glyph.y.into()))
+      * colr_scale
+      * glyph_transform.unwrap_or(Affine::IDENTITY);
+    colr
+      .paint(
+        location,
+        &mut DrawColorGlyphs {
+          scene: self.scene,
+          cpal: &font.cpal().unwrap(),
+          outlines: &font.outline_glyphs(),
+          transform_stack: vec![Transform::from_kurbo(&transform)],
+          clip_box: DEFAULT_CLIP_RECT,
+          clip_depth: 0,
+          location,
+          foreground_brush: self.brush,
+        },
+      )
+      .unwrap();
     */
+  }
+
+  fn render_bitmap_glyph(
+    &mut self,
+    font_size: f32,
+    bitmaps: &BitmapStrikes,
+    glyph_id: GlyphId,
+    upem: f32,
+  ) {
+    macro_rules! bail {
+      () => {{
+        self.store.text.emoji_cache.insert(glyph_id, None);
+        return;
+      }};
+    }
+
+    let Some(bitmap) = bitmaps.glyph_for_size(skrifa::instance::Size::new(font_size), glyph_id)
+    else {
+      bail!()
+    };
+    let image = match bitmap.data {
+      bitmap::BitmapData::Bgra(data) => {
+        if bitmap.width * bitmap.height * 4 != u32::try_from(data.len()).unwrap() {
+          bail!()
+        }
+
+        let data: Box<[u8]> = data
+          .chunks_exact(4)
+          .flat_map(|bytes| {
+            let [b, g, r, a] = bytes.try_into().unwrap();
+
+            let encoded = encode_color(AlphaColor::<Srgb>::from_rgba8(r, g, b, a).convert());
+            encoded.to_rgba8().to_u8_array()
+          })
+          .collect();
+
+        ImageData {
+          data:       Blob::new(Arc::new(data)),
+          format:     peniko::ImageFormat::Rgba8,
+          alpha_type: peniko::ImageAlphaType::Alpha,
+          width:      bitmap.width,
+          height:     bitmap.height,
+        }
+      }
+      bitmap::BitmapData::Png(data) => {
+        let mut decoder = png::Decoder::new(data);
+        decoder.set_transformations(Transformations::ALPHA | Transformations::STRIP_16);
+        let Ok(mut reader) = decoder.read_info() else { bail!() };
+
+        if reader.output_color_type() != (ColorType::Rgba, BitDepth::Eight) {
+          bail!();
+        }
+        let mut buf = vec![0; reader.output_buffer_size()].into_boxed_slice();
+
+        let info = reader.next_frame(&mut buf).unwrap();
+        if info.width != bitmap.width || info.height != bitmap.height {
+          bail!();
+        }
+
+        let data: Box<[u8]> = buf
+          .chunks_exact(4)
+          .flat_map(|bytes| {
+            let [r, g, b, a] = bytes.try_into().unwrap();
+
+            let encoded = encode_color(AlphaColor::<Srgb>::from_rgba8(r, g, b, a).convert());
+            encoded.to_rgba8().to_u8_array()
+          })
+          .collect();
+
+        ImageData {
+          data:       Blob::new(Arc::new(data)),
+          format:     peniko::ImageFormat::Rgba8,
+          alpha_type: peniko::ImageAlphaType::Alpha,
+          width:      bitmap.width,
+          height:     bitmap.height,
+        }
+      }
+
+      _ => bail!(),
+    };
+
+    // Logic copied from Skia without examination or careful understanding:
+    // https://github.com/google/skia/blob/61ac357e8e3338b90fb84983100d90768230797f/src/ports/SkTypeface_fontations.cpp#L664
+
+    let image_scale_factor = font_size / bitmap.ppem_y;
+    let font_units_to_size = font_size / upem;
+
+    // CoreText appears to special case Apple Color Emoji, adding
+    // a 100 font unit vertical offset. We do the same but only
+    // when both vertical offsets are 0 to avoid incorrect
+    // rendering if Apple ever does encode the offset directly in
+    // the font.
+    let bearing_y = if bitmap.bearing_y == 0.0 && bitmaps.format() == Some(BitmapFormat::Sbix) {
+      100.0
+    } else {
+      bitmap.bearing_y
+    };
+
+    let transform = Affine::IDENTITY
+      .pre_translate(Vec2 {
+        x: (-bitmap.bearing_x * font_units_to_size).into(),
+        y: (bearing_y * font_units_to_size).into(),
+      })
+      // Unclear why this isn't non-uniform
+      .pre_scale(image_scale_factor.into())
+      .pre_translate(Vec2 {
+        x: (-bitmap.inner_bearing_x).into(),
+        y: (-bitmap.inner_bearing_y).into(),
+      });
+    let transform = match bitmap.placement_origin {
+      bitmap::Origin::TopLeft => transform,
+      bitmap::Origin::BottomLeft => {
+        transform.pre_translate(Vec2 { x: 0., y: -f64::from(image.height) })
+      }
+    };
+
+    let emoji = Emoji::Bitmap { brush: ImageBrush::new(image), transform };
+    self.store.text.emoji_cache.insert(glyph_id, Some(emoji));
   }
 }
 
@@ -396,11 +426,6 @@ impl LayoutBuilder<'_> {
   }
 
   pub fn build(self, text: &str) -> parley::Layout<peniko::Brush> { self.builder.build(text) }
-}
-
-enum EmojiLikeGlyph<'a> {
-  Bitmap(bitmap::BitmapGlyph<'a>),
-  Colr(ColorGlyph<'a>),
 }
 
 // NB: This is in pixels, not scaled. This is intentional, as we always want the
