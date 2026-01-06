@@ -293,26 +293,50 @@ impl LspWorker {
     method: &str,
     params: Option<Box<RawValue>>,
   ) -> Option<Box<RawValue>> {
-    if method == "window/workDoneProgress/create" {
-      let params =
-        serde_json::from_str::<lsp_types::WorkDoneProgressCreateParams>(params.unwrap().get())
-          .unwrap();
-
-      let token = match params.token {
-        lsp_types::ProgressToken::Number(n) => n.to_string(),
-        lsp_types::ProgressToken::String(s) => s,
-      };
-
-      self
-        .state
-        .lock()
-        .progress
-        .insert(token, Progress { title: "".into(), message: None, progress: 0.0 });
-
-      Some(RawValue::from_string(serde_json::to_string(&()).unwrap()).unwrap())
-    } else {
-      None
+    struct Requester<'a> {
+      worker: &'a LspWorker,
+      method: &'a str,
+      params: Option<Box<RawValue>>,
+      result: Option<Box<RawValue>>,
     }
+
+    impl Requester<'_> {
+      fn on<R: lsp_types::request::Request>(
+        &mut self,
+        f: fn(&LspWorker, R::Params) -> R::Result,
+      ) -> &mut Self {
+        if self.method == R::METHOD {
+          let params =
+            serde_json::from_str::<R::Params>(self.params.as_ref().unwrap().get()).unwrap();
+
+          let result = f(self.worker, params);
+
+          self.result =
+            Some(RawValue::from_string(serde_json::to_string(&result).unwrap()).unwrap());
+        }
+
+        self
+      }
+    }
+
+    let mut req = Requester { worker: self, method, params, result: None };
+
+    req.on::<types::request::WorkDoneProgressCreate>(Self::on_work_done_progress_create);
+
+    req.result
+  }
+
+  fn on_work_done_progress_create(&self, params: lsp_types::WorkDoneProgressCreateParams) {
+    let token = match params.token {
+      lsp_types::ProgressToken::Number(n) => n.to_string(),
+      lsp_types::ProgressToken::String(s) => s,
+    };
+
+    self
+      .state
+      .lock()
+      .progress
+      .insert(token, Progress { title: "".into(), message: None, progress: 0.0 });
   }
 
   pub fn handle_notification(&self, method: &str, params: Option<Box<RawValue>>) {
