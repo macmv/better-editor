@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use be_editor::{EditorState, IndentLevel};
+use be_editor::{CommandMode, EditorState, IndentLevel};
 use be_input::Mode;
 use kurbo::{Circle, Line, Point, Rect, RoundedRect, Stroke, Triangle, Vec2};
 
@@ -278,12 +278,21 @@ impl EditorView {
         render.theme().background_raised,
       );
 
-      let text_pos = Point::new(20.0, render.size().height - line_height);
+      let text_pos = Point::new(0.0, render.size().height - line_height);
 
-      let layout = render.layout_text(&command.text, render.theme().text);
+      let text = format!(
+        "{}{}",
+        match command.mode {
+          CommandMode::Command => ":",
+          CommandMode::Search => "/",
+        },
+        command.text
+      );
+
+      let layout = render.layout_text(&text, render.theme().text);
       render.draw_text(&layout, text_pos);
 
-      let cursor = layout.cursor(command.cursor as usize, CursorMode::Line);
+      let cursor = layout.cursor(command.cursor as usize + 1, CursorMode::Line);
       render.fill(&(cursor + text_pos.to_vec2()), render.theme().text);
     } else if let Some(status) = self.editor.status() {
       render.fill(
@@ -297,7 +306,7 @@ impl EditorView {
       );
 
       let layout = render.layout_text(&status.message, render.theme().text);
-      render.draw_text(&layout, (20.0, render.size().height - line_height));
+      render.draw_text(&layout, (0.0, render.size().height - line_height));
     }
 
     if let Some(ft) = self.editor.file_type() {

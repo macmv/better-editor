@@ -4,6 +4,7 @@ use crate::{KeyStroke, Mode, key::Key};
 
 pub enum Action {
   SetMode { mode: Mode, delta: i32 },
+  OpenSearch,
   Append { after: bool },
   Move { count: Option<NonZero<u32>>, m: Move },
   Edit { count: Option<NonZero<u32>>, e: Edit },
@@ -146,6 +147,7 @@ impl Action {
         (Mode::Normal, Key::Char('v')) => Ok(Action::SetMode { mode: Mode::Visual, delta: 0 }),
         (Mode::Normal, Key::Char('R')) => Ok(Action::SetMode { mode: Mode::Replace, delta: 0 }),
         (Mode::Normal, Key::Char(':')) => Ok(Action::SetMode { mode: Mode::Command, delta: 0 }),
+        (Mode::Normal, Key::Char('/')) => Ok(Action::OpenSearch),
 
         (Mode::Normal | Mode::Visual, _) => {
           parse_move(key, iter).map(|m| Action::Move { count: NonZero::new(count), m })

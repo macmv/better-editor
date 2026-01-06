@@ -61,7 +61,15 @@ pub struct EditorState {
 #[derive(Default)]
 pub struct CommandState {
   pub text:   String,
+  pub mode:   CommandMode,
   pub cursor: usize, // in bytes
+}
+
+#[derive(Default, Copy, Clone)]
+pub enum CommandMode {
+  #[default]
+  Command,
+  Search,
 }
 
 #[derive(Copy, Clone)]
@@ -282,6 +290,10 @@ impl EditorState {
         if mode == Mode::Insert {
           self.auto_indent(VerticalDirection::Up);
         }
+      }
+      Action::OpenSearch => {
+        self.set_mode(Mode::Command);
+        self.command.as_mut().unwrap().mode = CommandMode::Search;
       }
       Action::Append { after } => {
         self.set_mode(Mode::Insert);
