@@ -142,6 +142,13 @@ mod tests {
     }
 
     fn check(&self, expect: Expect) { expect.assert_eq(&self.state()); }
+
+    fn check_repeated(&mut self, f: impl Fn(&mut EditorState), expect: &[Expect]) {
+      for expect in expect {
+        f(&mut self.0);
+        expect.assert_eq(&self.state());
+      }
+    }
   }
 
   impl Deref for TestEditor {
@@ -169,29 +176,19 @@ mod tests {
     let mut editor = editor("fn foo() -> Self { bar }");
     editor.check(expect![@"⟦f⟧n foo() -> Self { bar }"]);
 
-    editor.perform_move(Move::NextWord);
-    editor.check(expect![@"fn ⟦f⟧oo() -> Self { bar }"]);
-
-    editor.perform_move(Move::NextWord);
-    editor.check(expect![@"fn foo⟦(⟧) -> Self { bar }"]);
-
-    editor.perform_move(Move::NextWord);
-    editor.check(expect![@"fn foo() ⟦-⟧> Self { bar }"]);
-
-    editor.perform_move(Move::NextWord);
-    editor.check(expect![@"fn foo() -> ⟦S⟧elf { bar }"]);
-
-    editor.perform_move(Move::NextWord);
-    editor.check(expect![@"fn foo() -> Self ⟦{⟧ bar }"]);
-
-    editor.perform_move(Move::NextWord);
-    editor.check(expect![@"fn foo() -> Self { ⟦b⟧ar }"]);
-
-    editor.perform_move(Move::NextWord);
-    editor.check(expect![@"fn foo() -> Self { bar ⟦}⟧"]);
-
-    editor.perform_move(Move::NextWord);
-    editor.check(expect![@"fn foo() -> Self { bar ⟦}⟧"]);
+    editor.check_repeated(
+      |e| e.perform_move(Move::NextWord),
+      &[
+        expect![@"fn ⟦f⟧oo() -> Self { bar }"],
+        expect![@"fn foo⟦(⟧) -> Self { bar }"],
+        expect![@"fn foo() ⟦-⟧> Self { bar }"],
+        expect![@"fn foo() -> ⟦S⟧elf { bar }"],
+        expect![@"fn foo() -> Self ⟦{⟧ bar }"],
+        expect![@"fn foo() -> Self { ⟦b⟧ar }"],
+        expect![@"fn foo() -> Self { bar ⟦}⟧"],
+        expect![@"fn foo() -> Self { bar ⟦}⟧"],
+      ],
+    );
   }
 
   #[test]
@@ -199,29 +196,20 @@ mod tests {
     let mut editor = editor("fn foo() -> Self { bar }");
     editor.check(expect![@"⟦f⟧n foo() -> Self { bar }"]);
 
-    editor.perform_move(Move::EndWord);
-    editor.check(expect![@"f⟦n⟧ foo() -> Self { bar }"]);
-
-    editor.perform_move(Move::EndWord);
-    editor.check(expect![@"fn fo⟦o⟧() -> Self { bar }"]);
-
-    editor.perform_move(Move::EndWord);
-    editor.check(expect![@"fn foo(⟦)⟧ -> Self { bar }"]);
-
-    editor.perform_move(Move::EndWord);
-    editor.check(expect![@"fn foo() -⟦>⟧ Self { bar }"]);
-
-    editor.perform_move(Move::EndWord);
-    editor.check(expect![@"fn foo() -> Sel⟦f⟧ { bar }"]);
-
-    editor.perform_move(Move::EndWord);
-    editor.check(expect![@"fn foo() -> Self ⟦{⟧ bar }"]);
-
-    editor.perform_move(Move::EndWord);
-    editor.check(expect![@"fn foo() -> Self { ba⟦r⟧ }"]);
-
-    editor.perform_move(Move::EndWord);
-    editor.check(expect![@"fn foo() -> Self { bar ⟦}⟧"]);
+    editor.check_repeated(
+      |e| e.perform_move(Move::EndWord),
+      &[
+        expect![@"f⟦n⟧ foo() -> Self { bar }"],
+        expect![@"fn fo⟦o⟧() -> Self { bar }"],
+        expect![@"fn foo(⟦)⟧ -> Self { bar }"],
+        expect![@"fn foo() -⟦>⟧ Self { bar }"],
+        expect![@"fn foo() -> Sel⟦f⟧ { bar }"],
+        expect![@"fn foo() -> Self ⟦{⟧ bar }"],
+        expect![@"fn foo() -> Self { ba⟦r⟧ }"],
+        expect![@"fn foo() -> Self { bar ⟦}⟧"],
+        expect![@"fn foo() -> Self { bar ⟦}⟧"],
+      ],
+    );
   }
 
   #[test]
@@ -230,28 +218,18 @@ mod tests {
     editor.perform_move(Move::LineEnd);
     editor.check(expect![@"fn foo() -> Self { bar ⟦}⟧"]);
 
-    editor.perform_move(Move::PrevWord);
-    editor.check(expect![@"fn foo() -> Self { ⟦b⟧ar }"]);
-
-    editor.perform_move(Move::PrevWord);
-    editor.check(expect![@"fn foo() -> Self ⟦{⟧ bar }"]);
-
-    editor.perform_move(Move::PrevWord);
-    editor.check(expect![@"fn foo() -> ⟦S⟧elf { bar }"]);
-
-    editor.perform_move(Move::PrevWord);
-    editor.check(expect![@"fn foo() ⟦-⟧> Self { bar }"]);
-
-    editor.perform_move(Move::PrevWord);
-    editor.check(expect![@"fn foo⟦(⟧) -> Self { bar }"]);
-
-    editor.perform_move(Move::PrevWord);
-    editor.check(expect![@"fn ⟦f⟧oo() -> Self { bar }"]);
-
-    editor.perform_move(Move::PrevWord);
-    editor.check(expect![@"⟦f⟧n foo() -> Self { bar }"]);
-
-    editor.perform_move(Move::PrevWord);
-    editor.check(expect![@"⟦f⟧n foo() -> Self { bar }"]);
+    editor.check_repeated(
+      |e| e.perform_move(Move::PrevWord),
+      &[
+        expect![@"fn foo() -> Self { ⟦b⟧ar }"],
+        expect![@"fn foo() -> Self ⟦{⟧ bar }"],
+        expect![@"fn foo() -> ⟦S⟧elf { bar }"],
+        expect![@"fn foo() ⟦-⟧> Self { bar }"],
+        expect![@"fn foo⟦(⟧) -> Self { bar }"],
+        expect![@"fn ⟦f⟧oo() -> Self { bar }"],
+        expect![@"⟦f⟧n foo() -> Self { bar }"],
+        expect![@"⟦f⟧n foo() -> Self { bar }"],
+      ],
+    );
   }
 }
