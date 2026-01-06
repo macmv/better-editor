@@ -14,10 +14,12 @@ impl TestEditor {
     let mut s = self.0.doc.rope.to_string();
     let cursor_offset = self.0.doc.cursor_offset(self.0.cursor);
 
-    if s[cursor_offset..].chars().next() == Some('\n') {
+    let c = s[cursor_offset..].chars().next().unwrap();
+
+    if c == '\n' {
       s.insert_str(cursor_offset, "⟦ ⟧");
     } else {
-      s.insert(cursor_offset + 1, '⟧');
+      s.insert(cursor_offset + c.len_utf8(), '⟧');
       s.insert(cursor_offset, '⟦');
     }
 
@@ -61,6 +63,17 @@ fn move_col_works() {
 
   editor.move_col_rel(1);
   editor.check(expect![@"a⟦b⟧"]);
+}
+
+#[test]
+fn move_col_handles_emojis() {
+  let mut editor = editor("f💖oo");
+  editor.check(expect![@"⟦f⟧💖oo"]);
+
+  editor.check_repeated(
+    |e| e.move_col_rel(1),
+    &[expect![@"f⟦💖⟧oo"], expect![@"f💖⟦o⟧o"], expect![@"f💖o⟦o⟧"], expect![@"f💖o⟦o⟧"]],
+  );
 }
 
 #[test]
