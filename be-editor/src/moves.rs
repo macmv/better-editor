@@ -35,14 +35,29 @@ impl EditorState {
         }
       }
 
+      Move::EndWord => {
+        self.move_graphemes(1);
+        while self.cursor_kind() == WordKind::Blank {
+          self.move_graphemes(1);
+        }
+
+        let start = self.cursor_kind();
+        while self.cursor_kind() == start {
+          self.move_graphemes(1);
+        }
+        self.move_graphemes(-1);
+      }
+
       _ => {}
     }
   }
 
   fn cursor_char(&self) -> char {
     let line = self.doc.line(self.cursor.line);
-    let Some(grapheme) = line.graphemes().skip(self.cursor.column.0).next() else { return '\0' };
-    grapheme.chars().next().unwrap_or('\0')
+    let Some(grapheme) = line.graphemes().skip(self.cursor.column.0).next() else {
+      return '\n';
+    };
+    grapheme.chars().next().unwrap_or('\n')
   }
 
   fn cursor_kind(&self) -> WordKind { word_kind(self.cursor_char()) }
