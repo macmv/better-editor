@@ -172,7 +172,7 @@ mod tests {
   }
 
   #[test]
-  fn next_word_works() {
+  fn next_word() {
     let mut editor = editor("fn foo() -> Self { bar }");
     editor.check(expect![@"⟦f⟧n foo() -> Self { bar }"]);
 
@@ -192,7 +192,7 @@ mod tests {
   }
 
   #[test]
-  fn end_word_works() {
+  fn end_word() {
     let mut editor = editor("fn foo() -> Self { bar }");
     editor.check(expect![@"⟦f⟧n foo() -> Self { bar }"]);
 
@@ -213,7 +213,7 @@ mod tests {
   }
 
   #[test]
-  fn prev_word_works() {
+  fn prev_word() {
     let mut editor = editor("fn foo() -> Self { bar }");
     editor.perform_move(Move::LineEnd);
     editor.check(expect![@"fn foo() -> Self { bar ⟦}⟧"]);
