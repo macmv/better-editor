@@ -200,7 +200,7 @@ impl EditorView {
         let cursor = layout
           .cursor(self.editor.doc().cursor_column_offset(self.editor.cursor()), mode)
           + Vec2::new(20.0, start_y + (line - min_line.as_usize()) as f64 * line_height);
-        render.fill(&cursor, render.theme().text);
+        render.fill(&cursor.ceil(), render.theme().text);
 
         if let Some(completions) = self.editor.completions() {
           let layouts = completions
