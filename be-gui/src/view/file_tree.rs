@@ -73,10 +73,14 @@ impl FileTree {
   }
 
   fn active_mut(&mut self) -> Option<&mut Item> {
-    fn visit_dir(dir: &mut Directory, mut index: usize, active: usize) -> Option<&mut Item> {
+    fn visit_dir<'a>(
+      dir: &'a mut Directory,
+      index: &mut usize,
+      active: usize,
+    ) -> Option<&'a mut Item> {
       if dir.expanded {
         for item in dir.items.as_mut().unwrap() {
-          index += 1;
+          *index += 1;
           if let Some(it) = visit_item(item, index, active) {
             return Some(it);
           }
@@ -85,8 +89,12 @@ impl FileTree {
 
       None
     }
-    fn visit_item(item: &mut Item, index: usize, active: usize) -> Option<&mut Item> {
-      if index == active {
+    fn visit_item<'a>(
+      item: &'a mut Item,
+      index: &mut usize,
+      active: usize,
+    ) -> Option<&'a mut Item> {
+      if *index == active {
         return Some(item);
       }
 
@@ -96,7 +104,7 @@ impl FileTree {
       }
     }
 
-    visit_dir(&mut self.tree, 0, self.active)
+    visit_dir(&mut self.tree, &mut 0, self.active)
   }
 
   pub fn perform_action(&mut self, action: Action) {
