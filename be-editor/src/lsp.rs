@@ -1,6 +1,6 @@
 use std::{cell::RefCell, ops::Range, rc::Rc};
 
-use be_doc::{Change, Edit};
+use be_doc::{Change, Edit, crop::RopeSlice};
 use be_lsp::{LanguageClientState, LanguageServerKey, TextEdit, command, types};
 use be_task::Task;
 
@@ -184,10 +184,37 @@ impl EditorState {
     });
 
     if self.lsp.completions.show {
-      Some(self.lsp.completions.completions.items.iter().map(|i| i.label.clone()).collect())
+      let current_word = self.current_word_for_completions();
+
+      Some(
+        self
+          .lsp
+          .completions
+          .completions
+          .items
+          .iter()
+          .map(|i| i.label.clone())
+          // `starts_with` using a rope slice
+          .filter(|i| i.bytes().take(current_word.byte_len()).eq(current_word.bytes()))
+          .collect(),
+      )
     } else {
       None
     }
+  }
+
+  fn current_word_for_completions(&self) -> RopeSlice<'_> {
+    let end = self.doc.cursor_offset(self.cursor);
+    let len = self
+      .doc
+      .range(..end)
+      .chars()
+      .rev()
+      .take_while(|c| c.is_alphanumeric())
+      .map(|c| c.len_utf8())
+      .sum::<usize>();
+
+    self.doc.range(end - len..end)
   }
 }
 
