@@ -193,9 +193,12 @@ impl EditorState {
           .completions
           .items
           .iter()
+          .filter(|i| {
+            let filter_text = i.filter_text.as_ref().unwrap_or(&i.label);
+            // `starts_with` using a rope slice
+            filter_text.bytes().take(current_word.byte_len()).eq(current_word.bytes())
+          })
           .map(|i| i.label.clone())
-          // `starts_with` using a rope slice
-          .filter(|i| i.bytes().take(current_word.byte_len()).eq(current_word.bytes()))
           .collect(),
       )
     } else {
