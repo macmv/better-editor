@@ -444,6 +444,10 @@ impl EditorState {
   }
 
   pub fn auto_indent(&mut self, direction: VerticalDirection) {
+    if self.cursor.column != 0 || !self.doc.line(self.cursor.line).is_empty() {
+      return;
+    }
+
     let line = self.cursor.line;
     let indent = self.guess_indent(line, direction);
     let columns = indent.0 * self.config.borrow().editor.indent_width as usize;
