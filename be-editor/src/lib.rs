@@ -16,6 +16,9 @@ mod moves;
 mod status;
 mod treesitter;
 
+#[cfg(test)]
+mod tests;
+
 pub use highlight::HighlightKey;
 pub use lsp::{Diagnostic, DiagnosticLevel};
 
@@ -630,44 +633,5 @@ impl CommandState {
   fn delete_graphemes(&mut self, len: usize) {
     let count = self.text[self.cursor..].graphemes(true).take(len).map(|g| g.len()).sum::<usize>();
     self.text.replace_range(self.cursor..self.cursor + count, "");
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn move_col_works() {
-    let mut state = EditorState::from("ab");
-
-    state.move_col_rel(1);
-    assert_eq!(state.cursor.line, 0);
-    assert_eq!(state.cursor.column, 1);
-
-    state.move_col_rel(1);
-    assert_eq!(state.cursor.line, 0);
-    assert_eq!(state.cursor.column, 1);
-  }
-
-  #[test]
-  fn move_graphemes_works() {
-    let mut state = EditorState::from("abc\ndef");
-
-    state.move_graphemes(1);
-    assert_eq!(state.cursor.line, 0);
-    assert_eq!(state.cursor.column, 1);
-
-    state.move_graphemes(1);
-    assert_eq!(state.cursor.line, 0);
-    assert_eq!(state.cursor.column, 2);
-
-    state.move_graphemes(1);
-    assert_eq!(state.cursor.line, 0);
-    assert_eq!(state.cursor.column, 3);
-
-    state.move_graphemes(1);
-    assert_eq!(state.cursor.line, 1);
-    assert_eq!(state.cursor.column, 0);
   }
 }
