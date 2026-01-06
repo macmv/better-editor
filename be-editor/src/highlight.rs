@@ -4,6 +4,8 @@ use std::{
   ops::Range,
 };
 
+use be_doc::FindIter;
+
 use crate::{Diagnostic, EditorState, lsp::DiagnosticLevel, treesitter::CapturesIter};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -21,6 +23,7 @@ pub struct HighlightStack<'a> {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum HighlightKey<'a> {
+  SearchResult,
   Diagnostic(DiagnosticLevel),
   TreeSitter(&'a str),
   SemanticToken(&'a str),
@@ -29,6 +32,7 @@ pub enum HighlightKey<'a> {
 enum HighlightIter<'a> {
   TreeSitter(CapturesIter<'a>),
   Diagnostics(DiagnosticIter<'a>),
+  Search(SearchResults<'a>),
 
   #[cfg(test)]
   Slice(std::slice::Iter<'a, Highlight<'a>>),
@@ -43,6 +47,10 @@ struct StartNode<'a> {
 struct DiagnosticIter<'a> {
   iter:  std::slice::Iter<'a, Diagnostic>,
   range: Range<usize>,
+}
+
+struct SearchResults<'a> {
+  iter: FindIter<'a>,
 }
 
 impl Ord for StartNode<'_> {
@@ -92,6 +100,10 @@ impl EditorState {
       range: range.clone(),
     }));
 
+    if let Some(text) = &self.search_text {
+      iterators.push(HighlightIter::Search(SearchResults { iter: self.doc.find(text) }));
+    }
+
     MergeIterator::new(iterators, range.start)
   }
 }
@@ -103,6 +115,7 @@ impl<'a> Iterator for HighlightIter<'a> {
     match self {
       HighlightIter::TreeSitter(iter) => iter.next(),
       HighlightIter::Diagnostics(iter) => iter.next(),
+      HighlightIter::Search(iter) => iter.next(),
 
       #[cfg(test)]
       HighlightIter::Slice(iter) => iter.next().copied(),
@@ -120,6 +133,19 @@ impl<'a> Iterator for DiagnosticIter<'a> {
         return Some(it.highlight());
       }
     }
+  }
+}
+
+impl<'a> Iterator for SearchResults<'a> {
+  type Item = Highlight<'a>;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    let start = self.iter.next()?;
+    Some(Highlight {
+      start,
+      end: start + self.iter.needle().len(),
+      key: HighlightKey::SearchResult,
+    })
   }
 }
 

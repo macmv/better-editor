@@ -364,6 +364,7 @@ impl EditorState {
     match command.mode {
       CommandMode::Search => {
         self.search_text = Some(command.text);
+        self.damage_all = true;
         self.status = None;
       }
       CommandMode::Command => {

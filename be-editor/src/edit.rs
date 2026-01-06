@@ -17,6 +17,7 @@ impl EditorState {
       command.perform_edit(e);
       if command.mode == CommandMode::Search {
         self.search_text = Some(command.text.clone());
+        self.damage_all = true;
       }
 
       return;

@@ -193,6 +193,10 @@ impl SyntaxTheme {
       }
 
       match key {
+        HighlightKey::SearchResult => {
+          highlight.merge_from(&Highlight::empty().with_underline(Underline::Foreground))
+        }
+
         HighlightKey::TreeSitter(key) => {
           let mut cur = *key;
 
