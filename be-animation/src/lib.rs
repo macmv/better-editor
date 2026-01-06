@@ -85,6 +85,16 @@ impl Animation {
     state.direction = Direction::Reverse;
   }
 
+  pub fn stop(&mut self) {
+    let state = self.state.get_mut();
+    state.running = None;
+    if state.direction == Direction::Forward {
+      state.time = self.duration;
+    } else {
+      state.time = 0.0;
+    }
+  }
+
   pub fn advance(&self, now: std::time::Instant) {
     let mut state = self.state.borrow_mut();
 

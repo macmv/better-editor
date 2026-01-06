@@ -1,4 +1,4 @@
-use std::{cell::RefCell, path::PathBuf, rc::Rc};
+use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Instant};
 
 use be_config::Config;
 use kurbo::{Affine, Axis, Point, Rect, Shape, Size, Stroke, Vec2};
@@ -41,6 +41,7 @@ pub struct Notify {
 pub struct Render<'a> {
   pub store: &'a mut RenderStore,
   scene:     vello::Scene,
+  now:       Instant,
 
   scale: f64,
   size:  Size,
@@ -133,7 +134,6 @@ pub fn run() {
 
     let mut app = App {
       state: super::State::new(&store),
-
       store,
 
       texture,
@@ -189,9 +189,11 @@ impl App {
 
     self.state.layout(&mut layout);
 
+    let now = std::time::Instant::now();
     let mut render = Render {
       store: &mut self.store,
       scene: vello::Scene::new(),
+      now,
       scale,
       size: Size::new(
         surface.texture.width() as f64 / scale,
@@ -275,6 +277,8 @@ impl<'a> Render<'a> {
 
   /// TODO: Don't expose this.
   pub(crate) fn scale(&self) -> f64 { self.scale }
+
+  pub fn now(&self) -> Instant { self.now }
 
   pub fn theme(&self) -> &Theme { &self.store.theme }
 

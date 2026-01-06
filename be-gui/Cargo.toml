@@ -19,6 +19,8 @@ be-input = { path = "../be-input" }
 be-lsp = { path = "../be-lsp" }
 be-editor = { path = "../be-editor" }
 be-terminal = { path = "../be-terminal" }
+be-animation = { path = "../be-animation" }
+
 bytemuck = "1.24.0"
 png = { version = "0.17", default-features = false }
 fern = { version = "0.7.1", features = ["chrono"] }

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use be_animation::Animation;
 use be_editor::{CommandMode, EditorState, IndentLevel};
 use be_input::Mode;
 use kurbo::{Arc, Circle, Line, Point, Rect, RoundedRect, Stroke, Triangle, Vec2};
@@ -16,6 +17,8 @@ pub struct EditorView {
   pub(crate) temporary_replace_mode: bool,
   cached_layouts:                    HashMap<usize, TextLayout>,
   cached_scale:                      f64,
+
+  progress_animation: Animation,
 }
 
 impl EditorView {
@@ -27,6 +30,8 @@ impl EditorView {
       temporary_replace_mode: false,
       cached_layouts:         HashMap::new(),
       cached_scale:           0.0,
+
+      progress_animation: Animation::linear(2.0),
     };
 
     view.editor.config = store.config.clone();
@@ -305,13 +310,19 @@ impl EditorView {
     }
 
     let progress = self.editor.progress();
-    if !progress.is_empty() {
+    if progress.is_empty() {
+      self.progress_animation.stop();
+    } else if !self.progress_animation.is_running() {
+      self.progress_animation.start();
+    }
+    self.progress_animation.advance(render.now());
+    if self.progress_animation.is_running() {
       let arc = Arc::new(
         (10.0, render.size().height - 10.0),
         (8.0, 8.0),
         0.0,
         std::f64::consts::PI * 4.0 / 3.0,
-        0.0,
+        self.progress_animation.interpolate(0.0, std::f64::consts::PI * 2.0),
       );
       render.stroke(&arc, crate::oklch(1.0, 0.0, 0.0), Stroke::new(1.0));
     }
