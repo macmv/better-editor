@@ -99,6 +99,7 @@ impl EditorState {
   pub fn file_type(&self) -> Option<filetype::FileType> { self.filetype }
   pub fn take_damage_all(&mut self) -> bool { std::mem::take(&mut self.damage_all) }
   pub fn take_damages(&mut self) -> impl Iterator<Item = Line> { self.damages.drain() }
+  pub fn progress(&self) -> Vec<String> { self.lsp.progress() }
 
   pub fn update(&mut self) {
     if self.repo.is_none() {

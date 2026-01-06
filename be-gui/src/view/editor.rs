@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use be_editor::{CommandMode, EditorState, IndentLevel};
 use be_input::Mode;
-use kurbo::{Circle, Line, Point, Rect, RoundedRect, Stroke, Triangle, Vec2};
+use kurbo::{Arc, Circle, Line, Point, Rect, RoundedRect, Stroke, Triangle, Vec2};
 
 use crate::{CursorMode, Render, RenderStore, TextLayout, theme::Underline};
 
@@ -312,6 +312,18 @@ impl EditorView {
     if let Some(ft) = self.editor.file_type() {
       let layout = render.layout_text(&format!("{ft}"), render.theme().text);
       render.draw_text(&layout, (render.size().width - 50.0, render.size().height - line_height));
+    }
+
+    let progress = self.editor.progress();
+    if !progress.is_empty() {
+      let arc = Arc::new(
+        (10.0, render.size().height - 10.0),
+        (8.0, 8.0),
+        0.0,
+        std::f64::consts::PI * 4.0 / 3.0,
+        0.0,
+      );
+      render.stroke(&arc, crate::oklch(1.0, 0.0, 0.0), Stroke::new(1.0));
     }
   }
 

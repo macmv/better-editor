@@ -221,6 +221,12 @@ impl EditorState {
   }
 }
 
+impl LspState {
+  pub fn progress(&self) -> Vec<String> {
+    if self.save_task.is_some() { vec!["saving".into()] } else { vec![] }
+  }
+}
+
 impl CompletionsState {
   pub fn hide(&mut self) { self.show = false; }
 }
