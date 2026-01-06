@@ -1,6 +1,6 @@
 use std::{
   fmt,
-  ops::{Add, Range, Sub},
+  ops::{Add, Range, RangeBounds, Sub},
 };
 
 use crop::{Rope, RopeSlice};
@@ -161,7 +161,9 @@ impl Document {
     offset..offset + count
   }
 
-  pub fn range(&self, range: Range<usize>) -> RopeSlice<'_> { self.rope.byte_slice(range) }
+  pub fn range(&self, range: impl RangeBounds<usize>) -> RopeSlice<'_> {
+    self.rope.byte_slice(range)
+  }
 }
 
 impl Column {
