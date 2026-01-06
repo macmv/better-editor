@@ -110,8 +110,8 @@ mod tests {
   impl TestEditor {
     fn state(&self) -> String {
       let mut s = self.0.doc.rope.to_string();
-      s.insert(self.0.doc.cursor_offset(self.0.cursor) + 1, '$');
-      s.insert(self.0.doc.cursor_offset(self.0.cursor), '$');
+      s.insert(self.0.doc.cursor_offset(self.0.cursor) + 1, '⟧');
+      s.insert(self.0.doc.cursor_offset(self.0.cursor), '⟦');
       s
     }
   }
@@ -139,30 +139,30 @@ mod tests {
   #[test]
   fn next_word_works() {
     let mut editor = editor("fn foo() -> Self { bar }");
-    assert_eq!(editor, "$f$n foo() -> Self { bar }");
+    assert_eq!(editor, "⟦f⟧n foo() -> Self { bar }");
 
     editor.perform_move(Move::NextWord);
-    assert_eq!(editor, "fn $f$oo() -> Self { bar }");
+    assert_eq!(editor, "fn ⟦f⟧oo() -> Self { bar }");
 
     editor.perform_move(Move::NextWord);
-    assert_eq!(editor, "fn foo$($) -> Self { bar }");
+    assert_eq!(editor, "fn foo⟦(⟧) -> Self { bar }");
 
     editor.perform_move(Move::NextWord);
-    assert_eq!(editor, "fn foo() $-$> Self { bar }");
+    assert_eq!(editor, "fn foo() ⟦-⟧> Self { bar }");
 
     editor.perform_move(Move::NextWord);
-    assert_eq!(editor, "fn foo() -> $S$elf { bar }");
+    assert_eq!(editor, "fn foo() -> ⟦S⟧elf { bar }");
 
     editor.perform_move(Move::NextWord);
-    assert_eq!(editor, "fn foo() -> Self ${$ bar }");
+    assert_eq!(editor, "fn foo() -> Self ⟦{⟧ bar }");
 
     editor.perform_move(Move::NextWord);
-    assert_eq!(editor, "fn foo() -> Self { $b$ar }");
+    assert_eq!(editor, "fn foo() -> Self { ⟦b⟧ar }");
 
     editor.perform_move(Move::NextWord);
-    assert_eq!(editor, "fn foo() -> Self { bar $}$");
+    assert_eq!(editor, "fn foo() -> Self { bar ⟦}⟧");
 
     editor.perform_move(Move::NextWord);
-    assert_eq!(editor, "fn foo() -> Self { bar $}$");
+    assert_eq!(editor, "fn foo() -> Self { bar ⟦}⟧");
   }
 }
