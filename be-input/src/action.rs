@@ -36,6 +36,9 @@ pub enum Move {
 
   FileStart,
   FileEnd,
+
+  NextResult,
+  PrevResult,
 }
 
 pub enum Edit {
@@ -179,6 +182,8 @@ fn parse_move(
     Key::Char('^') => LineStartOfText,
     Key::Char('$') => LineEnd,
     Key::Char('%') => MatchingBracket,
+    Key::Char('n') => NextResult,
+    Key::Char('N') => PrevResult,
     Key::Char('g') => match iter.next().ok_or(ActionError::Incomplete)?.key {
       Key::Char('g') => FileStart,
       _ => return Err(ActionError::Unrecognized),

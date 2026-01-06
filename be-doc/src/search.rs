@@ -22,6 +22,18 @@ impl Document {
       })
     }
   }
+
+  pub fn find_from<'a>(&'a self, start: usize, pattern: &'a str) -> FindIter<'a> {
+    if pattern.is_empty() {
+      FindIter(FindIterImpl::Empty)
+    } else {
+      FindIter(FindIterImpl::TwoWay {
+        rope:    &self.rope,
+        offset:  start,
+        two_way: TwoWay::new(pattern.as_bytes()),
+      })
+    }
+  }
 }
 
 impl<'a> FindIter<'a> {
