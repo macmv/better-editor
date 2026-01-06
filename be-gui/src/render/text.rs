@@ -182,7 +182,7 @@ impl Render<'_> {
             .scene
             .draw_glyphs(run.font())
             .brush(&glyph_run.style().brush)
-            .hint(true)
+            .hint(false)
             .transform(transform)
             .glyph_transform(glyph_transform)
             .font_size(run.font_size())
