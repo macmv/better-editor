@@ -2,6 +2,7 @@ use be_task::Task;
 use parking_lot::Mutex;
 use std::{
   collections::HashMap,
+  ops::Range,
   sync::{Arc, Weak},
 };
 
@@ -21,6 +22,17 @@ use crate::client::LspState;
 pub struct LanguageServerStore {
   servers:    HashMap<LanguageServerKey, Arc<LanguageServerState>>,
   on_message: Arc<Mutex<Box<dyn Fn() + Send>>>,
+}
+
+pub struct Diagnostic {
+  pub range:    Range<usize>,
+  pub message:  String,
+  pub severity: Option<types::DiagnosticSeverity>,
+}
+
+pub struct TextEdit {
+  pub range:    Range<usize>,
+  pub new_text: String,
 }
 
 #[derive(Clone, Hash, Eq, PartialEq)]

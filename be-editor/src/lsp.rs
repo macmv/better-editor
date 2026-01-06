@@ -1,7 +1,7 @@
 use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use be_doc::{Change, Edit};
-use be_lsp::{LanguageClientState, LanguageServerKey, command, types};
+use be_lsp::{LanguageClientState, LanguageServerKey, TextEdit, command, types};
 use be_task::Task;
 
 use crate::{EditorState, HighlightKey, highlight::Highlight};
@@ -30,7 +30,7 @@ pub struct CompletionsState {
 }
 
 pub struct SaveTask {
-  task:    Task<Option<Vec<types::TextEdit>>>,
+  task:    Task<Vec<TextEdit>>,
   started: std::time::Instant,
 }
 
@@ -44,12 +44,6 @@ pub struct Diagnostic {
 pub enum DiagnosticLevel {
   Error,
   Warning,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum PositionEncoding {
-  Utf8,
-  Utf16,
 }
 
 impl EditorState {
@@ -72,7 +66,7 @@ impl EditorState {
 
     self.lsp.client.send(&command::DidOpenTextDocument {
       path:        self.file.as_ref().unwrap().path().to_path_buf(),
-      text:        self.doc.rope.to_string(),
+      doc:         self.doc.clone(),
       language_id: "rust".into(),
     });
   }
@@ -84,8 +78,7 @@ impl EditorState {
     self.lsp.client.servers(|state| {
       if let Some(d) = state.diagnostics.get(file.path()) {
         self.lsp.diagnostics.extend(d.iter().map(|d| Diagnostic {
-          range:   lsp_to_offset(&self.doc, d.range.start, PositionEncoding::Utf8)
-            ..lsp_to_offset(&self.doc, d.range.end, PositionEncoding::Utf8),
+          range:   d.range.clone(),
           message: d.message.clone(),
           level:   match d.severity {
             Some(types::DiagnosticSeverity::ERROR) => DiagnosticLevel::Error,
@@ -102,36 +95,30 @@ impl EditorState {
   pub(crate) fn lsp_notify_change(&mut self, change: &crate::Change) {
     let Some(file) = &self.file else { return };
 
-    let range = types::Range {
-      start: self.offset_to_lsp(change.range.start, PositionEncoding::Utf8),
-      end:   self.offset_to_lsp(change.range.end, PositionEncoding::Utf8),
-    };
-
     self.lsp.document_version += 1;
 
     self.lsp.client.send(&command::DidChangeTextDocument {
       path:    file.path().to_path_buf(),
       version: self.lsp.document_version,
-      changes: vec![(range, change.text.clone())],
+      doc:     self.doc.clone(),
+      changes: vec![(change.range.clone(), change.text.clone())],
     });
   }
 
   pub(crate) fn lsp_on_save(&mut self) {
     let Some(file) = &self.file else { return };
 
-    let task = self
-      .lsp
-      .client
-      .send_first_capable(&command::DocumentFormat { path: file.path().to_path_buf() });
+    let task = self.lsp.client.send_first_capable(&command::DocumentFormat {
+      path: file.path().to_path_buf(),
+      doc:  self.doc.clone(),
+    });
     self.lsp.save_task = task.map(|t| SaveTask { task: t, started: std::time::Instant::now() });
   }
 
   pub(crate) fn lsp_finish_on_save(&mut self) {
     if let Some(task) = &self.lsp.save_task {
-      if let Some(completed) = task.task.completed() {
-        if let Some(edits) = completed {
-          self.apply_bulk_lsp_edits(edits);
-        }
+      if let Some(edits) = task.task.completed() {
+        self.apply_bulk_lsp_edits(edits);
         self.lsp.save_task = None;
       } else if task.started.elapsed() > std::time::Duration::from_millis(500) {
         // TODO: User-visible warning.
@@ -141,7 +128,11 @@ impl EditorState {
     }
   }
 
-  fn apply_bulk_lsp_edits(&mut self, edits: Vec<types::TextEdit>) {
+  fn apply_bulk_lsp_edits(&mut self, edits: Vec<TextEdit>) {
+    if edits.is_empty() {
+      return;
+    }
+
     let single_edit = self.current_edit.is_none();
     if single_edit {
       self.current_edit = Some(Edit::empty());
@@ -152,9 +143,7 @@ impl EditorState {
     // What I gather from this very overly-explained paragraph is, just iterate
     // in reverse.
     for edit in edits.into_iter().rev() {
-      let start = lsp_to_offset(&self.doc, edit.range.start, PositionEncoding::Utf8);
-      let end = lsp_to_offset(&self.doc, edit.range.end, PositionEncoding::Utf8);
-      let change = Change { range: start..end, text: edit.new_text };
+      let change = Change { range: edit.range, text: edit.new_text };
       self.keep_cursor_for_change(&change);
       self.change(change);
     }
@@ -165,11 +154,10 @@ impl EditorState {
   }
 
   pub(crate) fn lsp_request_completions(&mut self) {
-    let cursor = self.cursor_to_lsp(PositionEncoding::Utf8);
-
     let tasks = self.lsp.client.send(&command::Completion {
-      path: self.file.as_ref().unwrap().path().to_path_buf(),
-      cursor,
+      path:   self.file.as_ref().unwrap().path().to_path_buf(),
+      doc:    self.doc.clone(),
+      cursor: self.cursor,
     });
     self.lsp.completions.clear_on_message = true;
     self.lsp.completions.tasks = tasks;
@@ -202,67 +190,6 @@ impl EditorState {
       None
     }
   }
-
-  fn cursor_to_lsp(&self, encoding: PositionEncoding) -> types::Position {
-    types::Position {
-      line:      self.cursor.line.as_usize() as u32,
-      character: {
-        match encoding {
-          PositionEncoding::Utf8 => self.doc.cursor_column_offset(self.cursor) as u32,
-          PositionEncoding::Utf16 => {
-            let line = self.doc.line(self.cursor.line);
-            line
-              .graphemes()
-              .take(self.cursor.column.0)
-              .map(|g| g.chars().map(|c| c.len_utf16()).sum::<usize>())
-              .sum::<usize>() as u32
-          }
-        }
-      },
-    }
-  }
-
-  fn offset_to_lsp(&self, offset: usize, encoding: PositionEncoding) -> types::Position {
-    let line = self.doc.rope.line_of_byte(offset);
-
-    let character = match encoding {
-      PositionEncoding::Utf8 => (offset - self.doc.byte_of_line(be_doc::Line(line))) as u32,
-      PositionEncoding::Utf16 => self
-        .doc
-        .rope
-        .byte_slice(offset - self.doc.byte_of_line(be_doc::Line(line))..offset)
-        .chars()
-        .map(|c| c.len_utf16())
-        .sum::<usize>() as u32,
-    };
-
-    types::Position { line: line as u32, character }
-  }
-}
-
-fn lsp_to_offset(
-  doc: &be_doc::Document,
-  position: types::Position,
-  encoding: PositionEncoding,
-) -> usize {
-  let character = match encoding {
-    PositionEncoding::Utf8 => position.character as usize,
-    PositionEncoding::Utf16 => {
-      let line = doc.line(be_doc::Line(position.line as usize));
-      let mut total = 0;
-      let mut character = 0;
-      for c in line.chars() {
-        if total + c.len_utf16() > position.character as usize {
-          break;
-        }
-        total += c.len_utf16();
-        character += c.len_utf8();
-      }
-      character
-    }
-  };
-
-  doc.byte_of_line(be_doc::Line(position.line as usize)) + character as usize
 }
 
 impl Diagnostic {

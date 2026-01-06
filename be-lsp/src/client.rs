@@ -1,10 +1,11 @@
+use be_doc::Document;
 use be_task::Task;
 use parking_lot::Mutex;
 use polling::{Events, Poller};
 use serde::de;
 use serde_json::value::RawValue;
 use std::{
-  collections::{HashMap, HashSet, VecDeque},
+  collections::{HashMap, VecDeque},
   fmt,
   io::{self, Read, Write},
   mem::ManuallyDrop,
@@ -12,6 +13,8 @@ use std::{
   process::{Child, ChildStdin, ChildStdout, Stdio},
   sync::Arc,
 };
+
+use crate::{Diagnostic, command::PositionEncoding};
 
 pub struct LspClient {
   _child:        Child,
@@ -27,8 +30,9 @@ pub struct LspClient {
 /// This is all the state we've sent to a particular server.
 #[derive(Default)]
 pub struct LspState {
-  pub opened_files: HashSet<PathBuf>,
-  pub diagnostics:  HashMap<PathBuf, Vec<lsp_types::Diagnostic>>,
+  pub caps:         types::ServerCapabilities,
+  pub opened_files: HashMap<PathBuf, Document>,
+  pub diagnostics:  HashMap<PathBuf, Vec<Diagnostic>>,
 }
 
 enum LspRequest {
@@ -187,6 +191,15 @@ impl LspClient {
 
     let thread = unsafe { ManuallyDrop::take(&mut self.worker_thread) };
     thread.join().unwrap();
+  }
+}
+
+impl LspState {
+  pub fn position_encoding(&self) -> PositionEncoding {
+    match self.caps.position_encoding.as_ref().map(|p| p.as_str()) {
+      Some("utf-8") => PositionEncoding::Utf8,
+      _ => PositionEncoding::Utf16,
+    }
   }
 }
 

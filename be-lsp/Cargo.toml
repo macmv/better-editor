@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-be-async = { version = "0.1.0", path = "../be-async" }
+be-async = { path = "../be-async" }
+be-doc = { path = "../be-doc" }
 be-task = { path = "../be-task" }
 crossbeam-channel = "0.5.15"
 libc = "0.2.178"
