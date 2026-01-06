@@ -391,6 +391,12 @@ impl EditorState {
           "e" => self
             .open(Path::new(args))
             .map(|()| format!("{}: opened", self.file.as_ref().unwrap().path().display())),
+          "noh" => {
+            self.search_text = None;
+            self.damage_all = true;
+            self.status = None;
+            return;
+          }
 
           _ => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
