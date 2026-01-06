@@ -36,9 +36,10 @@ pub struct TextEdit {
 }
 
 pub struct Progress {
-  pub title:    String,
-  pub message:  Option<String>,
-  pub progress: f64,
+  pub title:     String,
+  pub message:   Option<String>,
+  pub progress:  f64,
+  pub completed: Option<std::time::Instant>,
 }
 
 #[derive(Clone, Hash, Eq, PartialEq)]

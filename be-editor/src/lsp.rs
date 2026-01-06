@@ -229,9 +229,16 @@ impl LspState {
       tasks.push("saving".to_string());
     }
 
+    let now = std::time::Instant::now();
+
     self.client.servers(|state| {
       for progress in state.progress.values() {
-        tasks.push(format!("{} {:3}%", progress.title, progress.progress * 100.0));
+        if progress
+          .completed
+          .is_none_or(|c| now.duration_since(c) < std::time::Duration::from_secs(5))
+        {
+          tasks.push(format!("{} {:3}%", progress.title, progress.progress * 100.0));
+        }
       }
     });
 

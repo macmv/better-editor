@@ -377,7 +377,9 @@ fn on_work_done_progress_create(
     lsp_types::ProgressToken::String(s) => s,
   };
 
-  state.progress.insert(token, Progress { title: "".into(), message: None, progress: 0.0 });
+  state
+    .progress
+    .insert(token, Progress { title: "".into(), message: None, progress: 0.0, completed: None });
 }
 
 fn on_publish_diagnostics(state: &mut LspState, params: lsp_types::PublishDiagnosticsParams) {
@@ -414,9 +416,15 @@ fn on_progress(state: &mut LspState, params: lsp_types::ProgressParams) {
         warn!("work done for unknown token: {}", token);
       }
 
-      state
-        .progress
-        .insert(token, Progress { title: begin.title, message: begin.message, progress: 0.0 });
+      state.progress.insert(
+        token,
+        Progress {
+          title:     begin.title,
+          message:   begin.message,
+          progress:  0.0,
+          completed: None,
+        },
+      );
     }
     lsp_types::WorkDoneProgress::Report(report) => {
       if let Some(progress) = state.progress.get_mut(&token) {
@@ -425,7 +433,9 @@ fn on_progress(state: &mut LspState, params: lsp_types::ProgressParams) {
       }
     }
     lsp_types::WorkDoneProgress::End(_) => {
-      state.progress.remove(&token);
+      if let Some(progress) = state.progress.get_mut(&token) {
+        progress.completed = Some(std::time::Instant::now());
+      }
     }
   }
 }
