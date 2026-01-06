@@ -387,10 +387,14 @@ impl EditorState {
       self.lsp_finish_on_save();
 
       if self.lsp.save_task.is_none() {
-        self.status = Some(Status::for_success(format!(
-          "{}: written",
-          self.file.as_ref().unwrap().path().display()
-        )));
+        let res = self
+          .save()
+          .map(|()| format!("{}: written", self.file.as_ref().unwrap().path().display()));
+
+        match res {
+          Ok(m) => self.status = Some(Status::for_success(m)),
+          Err(e) => self.status = Some(Status::for_error(e)),
+        }
       }
     }
   }
