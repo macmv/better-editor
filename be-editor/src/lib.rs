@@ -342,7 +342,11 @@ impl EditorState {
         self.change(Change::replace(self.doc.grapheme_slice(self.cursor, 1), s));
       }
       Edit::Delete => {
-        self.change(Change::remove(self.doc.grapheme_slice(self.cursor, 1)));
+        let range = self.doc.grapheme_slice(self.cursor, 1);
+        if !self.doc.range(range.clone()).chars().any(|c| c == '\n') {
+          self.change(Change::remove(range));
+          self.clamp_column();
+        }
       }
       Edit::DeleteLine => {
         self.change(Change::remove(
