@@ -277,6 +277,10 @@ impl EditorState {
           self.set_mode(mode);
           self.move_col_rel(delta);
         }
+
+        if mode == Mode::Insert {
+          self.auto_indent(VerticalDirection::Up);
+        }
       }
       Action::Append { after } => {
         self.set_mode(Mode::Insert);
