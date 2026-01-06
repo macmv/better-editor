@@ -86,3 +86,72 @@ impl EditorState {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use be_input::{Direction, Edit, Move};
+
+  use crate::tests::editor;
+
+  #[test]
+  fn delete_wont_remove_newline() {
+    let mut editor = editor("foo\nbar\n");
+
+    editor.perform_move(Move::LineEnd);
+    editor.check(expect![@r#"
+      fo⟦o⟧
+      bar
+    "#
+    ]);
+
+    editor.check_repeated(
+      |e| e.perform_edit(Edit::Delete),
+      &[
+        expect![@r#"
+          f⟦o⟧
+          bar
+        "#],
+        expect![@r#"
+          ⟦f⟧
+          bar
+        "#],
+        expect![@r#"
+          ⟦ ⟧
+          bar
+        "#],
+        expect![@r#"
+          ⟦ ⟧
+          bar
+        "#],
+      ],
+    );
+
+    editor.perform_move(Move::Single(Direction::Down));
+    editor.check(expect![@r#"
+
+      ⟦b⟧ar
+    "#]);
+
+    editor.check_repeated(
+      |e| e.perform_edit(Edit::Delete),
+      &[
+        expect![@r#"
+
+          ⟦a⟧r
+        "#],
+        expect![@r#"
+
+          ⟦r⟧
+        "#],
+        expect![@r#"
+
+          ⟦ ⟧
+        "#],
+        expect![@r#"
+
+          ⟦ ⟧
+        "#],
+      ],
+    );
+  }
+}
