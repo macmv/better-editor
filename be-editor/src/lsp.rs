@@ -46,6 +46,12 @@ pub enum DiagnosticLevel {
   Warning,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum PositionEncoding {
+  Utf8,
+  Utf16,
+}
+
 impl EditorState {
   pub(crate) fn connect_to_lsp(&mut self) {
     let Some(ft) = &self.filetype else { return };
@@ -78,7 +84,8 @@ impl EditorState {
     self.lsp.client.servers(|state| {
       if let Some(d) = state.diagnostics.get(file.path()) {
         self.lsp.diagnostics.extend(d.iter().map(|d| Diagnostic {
-          range:   lsp_to_offset(&self.doc, d.range.start)..lsp_to_offset(&self.doc, d.range.end),
+          range:   lsp_to_offset(&self.doc, d.range.start, PositionEncoding::Utf8)
+            ..lsp_to_offset(&self.doc, d.range.end, PositionEncoding::Utf8),
           message: d.message.clone(),
           level:   match d.severity {
             Some(types::DiagnosticSeverity::ERROR) => DiagnosticLevel::Error,
@@ -96,8 +103,8 @@ impl EditorState {
     let Some(file) = &self.file else { return };
 
     let range = types::Range {
-      start: self.offset_to_lsp(change.range.start),
-      end:   self.offset_to_lsp(change.range.end),
+      start: self.offset_to_lsp(change.range.start, PositionEncoding::Utf8),
+      end:   self.offset_to_lsp(change.range.end, PositionEncoding::Utf8),
     };
 
     self.lsp.document_version += 1;
@@ -145,8 +152,8 @@ impl EditorState {
     // What I gather from this very overly-explained paragraph is, just iterate
     // in reverse.
     for edit in edits.into_iter().rev() {
-      let start = lsp_to_offset(&self.doc, edit.range.start);
-      let end = lsp_to_offset(&self.doc, edit.range.end);
+      let start = lsp_to_offset(&self.doc, edit.range.start, PositionEncoding::Utf8);
+      let end = lsp_to_offset(&self.doc, edit.range.end, PositionEncoding::Utf8);
       let change = Change { range: start..end, text: edit.new_text };
       self.keep_cursor_for_change(&change);
       self.change(change);
@@ -158,7 +165,7 @@ impl EditorState {
   }
 
   pub(crate) fn lsp_request_completions(&mut self) {
-    let cursor = self.cursor_to_lsp();
+    let cursor = self.cursor_to_lsp(PositionEncoding::Utf8);
 
     let tasks = self.lsp.client.send(&command::Completion {
       path: self.file.as_ref().unwrap().path().to_path_buf(),
@@ -196,22 +203,66 @@ impl EditorState {
     }
   }
 
-  fn cursor_to_lsp(&self) -> types::Position {
+  fn cursor_to_lsp(&self, encoding: PositionEncoding) -> types::Position {
     types::Position {
       line:      self.cursor.line.as_usize() as u32,
-      character: self.doc.cursor_column_offset(self.cursor) as u32,
+      character: {
+        match encoding {
+          PositionEncoding::Utf8 => self.doc.cursor_column_offset(self.cursor) as u32,
+          PositionEncoding::Utf16 => {
+            let line = self.doc.line(self.cursor.line);
+            line
+              .graphemes()
+              .take(self.cursor.column.0)
+              .map(|g| g.chars().map(|c| c.len_utf16()).sum::<usize>())
+              .sum::<usize>() as u32
+          }
+        }
+      },
     }
   }
 
-  fn offset_to_lsp(&self, offset: usize) -> types::Position {
+  fn offset_to_lsp(&self, offset: usize, encoding: PositionEncoding) -> types::Position {
     let line = self.doc.rope.line_of_byte(offset);
-    let column = offset - self.doc.byte_of_line(be_doc::Line(line));
-    types::Position { line: line as u32, character: column as u32 }
+
+    let character = match encoding {
+      PositionEncoding::Utf8 => (offset - self.doc.byte_of_line(be_doc::Line(line))) as u32,
+      PositionEncoding::Utf16 => self
+        .doc
+        .rope
+        .byte_slice(offset - self.doc.byte_of_line(be_doc::Line(line))..offset)
+        .chars()
+        .map(|c| c.len_utf16())
+        .sum::<usize>() as u32,
+    };
+
+    types::Position { line: line as u32, character }
   }
 }
 
-fn lsp_to_offset(doc: &be_doc::Document, position: types::Position) -> usize {
-  doc.byte_of_line(be_doc::Line(position.line as usize)) + position.character as usize
+fn lsp_to_offset(
+  doc: &be_doc::Document,
+  position: types::Position,
+  encoding: PositionEncoding,
+) -> usize {
+  let character = match encoding {
+    PositionEncoding::Utf8 => position.character as usize,
+    PositionEncoding::Utf16 => {
+      let line = doc.line(be_doc::Line(position.line as usize));
+      let mut total = 0;
+      let mut character = 0;
+      for c in line.chars() {
+        if total + c.len_utf16() > position.character as usize {
+          break;
+        }
+        total += c.len_utf16();
+        character += c.len_utf8();
+      }
+      character
+    }
+  };
+
+  doc.byte_of_line(be_doc::Line(position.line as usize)) + character as usize
 }
 
 impl Diagnostic {
