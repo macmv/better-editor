@@ -148,8 +148,8 @@ impl Shell {
       prev = i;
     }
 
-    let layout = layout.build(&line_string);
-    let layout = render.build_layout(layout);
+    let (layout, backgrounds) = layout.build(&line_string);
+    let layout = render.build_layout(layout, backgrounds);
 
     let mut background = vec![];
     let mut prev = 0.0;

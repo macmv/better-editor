@@ -365,6 +365,9 @@ impl EditorView {
             layout.apply(range.clone(), parley::StyleProperty::UnderlineBrush(Some(c.into())));
           }
         }
+        if let Some(background) = highlight.background {
+          layout.background(range.clone(), background);
+        }
       }
 
       if highlight.pos > max_index {
@@ -374,8 +377,8 @@ impl EditorView {
       prev = pos;
     }
 
-    let layout = layout.build(&line_string);
-    let layout = render.build_layout(layout);
+    let (layout, backgrounds) = layout.build(&line_string);
+    let layout = render.build_layout(layout, backgrounds);
 
     Some(entry.insert(layout))
   }

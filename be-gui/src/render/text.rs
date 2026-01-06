@@ -39,12 +39,14 @@ pub struct FontMetrics {
 pub struct TextLayout {
   metrics: FontMetrics,
 
-  layout: parley::Layout<peniko::Brush>,
-  scale:  f64,
+  layout:      parley::Layout<peniko::Brush>,
+  scale:       f64,
+  backgrounds: Vec<(usize, Option<peniko::Brush>)>,
 }
 
 pub struct LayoutBuilder<'a> {
-  builder: parley::RangedBuilder<'a, peniko::Brush>,
+  builder:     parley::RangedBuilder<'a, peniko::Brush>,
+  backgrounds: Vec<(usize, Option<peniko::Brush>)>,
 }
 
 impl TextStore {
@@ -106,7 +108,7 @@ impl TextStore {
       self.config.borrow().font.family.as_str().into(),
     ));
 
-    LayoutBuilder { builder }
+    LayoutBuilder { builder, backgrounds: vec![] }
   }
 
   pub fn set_scale(&mut self, scale: f64) {
@@ -118,18 +120,27 @@ impl TextStore {
 }
 
 impl Render<'_> {
-  pub fn build_layout(&mut self, mut layout: parley::Layout<peniko::Brush>) -> TextLayout {
+  pub fn build_layout(
+    &mut self,
+    mut layout: parley::Layout<peniko::Brush>,
+    backgrounds: Vec<(usize, Option<peniko::Brush>)>,
+  ) -> TextLayout {
     layout.break_all_lines(None);
     layout.align(None, parley::Alignment::Start, parley::AlignmentOptions::default());
 
-    TextLayout { metrics: self.store.text.font_metrics.clone(), layout, scale: self.scale }
+    TextLayout {
+      metrics: self.store.text.font_metrics.clone(),
+      layout,
+      backgrounds,
+      scale: self.scale,
+    }
   }
 
   pub fn layout_text(&mut self, text: &str, color: Color) -> TextLayout {
     let builder = self.store.text.layout_builder(text, color, self.scale);
 
-    let built = builder.build(text);
-    self.build_layout(built)
+    let (built, backgrounds) = builder.build(text);
+    self.build_layout(built, backgrounds)
   }
 
   pub fn draw_text(&mut self, text: &TextLayout, pos: impl Into<Point>) {
@@ -144,6 +155,9 @@ impl Render<'_> {
 
     let transform = Affine::translate(((pos.into().to_vec2() + offset) * self.scale).round());
 
+    let mut current_background = None;
+    let mut background_idx = 0;
+
     for line in text.layout.lines() {
       for item in line.items() {
         let parley::PositionedLayoutItem::GlyphRun(glyph_run) = item else { continue };
@@ -152,6 +166,29 @@ impl Render<'_> {
         let run = glyph_run.run();
         let mut x = rect.x0 as f32 + glyph_run.offset();
         let baseline = (rect.y0 as f32 + glyph_run.baseline()).round();
+
+        if let Some((next_change, next_background)) = text.backgrounds.get(background_idx) {
+          if let Some(cluster) = run.clusters().find(|c| c.text_range().contains(next_change)) {
+            let next_x = cluster.visual_offset().unwrap_or_default() as f64;
+
+            if let Some((background_x, Some(background_brush))) = current_background.as_ref() {
+              let line = cluster.line();
+              let metrics = line.metrics();
+
+              let rect = Rect::new(
+                *background_x,
+                metrics.min_coord as f64,
+                next_x,
+                metrics.max_coord as f64,
+              )
+              .expand();
+              self.scene.fill(Fill::NonZero, transform, background_brush, None, &rect);
+            }
+
+            current_background = Some((next_x, next_background.clone()));
+            background_idx += 1;
+          }
+        }
 
         if let Some(underline) = &style.underline {
           let run_metrics = glyph_run.run().metrics();
@@ -425,7 +462,24 @@ impl LayoutBuilder<'_> {
     self.builder.push(map_property(style, |b| b.encode()), range);
   }
 
-  pub fn build(self, text: &str) -> parley::Layout<peniko::Brush> { self.builder.build(text) }
+  pub fn background(&mut self, range: Range<usize>, color: Color) {
+    let start_idx =
+      self.backgrounds.binary_search_by(|(it, _)| it.cmp(&range.start)).unwrap_or_else(|e| e);
+    let end_idx =
+      self.backgrounds.binary_search_by(|(it, _)| it.cmp(&range.end)).unwrap_or_else(|e| e);
+
+    self.backgrounds.splice(
+      start_idx..end_idx,
+      [(range.start, Some(encode_color(color).into())), (range.end, None)],
+    );
+  }
+
+  pub fn build(
+    self,
+    text: &str,
+  ) -> (parley::Layout<peniko::Brush>, Vec<(usize, Option<peniko::Brush>)>) {
+    (self.builder.build(text), self.backgrounds)
+  }
 }
 
 // NB: This is in pixels, not scaled. This is intentional, as we always want the

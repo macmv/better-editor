@@ -91,6 +91,7 @@ impl Theme {
         ("comment", oklch(0.5, 0.0, 0.0).into()),
         ("error", Highlight::empty().with_underline(Underline::Color(oklch(0.8, 0.12, 30.0)))),
         ("warning", Highlight::empty().with_underline(Underline::Color(oklch(0.8, 0.12, 120.0)))),
+        ("search_result", Highlight::empty().with_background(oklch(0.5, 0.03, 288.0))),
       ]),
     }
   }
@@ -194,7 +195,7 @@ impl SyntaxTheme {
 
       match key {
         HighlightKey::SearchResult => {
-          highlight.merge_from(&Highlight::empty().with_underline(Underline::Foreground))
+          highlight.merge_from(&self.entries["search_result"]);
         }
 
         HighlightKey::TreeSitter(key) => {
