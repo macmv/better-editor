@@ -1,31 +1,48 @@
 use parking_lot::Mutex;
-use std::sync::{Arc, Weak};
+use std::{
+  any::Any,
+  sync::{Arc, Weak},
+};
 
 #[derive(Clone)]
-pub struct Task<T> {
-  inner: Arc<Mutex<TaskData<T>>>,
+pub struct Task<T: 'static> {
+  inner:    Arc<Mutex<TaskData>>,
+  _phantom: std::marker::PhantomData<T>,
 }
 
-pub struct Completer<T> {
-  inner: Weak<Mutex<TaskData<T>>>,
+pub struct Completer<T: 'static> {
+  inner:    Weak<Mutex<TaskData>>,
+  _phantom: std::marker::PhantomData<T>,
 }
 
-struct TaskData<T> {
+struct TaskData {
   complete: bool,
-  result:   Option<T>,
+  result:   Option<Box<dyn Any + Send>>,
 }
 
-impl<T> Task<T> {
+impl<T: 'static> Task<T> {
   pub fn new() -> Task<T> {
-    Task { inner: Arc::new(Mutex::new(TaskData { complete: false, result: None })) }
+    Task {
+      inner:    Arc::new(Mutex::new(TaskData { complete: false, result: None })),
+      _phantom: std::marker::PhantomData,
+    }
   }
 
-  pub fn completer(&self) -> Completer<T> { Completer { inner: Arc::downgrade(&self.inner) } }
+  pub fn completer(&self) -> Completer<T> {
+    Completer { inner: Arc::downgrade(&self.inner), _phantom: std::marker::PhantomData }
+  }
 
-  pub fn completed(&self) -> Option<T> { self.inner.lock().result.take() }
+  pub fn completed(&self) -> Option<T> {
+    self
+      .inner
+      .lock()
+      .result
+      .take()
+      .map(|b| *b.downcast().expect("task data contained the wrong type"))
+  }
 }
 
-impl<T> Completer<T> {
+impl<T: Send + 'static> Completer<T> {
   /// This is racy! Only use this to cleanup old `Completer`s that aren't used
   /// elsewhere.
   pub fn is_live(&self) -> bool { self.inner.strong_count() > 0 }
@@ -39,7 +56,7 @@ impl<T> Completer<T> {
       return Err(result);
     }
     inner.complete = true;
-    inner.result = Some(result);
+    inner.result = Some(Box::new(result));
     Ok(())
   }
 }
