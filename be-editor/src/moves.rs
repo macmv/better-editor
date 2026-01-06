@@ -25,24 +25,24 @@ impl EditorState {
       Move::NextWord => {
         if self.cursor_kind() != WordKind::Blank {
           let start = self.cursor_kind();
-          while self.cursor_kind() == start {
+          while self.cursor_kind() == start && !self.at_eof() {
             self.move_graphemes(1);
           }
         }
 
-        while self.cursor_kind() == WordKind::Blank {
+        while self.cursor_kind() == WordKind::Blank && !self.at_eof() {
           self.move_graphemes(1);
         }
       }
 
       Move::EndWord => {
         self.move_graphemes(1);
-        while self.cursor_kind() == WordKind::Blank {
+        while self.cursor_kind() == WordKind::Blank && !self.at_eof() {
           self.move_graphemes(1);
         }
 
         let start = self.cursor_kind();
-        while self.cursor_kind() == start {
+        while self.cursor_kind() == start && !self.at_eof() {
           self.move_graphemes(1);
         }
         self.move_graphemes(-1);
@@ -50,12 +50,12 @@ impl EditorState {
 
       Move::PrevWord => {
         self.move_graphemes(-1);
-        while self.cursor_kind() == WordKind::Blank {
+        while self.cursor_kind() == WordKind::Blank && !self.at_eof() {
           self.move_graphemes(-1);
         }
 
         let start = self.cursor_kind();
-        while self.cursor_kind() == start {
+        while self.cursor_kind() == start && !self.at_eof() {
           self.move_graphemes(-1);
         }
         self.move_graphemes(1);
@@ -63,6 +63,11 @@ impl EditorState {
 
       _ => {}
     }
+  }
+
+  fn at_eof(&self) -> bool {
+    self.cursor.line > self.max_line()
+      || (self.cursor.line == self.max_line() && self.cursor.column >= self.max_column())
   }
 
   fn cursor_char(&self) -> char {
