@@ -34,6 +34,8 @@ impl EditorView {
       progress_animation: Animation::linear(2.0),
     };
 
+    view.progress_animation.set_repeat(true);
+
     view.editor.config = store.config.clone();
     view.editor.lsp.store = store.lsp.clone();
     let notifier = store.notifier();
