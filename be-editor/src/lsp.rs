@@ -223,7 +223,19 @@ impl EditorState {
 
 impl LspState {
   pub fn progress(&self) -> Vec<String> {
-    if self.save_task.is_some() { vec!["saving".into()] } else { vec![] }
+    let mut tasks = vec![];
+
+    if self.save_task.is_some() {
+      tasks.push("saving".to_string());
+    }
+
+    self.client.servers(|state| {
+      for progress in state.progress.values() {
+        tasks.push(format!("{} {:3}%", progress.title, progress.progress * 100.0));
+      }
+    });
+
+    tasks
   }
 }
 

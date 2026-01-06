@@ -328,6 +328,24 @@ impl EditorView {
       );
       render.stroke(&arc, crate::oklch(1.0, 0.0, 0.0), Stroke::new(1.0));
     }
+
+    for (i, p) in progress.iter().enumerate() {
+      let layout = render.layout_text(p, render.theme().text);
+      let y = progress.len() - i + 1;
+      render.fill(
+        &Rect::new(
+          render.size().width - layout.size().width,
+          render.size().height - line_height * y as f64,
+          render.size().width,
+          render.size().height - line_height * (y - 1) as f64,
+        ),
+        render.theme().background_raised,
+      );
+      render.draw_text(
+        &layout,
+        (render.size().width - layout.size().width, render.size().height - line_height * y as f64),
+      );
+    }
   }
 
   fn layout_line(
