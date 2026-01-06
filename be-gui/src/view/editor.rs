@@ -165,8 +165,10 @@ impl EditorView {
             let shape = Triangle::new((0.0, y - 4.0), (0.0, y + 4.0), (4.0, y));
             render.fill(&shape, render.theme().diff_remove);
           } else {
-            let min_y = start_y + (change.after().start - min_line.as_usize()) as f64 * line_height;
-            let max_y = start_y + (change.after().end - min_line.as_usize()) as f64 * line_height;
+            let min_y =
+              start_y + (change.after().start as f64 - min_line.as_usize() as f64) * line_height;
+            let max_y =
+              start_y + (change.after().end as f64 - min_line.as_usize() as f64) * line_height;
 
             let shape = Rect::new(0.0, min_y, 4.0, max_y);
             render.fill(
