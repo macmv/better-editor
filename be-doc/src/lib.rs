@@ -8,6 +8,7 @@ use unicode_width::UnicodeWidthStr;
 
 mod edit;
 mod fs;
+mod search;
 
 pub use crop;
 pub use edit::{Change, Edit};
