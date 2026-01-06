@@ -4,6 +4,7 @@ pub struct Animation {
   duration: f64,
   ease:     Ease,
   state:    RefCell<State>,
+  repeat:   bool,
 }
 
 pub enum Ease {
@@ -47,7 +48,7 @@ enum Direction {
 macro_rules! ease {
   ($ease:ident, $func:ident) => {
     pub fn $func(duration: f64) -> Animation {
-      Animation { duration, state: Default::default(), ease: Ease::$ease }
+      Animation { duration, state: Default::default(), ease: Ease::$ease, repeat: false }
     }
   };
 }
@@ -59,6 +60,8 @@ impl Animation {
   ease!(CubicInOut, ease_in_out);
 
   pub fn is_running(&self) -> bool { self.state.borrow().running.is_some() }
+
+  pub fn set_repeat(&mut self, repeat: bool) { self.repeat = repeat; }
 
   pub fn interpolate(&self, start: f64, end: f64) -> f64 {
     let t = self.state.borrow().time / self.duration;
@@ -107,16 +110,24 @@ impl Animation {
         state.time += dt.as_secs_f64();
 
         if state.time >= self.duration {
-          state.time = self.duration;
-          state.running = None;
+          if self.repeat {
+            state.time -= self.duration;
+          } else {
+            state.time = self.duration;
+            state.running = None;
+          }
         }
       }
       Direction::Reverse => {
         state.time -= dt.as_secs_f64();
 
         if state.time <= 0.0 {
-          state.time = 0.0;
-          state.running = None;
+          if self.repeat {
+            state.time += self.duration;
+          } else {
+            state.time = 0.0;
+            state.running = None;
+          }
         }
       }
     }
