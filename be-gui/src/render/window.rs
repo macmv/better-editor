@@ -182,6 +182,10 @@ impl winit::application::ApplicationHandler<Event> for App {
           init.app.render(&texture, &init.device, &init.queue, init.scale);
 
           texture.present();
+
+          if init.app.state.animated() {
+            init.window.request_redraw();
+          }
         }
       }
 

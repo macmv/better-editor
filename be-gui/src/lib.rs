@@ -80,6 +80,8 @@ impl State {
     );
   }
 
+  fn animated(&self) -> bool { self.tabs[self.active].content.animated(&self.views) }
+
   fn draw(&mut self, render: &mut Render) {
     render.split(
       self,

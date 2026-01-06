@@ -46,6 +46,8 @@ impl EditorView {
 
   pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
 
+  pub fn animated(&self) -> bool { self.progress_animation.is_running() }
+
   pub fn draw(&mut self, render: &mut Render) {
     self.editor.update();
 

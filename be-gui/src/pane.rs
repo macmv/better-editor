@@ -22,6 +22,13 @@ pub struct ViewsIter<'a> {
 }
 
 impl Pane {
+  pub fn animated(&self, views: &HashMap<ViewId, View>) -> bool {
+    match self {
+      Pane::View(id) => views[id].animated(),
+      Pane::Split(split) => split.items.iter().any(|item| item.animated(views)),
+    }
+  }
+
   pub fn draw(&self, views: &mut HashMap<ViewId, View>, render: &mut Render) {
     match self {
       Pane::View(id) => views.get_mut(id).unwrap().draw(render),

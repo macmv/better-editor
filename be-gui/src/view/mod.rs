@@ -43,6 +43,14 @@ impl View {
 
   pub fn visible(&self) -> bool { !self.bounds.is_zero_area() }
 
+  pub fn animated(&self) -> bool {
+    match &self.content {
+      ViewContent::Editor(editor) => editor.animated(),
+      ViewContent::FileTree(_) => false,
+      ViewContent::Shell(_) => false,
+    }
+  }
+
   pub fn draw(&mut self, render: &mut Render) {
     if !self.visible() {
       return;
