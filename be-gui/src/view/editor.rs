@@ -328,10 +328,17 @@ impl EditorView {
     let highlights = self.editor.highlights(index..max_index);
     let mut prev = index;
     for highlight in highlights {
-      let pos = if highlight.pos > max_index { max_index } else { highlight.pos };
+      let mut pos = if highlight.pos > max_index { max_index } else { highlight.pos };
 
-      if pos < index {
+      if pos < index || pos <= prev {
         continue;
+      }
+
+      // Round up to char boundaries. Avoids panics when laying out text. It's still
+      // wrong, but highlights come from places like LSP, where we can't trust
+      // their positions.
+      while !line_string.is_char_boundary(pos - index) && pos < max_index {
+        pos += 1;
       }
 
       if let Some(highlight) = theme.syntax.lookup(&highlight.highlights) {
@@ -355,7 +362,7 @@ impl EditorView {
         break;
       }
 
-      prev = highlight.pos;
+      prev = pos;
     }
 
     let layout = layout.build(&line_string);
