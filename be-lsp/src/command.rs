@@ -323,6 +323,10 @@ impl LspWorker {
 
     req.on::<types::request::WorkDoneProgressCreate>(Self::on_work_done_progress_create);
 
+    if req.result.is_none() {
+      info!("unhandled request: {}", method);
+    }
+
     req.result
   }
 
@@ -340,62 +344,91 @@ impl LspWorker {
   }
 
   pub fn handle_notification(&self, method: &str, params: Option<Box<RawValue>>) {
-    if method == "textDocument/publishDiagnostics" {
-      let params =
-        serde_json::from_str::<lsp_types::PublishDiagnosticsParams>(params.unwrap().get()).unwrap();
+    struct Notifier<'a> {
+      worker:  &'a LspWorker,
+      method:  &'a str,
+      params:  Option<Box<RawValue>>,
+      handled: bool,
+    }
 
-      let path = PathBuf::from(params.uri.path().as_str());
+    impl Notifier<'_> {
+      fn on<R: lsp_types::notification::Notification>(
+        &mut self,
+        f: fn(&LspWorker, R::Params),
+      ) -> &mut Self {
+        if self.method == R::METHOD {
+          let params =
+            serde_json::from_str::<R::Params>(self.params.as_ref().unwrap().get()).unwrap();
 
-      let (encoding, doc) = {
-        let state = self.state.lock();
-        (state.position_encoding(), state.opened_document(&path).unwrap().clone())
-      };
+          f(self.worker, params);
 
-      let diagnostics = params
-        .diagnostics
-        .into_iter()
-        .map(|d| Diagnostic {
-          range:    decode_range(encoding, &doc, d.range),
-          severity: d.severity,
-          message:  d.message,
-        })
-        .collect();
-
-      self.state.lock().diagnostics.insert(path, diagnostics);
-    } else if method == "$/progress" {
-      let params =
-        serde_json::from_str::<lsp_types::ProgressParams>(params.unwrap().get()).unwrap();
-
-      let lsp_types::ProgressParamsValue::WorkDone(work) = params.value;
-
-      let token = match params.token {
-        lsp_types::ProgressToken::Number(n) => n.to_string(),
-        lsp_types::ProgressToken::String(s) => s,
-      };
-
-      match work {
-        lsp_types::WorkDoneProgress::Begin(begin) => {
-          let mut state = self.state.lock();
-          if !state.progress.contains_key(&token) {
-            warn!("work done for unknown token: {}", token);
-          }
-
-          state
-            .progress
-            .insert(token, Progress { title: begin.title, message: begin.message, progress: 0.0 });
+          self.handled = true;
         }
-        lsp_types::WorkDoneProgress::Report(report) => {
-          if let Some(progress) = self.state.lock().progress.get_mut(&token) {
-            progress.message = report.message;
-            progress.progress = report.percentage.unwrap_or(0) as f64 / 100.0;
-          }
+
+        self
+      }
+    }
+
+    let mut req = Notifier { worker: self, method, params, handled: false };
+
+    req
+      .on::<types::notification::PublishDiagnostics>(Self::on_publish_diagnostics)
+      .on::<types::notification::Progress>(Self::on_progress);
+
+    if !req.handled {
+      info!("unhandled notification: {}", method);
+    }
+  }
+
+  fn on_publish_diagnostics(&self, params: lsp_types::PublishDiagnosticsParams) {
+    let path = PathBuf::from(params.uri.path().as_str());
+
+    let (encoding, doc) = {
+      let state = self.state.lock();
+      (state.position_encoding(), state.opened_document(&path).unwrap().clone())
+    };
+
+    let diagnostics = params
+      .diagnostics
+      .into_iter()
+      .map(|d| Diagnostic {
+        range:    decode_range(encoding, &doc, d.range),
+        severity: d.severity,
+        message:  d.message,
+      })
+      .collect();
+
+    self.state.lock().diagnostics.insert(path, diagnostics);
+  }
+
+  fn on_progress(&self, params: lsp_types::ProgressParams) {
+    let lsp_types::ProgressParamsValue::WorkDone(work) = params.value;
+
+    let token = match params.token {
+      lsp_types::ProgressToken::Number(n) => n.to_string(),
+      lsp_types::ProgressToken::String(s) => s,
+    };
+
+    match work {
+      lsp_types::WorkDoneProgress::Begin(begin) => {
+        let mut state = self.state.lock();
+        if !state.progress.contains_key(&token) {
+          warn!("work done for unknown token: {}", token);
         }
-        lsp_types::WorkDoneProgress::End(_) => {
-          self.state.lock().progress.remove(&token);
+
+        state
+          .progress
+          .insert(token, Progress { title: begin.title, message: begin.message, progress: 0.0 });
+      }
+      lsp_types::WorkDoneProgress::Report(report) => {
+        if let Some(progress) = self.state.lock().progress.get_mut(&token) {
+          progress.message = report.message;
+          progress.progress = report.percentage.unwrap_or(0) as f64 / 100.0;
         }
       }
-    } else {
-      info!("unhandled notification: {}", method);
+      lsp_types::WorkDoneProgress::End(_) => {
+        self.state.lock().progress.remove(&token);
+      }
     }
   }
 }
