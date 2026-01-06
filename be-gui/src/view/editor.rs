@@ -267,18 +267,18 @@ impl EditorView {
       }
     }
 
-    if let Some(command) = self.editor.command() {
-      render.fill(
-        &Rect::new(
-          0.0,
-          render.size().height - line_height,
-          render.size().width,
-          render.size().height,
-        ),
-        render.theme().background_raised,
-      );
+    render.fill(
+      &Rect::new(
+        0.0,
+        render.size().height - line_height,
+        render.size().width,
+        render.size().height,
+      ),
+      render.theme().background_raised,
+    );
 
-      let text_pos = Point::new(0.0, render.size().height - line_height);
+    if let Some(command) = self.editor.command() {
+      let text_pos = Point::new(20.0, render.size().height - line_height);
 
       let text = format!(
         "{}{}",
@@ -295,18 +295,8 @@ impl EditorView {
       let cursor = layout.cursor(command.cursor as usize + 1, CursorMode::Line);
       render.fill(&(cursor + text_pos.to_vec2()), render.theme().text);
     } else if let Some(status) = self.editor.status() {
-      render.fill(
-        &Rect::new(
-          0.0,
-          render.size().height - line_height,
-          render.size().width,
-          render.size().height,
-        ),
-        render.theme().background_raised,
-      );
-
       let layout = render.layout_text(&status.message, render.theme().text);
-      render.draw_text(&layout, (0.0, render.size().height - line_height));
+      render.draw_text(&layout, (20.0, render.size().height - line_height));
     }
 
     if let Some(ft) = self.editor.file_type() {
