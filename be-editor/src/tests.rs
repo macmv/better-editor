@@ -12,8 +12,15 @@ pub fn editor(src: &str) -> TestEditor { TestEditor(EditorState::from(src)) }
 impl TestEditor {
   fn state(&self) -> String {
     let mut s = self.0.doc.rope.to_string();
-    s.insert(self.0.doc.cursor_offset(self.0.cursor) + 1, '⟧');
-    s.insert(self.0.doc.cursor_offset(self.0.cursor), '⟦');
+    let cursor_offset = self.0.doc.cursor_offset(self.0.cursor);
+
+    if s[cursor_offset..].chars().next() == Some('\n') {
+      s.insert_str(cursor_offset, "⟦ ⟧");
+    } else {
+      s.insert(cursor_offset + 1, '⟧');
+      s.insert(cursor_offset, '⟦');
+    }
+
     s
   }
 
@@ -47,34 +54,40 @@ impl PartialEq<&str> for TestEditor {
 
 #[test]
 fn move_col_works() {
-  let mut state = EditorState::from("ab");
+  let mut editor = editor("ab");
 
-  state.move_col_rel(1);
-  assert_eq!(state.cursor.line, 0);
-  assert_eq!(state.cursor.column, 1);
+  editor.move_col_rel(1);
+  editor.check(expect![@"a⟦b⟧"]);
 
-  state.move_col_rel(1);
-  assert_eq!(state.cursor.line, 0);
-  assert_eq!(state.cursor.column, 1);
+  editor.move_col_rel(1);
+  editor.check(expect![@"a⟦b⟧"]);
 }
 
 #[test]
 fn move_graphemes_works() {
-  let mut state = EditorState::from("abc\ndef");
+  let mut editor = editor("abc\ndef");
 
-  state.move_graphemes(1);
-  assert_eq!(state.cursor.line, 0);
-  assert_eq!(state.cursor.column, 1);
+  editor.move_graphemes(1);
+  editor.check(expect![@r#"
+    a⟦b⟧c
+    def"#
+  ]);
 
-  state.move_graphemes(1);
-  assert_eq!(state.cursor.line, 0);
-  assert_eq!(state.cursor.column, 2);
+  editor.move_graphemes(1);
+  editor.check(expect![@r#"
+    ab⟦c⟧
+    def"#
+  ]);
 
-  state.move_graphemes(1);
-  assert_eq!(state.cursor.line, 0);
-  assert_eq!(state.cursor.column, 3);
+  editor.move_graphemes(1);
+  editor.check(expect![@r#"
+    abc⟦ ⟧
+    def"#
+  ]);
 
-  state.move_graphemes(1);
-  assert_eq!(state.cursor.line, 1);
-  assert_eq!(state.cursor.column, 0);
+  editor.move_graphemes(1);
+  editor.check(expect![@r#"
+    abc
+    ⟦d⟧ef"#
+  ]);
 }
