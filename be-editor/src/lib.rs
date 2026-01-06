@@ -87,6 +87,9 @@ impl EditorState {
       self.repo = Some(Repo::open(std::path::Path::new(".")));
     }
 
+    self.lsp_update_diagnostics();
+    self.update_save_task();
+
     if let Some(repo) = &self.repo {
       if let Some(file) = &self.file.as_ref() {
         if let Some(diff) = repo.changes_in(file.path()) {
@@ -94,9 +97,6 @@ impl EditorState {
         }
       }
     }
-
-    self.lsp_update_diagnostics();
-    self.update_save_task();
   }
 
   fn on_open_file(&mut self) {
