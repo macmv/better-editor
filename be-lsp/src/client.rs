@@ -14,7 +14,7 @@ use std::{
   sync::Arc,
 };
 
-use crate::{Diagnostic, command::PositionEncoding};
+use crate::Diagnostic;
 
 pub struct LspClient {
   _child:        Child,
@@ -130,6 +130,8 @@ impl LspClient {
       }
     };
 
+    client.state.lock().caps = result.capabilities.clone();
+
     client.notify::<lsp_types::notification::Initialized>(lsp_types::InitializedParams {});
 
     (client, result.capabilities)
@@ -191,15 +193,6 @@ impl LspClient {
 
     let thread = unsafe { ManuallyDrop::take(&mut self.worker_thread) };
     thread.join().unwrap();
-  }
-}
-
-impl LspState {
-  pub fn position_encoding(&self) -> PositionEncoding {
-    match self.caps.position_encoding.as_ref().map(|p| p.as_str()) {
-      Some("utf-8") => PositionEncoding::Utf8,
-      _ => PositionEncoding::Utf16,
-    }
   }
 }
 

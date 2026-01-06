@@ -5,12 +5,15 @@ use std::{
   str::FromStr,
 };
 
-use be_doc::{Cursor, Document};
+use be_doc::{Change, Cursor, Document};
 use be_task::Task;
 use serde_json::value::RawValue;
 use types::Uri;
 
-use crate::{Diagnostic, LspClient, TextEdit, client::LspWorker};
+use crate::{
+  Diagnostic, LspClient, TextEdit,
+  client::{LspState, LspWorker},
+};
 
 pub trait LspCommand {
   type Result;
@@ -27,7 +30,7 @@ fn doc_id(path: &Path) -> types::TextDocumentIdentifier {
   types::TextDocumentIdentifier { uri: doc_uri(path) }
 }
 
-impl LspClient {
+impl LspState {
   pub fn encode_range(&self, doc: &Document, range: Range<usize>) -> types::Range {
     types::Range {
       start: self.encode_position(doc, range.start),
@@ -70,7 +73,21 @@ impl LspClient {
     }
   }
 
-  pub fn position_encoding(&self) -> PositionEncoding { self.state.lock().position_encoding() }
+  pub fn position_encoding(&self) -> PositionEncoding {
+    match self.caps.position_encoding.as_ref().map(|p| p.as_str()) {
+      Some("utf-8") => PositionEncoding::Utf8,
+      _ => PositionEncoding::Utf16,
+    }
+  }
+
+  pub fn opened_document(&self, path: &PathBuf) -> Option<&Document> {
+    if let Some(f) = self.opened_files.get(path) {
+      Some(f)
+    } else {
+      error!("file not opened: {}", path.display());
+      None
+    }
+  }
 }
 
 pub fn decode_range(
@@ -126,6 +143,7 @@ impl LspCommand for DidOpenTextDocument {
 
   fn send(&self, client: &mut LspClient) -> Option<Task<Infallible>> {
     if client.state.lock().opened_files.insert(self.path.clone(), self.doc.clone()).is_some() {
+      error!("file already opened: {}", self.path.display());
       return None;
     }
 
@@ -143,10 +161,10 @@ impl LspCommand for DidOpenTextDocument {
 }
 
 pub struct DidChangeTextDocument {
-  pub path:    PathBuf,
-  pub version: i32,
-  pub doc:     Document,
-  pub changes: Vec<(Range<usize>, String)>,
+  pub path:              PathBuf,
+  pub version:           i32,
+  pub doc_before_change: Document,
+  pub changes:           Vec<Change>,
 }
 
 impl LspCommand for DidChangeTextDocument {
@@ -157,26 +175,35 @@ impl LspCommand for DidChangeTextDocument {
   }
 
   fn send(&self, client: &mut LspClient) -> Option<Task<Self::Result>> {
-    if !client.state.lock().opened_files.contains_key(&self.path) {
-      error!("cannot change a file that is not opened: {}", self.path.display());
-      return None;
-    }
+    let content_changes = {
+      let mut state = client.state.lock();
+      let Some(doc) = state.opened_files.get_mut(&self.path) else {
+        error!("cannot change a file that is not opened: {}", self.path.display());
+        return None;
+      };
+      *doc = self.doc_before_change.clone();
+      for change in &self.changes {
+        doc.apply(change);
+      }
+
+      self
+        .changes
+        .iter()
+        .map(|change| types::TextDocumentContentChangeEvent {
+          range:        Some(state.encode_range(&self.doc_before_change, change.range.clone())),
+          range_length: None,
+          text:         change.text.clone(),
+        })
+        .collect()
+    };
 
     client.notify::<types::notification::DidChangeTextDocument>(
       types::DidChangeTextDocumentParams {
-        text_document:   types::VersionedTextDocumentIdentifier {
+        text_document: types::VersionedTextDocumentIdentifier {
           uri:     doc_uri(&self.path),
           version: self.version,
         },
-        content_changes: self
-          .changes
-          .iter()
-          .map(|change| types::TextDocumentContentChangeEvent {
-            range:        Some(client.encode_range(&self.doc, change.0.clone())),
-            range_length: None,
-            text:         change.1.clone(),
-          })
-          .collect(),
+        content_changes,
       },
     );
 
@@ -186,7 +213,6 @@ impl LspCommand for DidChangeTextDocument {
 
 pub struct Completion {
   pub path:   PathBuf,
-  pub doc:    Document,
   pub cursor: Cursor,
 }
 
@@ -198,10 +224,16 @@ impl LspCommand for Completion {
   }
 
   fn send(&self, client: &mut LspClient) -> Option<Task<Option<types::CompletionResponse>>> {
+    let position = {
+      let state = client.state.lock();
+      let doc = state.opened_document(&self.path)?;
+      state.encode_cursor(doc, self.cursor)
+    };
+
     Some(client.request::<types::request::Completion>(types::CompletionParams {
       text_document_position:    types::TextDocumentPositionParams {
         text_document: doc_id(&self.path),
-        position:      client.encode_cursor(&self.doc, self.cursor),
+        position,
       },
       context:                   None,
       work_done_progress_params: types::WorkDoneProgressParams::default(),
@@ -212,7 +244,6 @@ impl LspCommand for Completion {
 
 pub struct DocumentFormat {
   pub path: PathBuf,
-  pub doc:  Document,
 }
 
 impl LspCommand for DocumentFormat {
@@ -223,8 +254,10 @@ impl LspCommand for DocumentFormat {
   }
 
   fn send(&self, client: &mut LspClient) -> Option<Task<Vec<TextEdit>>> {
-    let encoding = client.position_encoding();
-    let doc = self.doc.clone();
+    let (encoding, doc) = {
+      let state = client.state.lock();
+      (state.position_encoding(), state.opened_document(&self.path)?.clone())
+    };
 
     Some(
       client
@@ -260,13 +293,18 @@ impl LspWorker {
       let params =
         serde_json::from_str::<lsp_types::PublishDiagnosticsParams>(params.unwrap().get()).unwrap();
 
-      let encoding = self.state.lock().position_encoding();
       let path = PathBuf::from(params.uri.path().as_str());
+
+      let (encoding, doc) = {
+        let state = self.state.lock();
+        (state.position_encoding(), state.opened_document(&path).unwrap().clone())
+      };
+
       let diagnostics = params
         .diagnostics
         .into_iter()
         .map(|d| Diagnostic {
-          range:    decode_range(encoding, &self.state.lock().opened_files[&path], d.range),
+          range:    decode_range(encoding, &doc, d.range),
           severity: d.severity,
           message:  d.message,
         })

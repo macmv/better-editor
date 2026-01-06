@@ -98,20 +98,20 @@ impl EditorState {
     self.lsp.document_version += 1;
 
     self.lsp.client.send(&command::DidChangeTextDocument {
-      path:    file.path().to_path_buf(),
-      version: self.lsp.document_version,
-      doc:     self.doc.clone(),
-      changes: vec![(change.range.clone(), change.text.clone())],
+      path:              file.path().to_path_buf(),
+      version:           self.lsp.document_version,
+      doc_before_change: self.doc.clone(),
+      changes:           vec![change.clone()],
     });
   }
 
   pub(crate) fn lsp_on_save(&mut self) {
     let Some(file) = &self.file else { return };
 
-    let task = self.lsp.client.send_first_capable(&command::DocumentFormat {
-      path: file.path().to_path_buf(),
-      doc:  self.doc.clone(),
-    });
+    let task = self
+      .lsp
+      .client
+      .send_first_capable(&command::DocumentFormat { path: file.path().to_path_buf() });
     self.lsp.save_task = task.map(|t| SaveTask { task: t, started: std::time::Instant::now() });
   }
 
@@ -156,7 +156,6 @@ impl EditorState {
   pub(crate) fn lsp_request_completions(&mut self) {
     let tasks = self.lsp.client.send(&command::Completion {
       path:   self.file.as_ref().unwrap().path().to_path_buf(),
-      doc:    self.doc.clone(),
       cursor: self.cursor,
     });
     self.lsp.completions.clear_on_message = true;
