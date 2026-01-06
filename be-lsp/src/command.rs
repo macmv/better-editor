@@ -435,6 +435,7 @@ fn on_progress(state: &mut LspState, params: lsp_types::ProgressParams) {
     lsp_types::WorkDoneProgress::End(_) => {
       if let Some(progress) = state.progress.get_mut(&token) {
         progress.completed = Some(std::time::Instant::now());
+        progress.progress = 1.0;
       }
     }
   }
