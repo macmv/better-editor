@@ -11,6 +11,7 @@ members = [
   "be-editor",
   "be-lsp",
   "be-terminal",
+  "be-animation",
   "be-gui",
 ]
 
