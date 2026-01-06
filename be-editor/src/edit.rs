@@ -1,7 +1,7 @@
 use be_doc::Change;
 use be_input::{Mode, VerticalDirection};
 
-use crate::EditorState;
+use crate::{CommandMode, EditorState};
 
 impl EditorState {
   pub(crate) fn perform_edit(&mut self, e: be_input::Edit) {
@@ -15,6 +15,10 @@ impl EditorState {
       }
 
       command.perform_edit(e);
+      if command.mode == CommandMode::Search {
+        self.search_text = Some(command.text.clone());
+      }
+
       return;
     }
 

@@ -36,9 +36,10 @@ pub struct EditorState {
   cursor: Cursor,
   mode:   Mode,
 
-  file:    Option<OpenedFile>,
-  status:  Option<Status>,
-  command: Option<CommandState>,
+  file:        Option<OpenedFile>,
+  status:      Option<Status>,
+  command:     Option<CommandState>,
+  search_text: Option<String>,
 
   filetype:   Option<filetype::FileType>,
   highligher: Option<treesitter::Highlighter>,
@@ -65,7 +66,7 @@ pub struct CommandState {
   pub cursor: usize, // in bytes
 }
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Copy, Clone, PartialEq, Eq)]
 pub enum CommandMode {
   #[default]
   Command,
@@ -360,37 +361,47 @@ impl EditorState {
   fn run_command(&mut self) {
     let Some(command) = self.command.take() else { return };
 
-    let (cmd, args) = command.text.split_once(' ').unwrap_or((&command.text, ""));
+    match command.mode {
+      CommandMode::Search => {
+        self.search_text = Some(command.text);
+        self.status = None;
+      }
+      CommandMode::Command => {
+        let (cmd, args) = command.text.split_once(' ').unwrap_or((&command.text, ""));
 
-    let res = match cmd {
-      "w" => {
-        self.lsp_on_save();
+        let res = match cmd {
+          "w" => {
+            self.lsp_on_save();
 
-        if self.lsp.save_task.is_none() {
-          self.save().map(|()| format!("{}: written", self.file.as_ref().unwrap().path().display()))
-        } else {
-          Ok("saving...".to_string())
+            if self.lsp.save_task.is_none() {
+              self
+                .save()
+                .map(|()| format!("{}: written", self.file.as_ref().unwrap().path().display()))
+            } else {
+              Ok("saving...".to_string())
+            }
+          }
+          "q" => {
+            if let Some(cmd) = &self.exit_cmd {
+              cmd();
+            }
+            Ok("exiting".to_string())
+          }
+          "e" => self
+            .open(Path::new(args))
+            .map(|()| format!("{}: opened", self.file.as_ref().unwrap().path().display())),
+
+          _ => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("unknown command: {}", cmd),
+          )),
+        };
+
+        match res {
+          Ok(m) => self.status = Some(Status::for_success(m)),
+          Err(e) => self.status = Some(Status::for_error(e)),
         }
       }
-      "q" => {
-        if let Some(cmd) = &self.exit_cmd {
-          cmd();
-        }
-        Ok("exiting".to_string())
-      }
-      "e" => self
-        .open(Path::new(args))
-        .map(|()| format!("{}: opened", self.file.as_ref().unwrap().path().display())),
-
-      _ => Err(std::io::Error::new(
-        std::io::ErrorKind::InvalidInput,
-        format!("unknown command: {}", cmd),
-      )),
-    };
-
-    match res {
-      Ok(m) => self.status = Some(Status::for_success(m)),
-      Err(e) => self.status = Some(Status::for_error(e)),
     }
   }
 
