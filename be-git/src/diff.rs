@@ -380,8 +380,6 @@ fn similarity_diff<'a>(
 fn line_similarity<'a>(a: RopeSlice<'a>, b: RopeSlice<'a>) -> f32 {
   if a == b {
     return 1.0;
-  } else if a.is_empty() && b.is_empty() {
-    return 1.0;
   }
 
   let dist = levenshtein_distance(a, b) as f32;
