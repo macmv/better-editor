@@ -45,7 +45,9 @@ pub enum Edit {
   Insert(char),
   Replace(char),
   Delete,
+  Cut,
   DeleteLine,
+  CutLine,
   DeleteRestOfLine,
   Backspace,
   Undo,
@@ -136,6 +138,10 @@ impl Action {
         (Mode::Normal, Key::Char('x')) => e!(Delete),
         (Mode::Normal, Key::Char('d')) => match iter.next().ok_or(ActionError::Incomplete)?.key {
           Key::Char('d') => e!(DeleteLine),
+          _ => Err(ActionError::Unrecognized),
+        },
+        (Mode::Normal, Key::Char('c')) => match iter.next().ok_or(ActionError::Incomplete)?.key {
+          Key::Char('c') => e!(CutLine),
           _ => Err(ActionError::Unrecognized),
         },
         (Mode::Normal, Key::Char('D')) => e!(DeleteRestOfLine),
