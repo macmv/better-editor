@@ -39,5 +39,8 @@ fn main() {
     .apply()
     .unwrap();
 
+  puffin::set_scopes_on(true);
+  let _s = puffin_http::Server::new("127.0.0.1:8585").unwrap();
+
   be_gui::run();
 }

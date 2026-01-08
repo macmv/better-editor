@@ -137,6 +137,8 @@ impl Render<'_> {
   }
 
   pub fn layout_text(&mut self, text: &str, color: Color) -> TextLayout {
+    puffin::profile_function!();
+
     let builder = self.store.text.layout_builder(text, color, self.scale);
 
     let (built, backgrounds) = builder.build(text);
@@ -144,6 +146,8 @@ impl Render<'_> {
   }
 
   pub fn draw_text(&mut self, text: &TextLayout, pos: impl Into<Point>) {
+    puffin::profile_function!();
+
     let rect = {
       let mut rect =
         Rect::new(0.0, 0.0, f64::from(text.layout.full_width()), f64::from(text.layout.height()));

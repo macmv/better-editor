@@ -46,6 +46,8 @@ impl Shell {
   }
 
   pub fn draw(&mut self, render: &mut Render) {
+    puffin::profile_function!();
+
     let line_height = render.store.text.font_metrics().line_height;
     let character_width = render.store.text.font_metrics().character_width;
     let height = (render.size().height / line_height).floor() as usize;

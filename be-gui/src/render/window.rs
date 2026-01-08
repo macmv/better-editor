@@ -179,6 +179,7 @@ impl winit::application::ApplicationHandler<Event> for App {
         if let Some(init) = &mut self.init {
           let texture = init.surface.get_current_texture().unwrap();
 
+          puffin::GlobalProfiler::lock().new_frame();
           init.app.render(&texture, &init.device, &init.queue, init.scale);
 
           texture.present();

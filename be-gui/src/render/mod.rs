@@ -175,6 +175,8 @@ impl App {
     queue: &wgpu::Queue,
     scale: f64,
   ) {
+    puffin::profile_scope!("render");
+
     self.store.text.set_scale(scale);
 
     let mut layout = Layout {
@@ -187,7 +189,10 @@ impl App {
       stack: vec![],
     };
 
-    self.state.layout(&mut layout);
+    {
+      puffin::profile_scope!("layout");
+      self.state.layout(&mut layout);
+    }
 
     let now = std::time::Instant::now();
     let mut render = Render {
@@ -202,7 +207,10 @@ impl App {
       stack: vec![],
     };
 
-    self.state.draw(&mut render);
+    {
+      puffin::profile_scope!("draw");
+      self.state.draw(&mut render);
+    }
 
     let scene = render.scene;
 

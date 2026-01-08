@@ -51,6 +51,8 @@ impl EditorView {
   pub fn animated(&self) -> bool { self.progress_animation.is_running() }
 
   pub fn draw(&mut self, render: &mut Render) {
+    puffin::profile_function!();
+
     self.editor.update();
 
     if self.cached_scale != render.scale() {

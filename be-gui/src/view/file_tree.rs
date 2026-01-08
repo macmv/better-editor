@@ -193,6 +193,8 @@ impl Item {
 
 impl FileTree {
   pub fn draw(&self, render: &mut Render) {
+    puffin::profile_function!();
+
     render.fill(
       &Rect::new(0.0, 0.0, render.size().width, render.size().height),
       render.theme().background_lower,
