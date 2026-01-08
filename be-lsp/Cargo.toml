@@ -11,7 +11,7 @@ crossbeam-channel = "0.5.15"
 libc = "0.2.178"
 log = "0.4.29"
 
-lsp-types = "0.97.0"
+lsp = { version = "0.1.0", features = ["raw_value"] }
 parking_lot = "0.12.5"
 polling = "3.11.0"
 serde = { version = "1.0.228", features = ["derive"] }

@@ -2,13 +2,11 @@ use std::{
   convert::Infallible,
   ops::Range,
   path::{Path, PathBuf},
-  str::FromStr,
 };
 
 use be_doc::{Change, Cursor, Document};
 use be_task::Task;
 use serde_json::value::RawValue;
-use types::Uri;
 
 use crate::{
   Diagnostic, LspClient, Progress, TextEdit,
@@ -22,9 +20,7 @@ pub trait LspCommand {
   fn send(&self, client: &mut LspClient) -> Option<Task<Self::Result>>;
 }
 
-fn doc_uri(path: &Path) -> Uri {
-  Uri::from_str(&format!("file://{}", path.to_string_lossy())).unwrap()
-}
+fn doc_uri(path: &Path) -> types::Uri { types::Uri::from_file_path(path) }
 
 fn doc_id(path: &Path) -> types::TextDocumentIdentifier {
   types::TextDocumentIdentifier { uri: doc_uri(path) }
@@ -74,8 +70,8 @@ impl LspState {
   }
 
   pub fn position_encoding(&self) -> PositionEncoding {
-    match self.caps.position_encoding.as_ref().map(|p| p.as_str()) {
-      Some("utf-8") => PositionEncoding::Utf8,
+    match self.caps.position_encoding {
+      Some(lsp::PositionEncodingKind::Utf8) => PositionEncoding::Utf8,
       _ => PositionEncoding::Utf16,
     }
   }
@@ -147,7 +143,7 @@ impl LspCommand for DidOpenTextDocument {
       return None;
     }
 
-    client.notify::<types::notification::DidOpenTextDocument>(types::DidOpenTextDocumentParams {
+    client.notify::<types::notification::TextDocumentDidOpen>(types::DidOpenTextDocumentParams {
       text_document: types::TextDocumentItem {
         version:     0,
         uri:         doc_uri(&self.path),
@@ -189,19 +185,21 @@ impl LspCommand for DidChangeTextDocument {
       self
         .changes
         .iter()
-        .map(|change| types::TextDocumentContentChangeEvent {
-          range:        Some(state.encode_range(&self.doc_before_change, change.range.clone())),
-          range_length: None,
-          text:         change.text.clone(),
+        .map(|change| {
+          types::TextDocumentContentChangeEvent::RangeRangeRangeLengthUintegerTextString {
+            range:        state.encode_range(&self.doc_before_change, change.range.clone()),
+            range_length: None,
+            text:         change.text.clone(),
+          }
         })
         .collect()
     };
 
-    client.notify::<types::notification::DidChangeTextDocument>(
+    client.notify::<types::notification::TextDocumentDidChange>(
       types::DidChangeTextDocumentParams {
         text_document: types::VersionedTextDocumentIdentifier {
-          uri:     doc_uri(&self.path),
-          version: self.version,
+          text_document_identifier: doc_id(&self.path),
+          version:                  self.version,
         },
         content_changes,
       },
@@ -217,27 +215,30 @@ pub struct Completion {
 }
 
 impl LspCommand for Completion {
-  type Result = Option<types::CompletionResponse>;
+  type Result = Option<types::Or2<Vec<types::CompletionItem>, types::CompletionList>>;
 
   fn is_capable(&self, caps: &types::ServerCapabilities) -> bool {
     caps.completion_provider.is_some()
   }
 
-  fn send(&self, client: &mut LspClient) -> Option<Task<Option<types::CompletionResponse>>> {
+  fn send(
+    &self,
+    client: &mut LspClient,
+  ) -> Option<Task<Option<types::Or2<Vec<types::CompletionItem>, types::CompletionList>>>> {
     let position = {
       let state = client.state.lock();
       let doc = state.opened_document(&self.path)?;
       state.encode_cursor(doc, self.cursor)
     };
 
-    Some(client.request::<types::request::Completion>(types::CompletionParams {
-      text_document_position:    types::TextDocumentPositionParams {
+    Some(client.request::<types::request::TextDocumentCompletion>(types::CompletionParams {
+      text_document_position_params: types::TextDocumentPositionParams {
         text_document: doc_id(&self.path),
         position,
       },
-      context:                   None,
-      work_done_progress_params: types::WorkDoneProgressParams::default(),
-      partial_result_params:     types::PartialResultParams::default(),
+      context:                       None,
+      work_done_progress_params:     types::WorkDoneProgressParams::default(),
+      partial_result_params:         types::PartialResultParams::default(),
     }))
   }
 }
@@ -261,7 +262,7 @@ impl LspCommand for DocumentFormat {
 
     Some(
       client
-        .request::<types::request::Formatting>(types::DocumentFormattingParams {
+        .request::<types::request::TextDocumentFormatting>(types::DocumentFormattingParams {
           text_document:             doc_id(&self.path),
           options:                   types::FormattingOptions {
             tab_size: 2,
@@ -301,7 +302,7 @@ impl LspWorker {
     }
 
     impl Requester<'_> {
-      fn on<R: lsp_types::request::Request>(
+      fn on<R: lsp::request::Request>(
         &mut self,
         f: fn(&mut LspState, R::Params) -> R::Result,
       ) -> &mut Self {
@@ -321,7 +322,7 @@ impl LspWorker {
 
     let mut req = Requester { worker: self, method, params, result: None };
 
-    req.on::<types::request::WorkDoneProgressCreate>(on_work_done_progress_create);
+    req.on::<types::request::WindowWorkDoneProgressCreate>(on_work_done_progress_create);
 
     if req.result.is_none() {
       info!("unhandled request: {}", method);
@@ -339,7 +340,7 @@ impl LspWorker {
     }
 
     impl Notifier<'_> {
-      fn on<R: lsp_types::notification::Notification>(
+      fn on<R: lsp::notification::Notification>(
         &mut self,
         f: fn(&mut LspState, R::Params),
       ) -> &mut Self {
@@ -359,7 +360,7 @@ impl LspWorker {
     let mut req = Notifier { worker: self, method, params, handled: false };
 
     req
-      .on::<types::notification::PublishDiagnostics>(on_publish_diagnostics)
+      .on::<types::notification::TextDocumentPublishDiagnostics>(on_publish_diagnostics)
       .on::<types::notification::Progress>(on_progress);
 
     if !req.handled {
@@ -368,13 +369,10 @@ impl LspWorker {
   }
 }
 
-fn on_work_done_progress_create(
-  state: &mut LspState,
-  params: lsp_types::WorkDoneProgressCreateParams,
-) {
+fn on_work_done_progress_create(state: &mut LspState, params: lsp::WorkDoneProgressCreateParams) {
   let token = match params.token {
-    lsp_types::ProgressToken::Number(n) => n.to_string(),
-    lsp_types::ProgressToken::String(s) => s,
+    lsp::ProgressToken::Integer(n) => n.to_string(),
+    lsp::ProgressToken::String(s) => s,
   };
 
   state
@@ -382,8 +380,8 @@ fn on_work_done_progress_create(
     .insert(token, Progress { title: "".into(), message: None, progress: 0.0, completed: None });
 }
 
-fn on_publish_diagnostics(state: &mut LspState, params: lsp_types::PublishDiagnosticsParams) {
-  let path = PathBuf::from(params.uri.path().as_str());
+fn on_publish_diagnostics(state: &mut LspState, params: lsp::PublishDiagnosticsParams) {
+  let path = params.uri.to_file_path().unwrap();
 
   let encoding = state.position_encoding();
   // TODO: Store these diagnostics somewhere
@@ -402,16 +400,16 @@ fn on_publish_diagnostics(state: &mut LspState, params: lsp_types::PublishDiagno
   state.diagnostics.insert(path, diagnostics);
 }
 
-fn on_progress(state: &mut LspState, params: lsp_types::ProgressParams) {
-  let lsp_types::ProgressParamsValue::WorkDone(work) = params.value;
+fn on_progress(state: &mut LspState, params: lsp::ProgressParams) {
+  let work = serde_json::from_str::<lsp::WorkDoneProgress>(params.value.get()).unwrap();
 
   let token = match params.token {
-    lsp_types::ProgressToken::Number(n) => n.to_string(),
-    lsp_types::ProgressToken::String(s) => s,
+    lsp::ProgressToken::Integer(n) => n.to_string(),
+    lsp::ProgressToken::String(s) => s,
   };
 
   match work {
-    lsp_types::WorkDoneProgress::Begin(begin) => {
+    lsp::WorkDoneProgress::Begin(begin) => {
       if !state.progress.contains_key(&token) {
         warn!("work done for unknown token: {}", token);
       }
@@ -426,13 +424,13 @@ fn on_progress(state: &mut LspState, params: lsp_types::ProgressParams) {
         },
       );
     }
-    lsp_types::WorkDoneProgress::Report(report) => {
+    lsp::WorkDoneProgress::Report(report) => {
       if let Some(progress) = state.progress.get_mut(&token) {
         progress.message = report.message;
         progress.progress = report.percentage.unwrap_or(0) as f64 / 100.0;
       }
     }
-    lsp_types::WorkDoneProgress::End(_) => {
+    lsp::WorkDoneProgress::End(_) => {
       if let Some(progress) = state.progress.get_mut(&token) {
         progress.completed = Some(std::time::Instant::now());
         progress.progress = 1.0;

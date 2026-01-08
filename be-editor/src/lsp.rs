@@ -23,7 +23,7 @@ pub struct LspState {
 
 #[derive(Default)]
 pub struct CompletionsState {
-  tasks:            Vec<Task<Option<types::CompletionResponse>>>,
+  tasks: Vec<Task<Option<types::Or2<Vec<types::CompletionItem>, types::CompletionList>>>>,
   completions:      types::CompletionList,
   show:             bool,
   clear_on_message: bool,
@@ -81,8 +81,8 @@ impl EditorState {
           range:   d.range.clone(),
           message: d.message.clone(),
           level:   match d.severity {
-            Some(types::DiagnosticSeverity::ERROR) => DiagnosticLevel::Error,
-            Some(types::DiagnosticSeverity::WARNING) => DiagnosticLevel::Warning,
+            Some(types::DiagnosticSeverity::Error) => DiagnosticLevel::Error,
+            Some(types::DiagnosticSeverity::Warning) => DiagnosticLevel::Warning,
             _ => DiagnosticLevel::Error,
           },
         }));
@@ -172,8 +172,8 @@ impl EditorState {
 
         if let Some(completions) = completed {
           self.lsp.completions.completions.items.extend(match completions {
-            types::CompletionResponse::List(list) => list.items,
-            types::CompletionResponse::Array(completions) => completions,
+            types::Or2::A(completions) => completions,
+            types::Or2::B(list) => list.items,
           });
         }
         self.lsp.completions.show = true;

@@ -1,18 +1,18 @@
-pub fn client_capabilities() -> lsp_types::ClientCapabilities {
-  lsp_types::ClientCapabilities {
-    general: Some(lsp_types::GeneralClientCapabilities {
+pub fn client_capabilities() -> lsp::ClientCapabilities {
+  lsp::ClientCapabilities {
+    general: Some(lsp::GeneralClientCapabilities {
       position_encodings: Some(vec![
-        lsp_types::PositionEncodingKind::UTF8,
-        lsp_types::PositionEncodingKind::UTF16,
+        lsp::PositionEncodingKind::Utf8,
+        lsp::PositionEncodingKind::Utf16,
       ]),
       ..Default::default()
     }),
-    text_document: Some(lsp_types::TextDocumentClientCapabilities {
-      completion: Some(lsp_types::CompletionClientCapabilities { ..Default::default() }),
-      formatting: Some(lsp_types::DocumentFormattingClientCapabilities { ..Default::default() }),
+    text_document: Some(lsp::TextDocumentClientCapabilities {
+      completion: Some(lsp::CompletionClientCapabilities { ..Default::default() }),
+      formatting: Some(lsp::DocumentFormattingClientCapabilities { ..Default::default() }),
       ..Default::default()
     }),
-    window: Some(lsp_types::WindowClientCapabilities {
+    window: Some(lsp::WindowClientCapabilities {
       work_done_progress: Some(true),
       ..Default::default()
     }),

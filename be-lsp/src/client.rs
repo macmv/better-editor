@@ -81,7 +81,7 @@ impl LspClient {
   pub fn spawn(
     cmd: &str,
     on_message: Arc<Mutex<Box<dyn Fn() + Send>>>,
-  ) -> (LspClient, lsp_types::ServerCapabilities) {
+  ) -> (LspClient, lsp::ServerCapabilities) {
     let mut child =
       std::process::Command::new(cmd).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
 
@@ -114,13 +114,13 @@ impl LspClient {
       tx: ManuallyDrop::new(send_tx),
     };
 
-    let init = lsp_types::InitializeParams {
-      process_id: Some(std::process::id()),
+    let init = lsp::InitializeParams {
+      process_id: Some(std::process::id() as i32),
       capabilities: crate::init::client_capabilities(),
       ..Default::default()
     };
 
-    let task = client.request::<lsp_types::request::Initialize>(init);
+    let task = client.request::<lsp::request::Initialize>(init);
 
     let result = loop {
       match task.completed() {
@@ -133,12 +133,12 @@ impl LspClient {
 
     client.state.lock().caps = result.capabilities.clone();
 
-    client.notify::<lsp_types::notification::Initialized>(lsp_types::InitializedParams {});
+    client.notify::<lsp::notification::Initialized>(lsp::InitializedParams {});
 
     (client, result.capabilities)
   }
 
-  pub fn request<T: lsp_types::request::Request>(&mut self, req: T::Params) -> Task<T::Result> {
+  pub fn request<T: lsp::request::Request>(&mut self, req: T::Params) -> Task<T::Result> {
     let task = Task::new();
 
     let completer = task.completer();
@@ -166,7 +166,7 @@ impl LspClient {
     task
   }
 
-  pub fn notify<T: lsp_types::notification::Notification>(&mut self, req: T::Params) {
+  pub fn notify<T: lsp::notification::Notification>(&mut self, req: T::Params) {
     self
       .tx
       .send(LspRequest::Notification(Notification {
@@ -187,7 +187,7 @@ impl LspClient {
   ///
   /// Must only be called once.
   pub unsafe fn shutdown_mut(&mut self) {
-    self.notify::<lsp_types::notification::Exit>(());
+    self.notify::<lsp::notification::Exit>(());
     unsafe {
       ManuallyDrop::drop(&mut self.tx);
     }
@@ -541,9 +541,6 @@ impl<'de> de::Deserialize<'de> for Message {
 
 #[cfg(test)]
 mod tests {
-  use std::str::FromStr;
-
-  use types::Uri;
 
   use super::*;
 
@@ -552,27 +549,25 @@ mod tests {
     let (mut client, _) = LspClient::spawn("rust-analyzer", Arc::new(Mutex::new(Box::new(|| {}))));
 
     let path = std::path::Path::new("./src/lib.rs").canonicalize().unwrap();
-    let uri = Uri::from_str(&format!("file://{}", path.to_str().unwrap())).unwrap();
+    let uri = types::Uri::from_file_path(&path);
 
-    client.notify::<lsp_types::notification::DidOpenTextDocument>(
-      lsp_types::DidOpenTextDocumentParams {
-        text_document: lsp_types::TextDocumentItem {
-          uri:         uri.clone(),
-          text:        std::fs::read_to_string(&path).unwrap(),
-          version:     1,
-          language_id: "rust".into(),
-        },
+    client.notify::<lsp::notification::TextDocumentDidOpen>(lsp::DidOpenTextDocumentParams {
+      text_document: lsp::TextDocumentItem {
+        uri:         uri.clone(),
+        text:        std::fs::read_to_string(&path).unwrap(),
+        version:     1,
+        language_id: "rust".into(),
       },
-    );
+    });
 
-    let task = client.request::<lsp_types::request::Completion>(lsp_types::CompletionParams {
-      work_done_progress_params: Default::default(),
-      text_document_position:    lsp_types::TextDocumentPositionParams {
-        text_document: lsp_types::TextDocumentIdentifier { uri },
-        position:      lsp_types::Position { line: 0, character: 0 },
+    let task = client.request::<lsp::request::TextDocumentCompletion>(lsp::CompletionParams {
+      work_done_progress_params:     Default::default(),
+      text_document_position_params: lsp::TextDocumentPositionParams {
+        text_document: lsp::TextDocumentIdentifier { uri },
+        position:      lsp::Position { line: 0, character: 0 },
       },
-      context:                   None,
-      partial_result_params:     Default::default(),
+      context:                       None,
+      partial_result_params:         Default::default(),
     });
 
     loop {

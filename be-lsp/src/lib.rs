@@ -13,7 +13,7 @@ mod init;
 #[macro_use]
 extern crate log;
 
-pub extern crate lsp_types as types;
+pub extern crate lsp as types;
 
 pub use client::LspClient;
 
