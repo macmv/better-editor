@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashSet, path::Path, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, ops::Range, path::Path, rc::Rc};
 
 use be_config::Config;
 use be_doc::{Change, Column, Cursor, Document, Edit, Line, crop::RopeSlice};
@@ -333,12 +333,27 @@ impl EditorState {
     self.change_no_history(change);
   }
 
+  fn damage_line(&mut self, line: Line) { self.damages.insert(line); }
+
+  fn damage_range(&mut self, range: Range<usize>) {
+    let start_line = self.doc.rope.line_of_byte(range.start);
+    let end_line = self.doc.rope.line_of_byte(range.end);
+
+    if self.doc.range(range.clone()).chars().any(|c| c == '\n') {
+      self.damage_all = true;
+    } else {
+      for line in start_line..=end_line {
+        self.damage_line(Line(line));
+      }
+    }
+  }
+
   fn change_no_history(&mut self, change: Change) {
     let start_pos = self.offset_to_ts_point(change.range.start);
     let end_pos = self.offset_to_ts_point(change.range.end);
 
     for line in start_pos.row..=end_pos.row {
-      self.damages.insert(Line(line));
+      self.damage_line(Line(line));
     }
 
     if change.text.contains('\n') || self.doc.range(change.range.clone()).chars().any(|c| c == '\n')

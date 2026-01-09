@@ -76,8 +76,8 @@ impl EditorState {
 
     self.lsp.diagnostics.clear();
     self.lsp.client.servers(|state| {
-      if let Some(d) = state.diagnostics.get(file.path()) {
-        self.lsp.diagnostics.extend(d.iter().map(|d| Diagnostic {
+      if let Some(file) = state.files.get(file.path()) {
+        self.lsp.diagnostics.extend(file.diagnostics.iter().map(|d| Diagnostic {
           range:   d.range.clone(),
           message: d.message.clone(),
           level:   match d.severity {
@@ -88,6 +88,10 @@ impl EditorState {
         }));
       }
     });
+
+    for range in self.lsp.diagnostics.iter().map(|d| d.range.clone()).collect::<Vec<_>>() {
+      self.damage_range(range);
+    }
 
     self.lsp.diagnostics.sort_by_key(|d| d.range.start);
   }

@@ -10,7 +10,7 @@ use serde_json::value::RawValue;
 
 use crate::{
   Diagnostic, LspClient, Progress, TextEdit,
-  client::{LspState, LspWorker},
+  client::{FileState, LspState, LspWorker},
 };
 
 pub trait LspCommand {
@@ -76,8 +76,17 @@ impl LspState {
     }
   }
 
-  pub fn opened_document(&self, path: &PathBuf) -> Option<&Document> {
-    if let Some(f) = self.opened_files.get(path) {
+  pub fn file(&self, path: &PathBuf) -> Option<&FileState> {
+    if let Some(f) = self.files.get(path) {
+      Some(f)
+    } else {
+      error!("file not opened: {}", path.display());
+      None
+    }
+  }
+
+  pub fn file_mut(&mut self, path: &PathBuf) -> Option<&mut FileState> {
+    if let Some(f) = self.files.get_mut(path) {
       Some(f)
     } else {
       error!("file not opened: {}", path.display());
@@ -138,7 +147,13 @@ impl LspCommand for DidOpenTextDocument {
   }
 
   fn send(&self, client: &mut LspClient) -> Option<Task<Infallible>> {
-    if client.state.lock().opened_files.insert(self.path.clone(), self.doc.clone()).is_some() {
+    if client
+      .state
+      .lock()
+      .files
+      .insert(self.path.clone(), FileState::from(self.doc.clone()))
+      .is_some()
+    {
       error!("file already opened: {}", self.path.display());
       return None;
     }
@@ -173,13 +188,10 @@ impl LspCommand for DidChangeTextDocument {
   fn send(&self, client: &mut LspClient) -> Option<Task<Self::Result>> {
     let content_changes = {
       let mut state = client.state.lock();
-      let Some(doc) = state.opened_files.get_mut(&self.path) else {
-        error!("cannot change a file that is not opened: {}", self.path.display());
-        return None;
-      };
-      *doc = self.doc_before_change.clone();
+      let file = state.file_mut(&self.path)?;
+      file.doc = self.doc_before_change.clone();
       for change in &self.changes {
-        doc.apply(change);
+        file.doc.apply(change);
       }
 
       self
@@ -227,8 +239,8 @@ impl LspCommand for Completion {
   ) -> Option<Task<Option<types::Or2<Vec<types::CompletionItem>, types::CompletionList>>>> {
     let position = {
       let state = client.state.lock();
-      let doc = state.opened_document(&self.path)?;
-      state.encode_cursor(doc, self.cursor)
+      let file = state.file(&self.path)?;
+      state.encode_cursor(&file.doc, self.cursor)
     };
 
     Some(client.request::<types::request::TextDocumentCompletion>(types::CompletionParams {
@@ -257,7 +269,7 @@ impl LspCommand for DocumentFormat {
   fn send(&self, client: &mut LspClient) -> Option<Task<Vec<TextEdit>>> {
     let (encoding, doc) = {
       let state = client.state.lock();
-      (state.position_encoding(), state.opened_document(&self.path)?.clone())
+      (state.position_encoding(), state.file(&self.path)?.doc.clone())
     };
 
     Some(
@@ -384,20 +396,14 @@ fn on_publish_diagnostics(state: &mut LspState, params: lsp::PublishDiagnosticsP
   let path = params.uri.to_file_path().unwrap();
 
   let encoding = state.position_encoding();
-  // TODO: Store these diagnostics somewhere
-  let Some(doc) = state.opened_files.get(&path).cloned() else { return };
+  let Some(file) = state.file_mut(&path) else { return };
 
-  let diagnostics = params
-    .diagnostics
-    .into_iter()
-    .map(|d| Diagnostic {
-      range:    decode_range(encoding, &doc, d.range),
-      severity: d.severity,
-      message:  d.message,
-    })
-    .collect();
-
-  state.diagnostics.insert(path, diagnostics);
+  file.diagnostics.clear();
+  file.diagnostics.extend(params.diagnostics.into_iter().map(|d| Diagnostic {
+    range:    decode_range(encoding, &file.doc, d.range),
+    severity: d.severity,
+    message:  d.message,
+  }));
 }
 
 fn on_progress(state: &mut LspState, params: lsp::ProgressParams) {

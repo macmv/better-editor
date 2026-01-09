@@ -30,10 +30,19 @@ pub struct LspClient {
 /// This is all the state we've sent to a particular server.
 #[derive(Default)]
 pub struct LspState {
-  pub caps:         types::ServerCapabilities,
-  pub opened_files: HashMap<PathBuf, Document>,
-  pub diagnostics:  HashMap<PathBuf, Vec<Diagnostic>>,
-  pub progress:     HashMap<String, Progress>,
+  pub caps:     types::ServerCapabilities,
+  pub files:    HashMap<PathBuf, FileState>,
+  pub progress: HashMap<String, Progress>,
+}
+
+#[derive(Default)]
+pub struct FileState {
+  pub doc:         Document,
+  pub diagnostics: Vec<Diagnostic>,
+}
+
+impl From<Document> for FileState {
+  fn from(value: Document) -> Self { FileState { doc: value, ..Default::default() } }
 }
 
 enum LspRequest {
