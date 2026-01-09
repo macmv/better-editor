@@ -44,11 +44,15 @@ impl EditorState {
         let s = c.encode_utf8(&mut bytes);
         self.change(Change::replace(self.doc.grapheme_slice(self.cursor, 1), s));
       }
-      Edit::Delete => {
+      Edit::Delete | Edit::Cut => {
         let range = self.doc.grapheme_slice(self.cursor, 1);
         if !self.doc.range(range.clone()).chars().any(|c| c == '\n') {
           self.change(Change::remove(range));
           self.clamp_column();
+        }
+
+        if matches!(e, Edit::Cut) {
+          self.set_mode(Mode::Insert);
         }
       }
       Edit::DeleteLine => {
@@ -56,6 +60,15 @@ impl EditorState {
           self.doc.byte_of_line(self.cursor.line)..self.doc.byte_of_line(self.cursor.line + 1),
         ));
         self.clamp_column();
+      }
+      Edit::CutLine => {
+        self.set_mode(Mode::Insert);
+        self.change(Change::remove(
+          self.doc.byte_of_line(self.cursor.line)..self.doc.byte_of_line_end(self.cursor.line),
+        ));
+        self.clamp_column();
+
+        self.auto_indent(VerticalDirection::Up);
       }
       Edit::DeleteRestOfLine => {
         self.change(Change::remove(
