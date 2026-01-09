@@ -100,8 +100,16 @@ impl EditorState {
 
   // Perform the move after 'd' or 'c'.
   fn perform_delete_move(&mut self, m: Move) {
+    let inclusive = match m {
+      Move::EndWord => true,
+      _ => false,
+    };
+
     let start = self.doc.cursor_offset(self.cursor);
     self.perform_move(m);
+    if inclusive {
+      self.move_graphemes(1);
+    }
     let end = self.doc.cursor_offset(self.cursor);
 
     let change = Change::remove(start..end);
