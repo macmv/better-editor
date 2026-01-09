@@ -137,7 +137,7 @@ impl Action {
         }
         (Mode::Normal, Key::Char('x')) => e!(Delete(Move::Single(Direction::Right))),
         (Mode::Normal, Key::Char('d')) => match iter.next().ok_or(ActionError::Incomplete)? {
-          KeyStroke { key: Key::Char('d'), .. } => e!(CutLine),
+          KeyStroke { key: Key::Char('d'), .. } => e!(DeleteLine),
           k => parse_move(k, iter).map(|m| Action::Edit { e: Edit::Delete(m), count: None }),
         },
         (Mode::Normal, Key::Char('c')) => match iter.next().ok_or(ActionError::Incomplete)? {
