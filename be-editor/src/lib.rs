@@ -577,7 +577,7 @@ impl CommandState {
         self.text.insert(self.cursor, c);
         self.move_cursor(1);
       }
-      Edit::Delete => {
+      Edit::Delete(Move::Single(Direction::Right)) => {
         self.delete_graphemes(1);
       }
       Edit::Backspace => {

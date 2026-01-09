@@ -1,5 +1,5 @@
 use be_doc::Change;
-use be_input::{Mode, VerticalDirection};
+use be_input::{Mode, Move, VerticalDirection};
 
 use crate::{CommandMode, EditorState};
 
@@ -44,16 +44,10 @@ impl EditorState {
         let s = c.encode_utf8(&mut bytes);
         self.change(Change::replace(self.doc.grapheme_slice(self.cursor, 1), s));
       }
-      Edit::Delete | Edit::Cut => {
-        let range = self.doc.grapheme_slice(self.cursor, 1);
-        if !self.doc.range(range.clone()).chars().any(|c| c == '\n') {
-          self.change(Change::remove(range));
-          self.clamp_column();
-        }
-
-        if matches!(e, Edit::Cut) {
-          self.set_mode(Mode::Insert);
-        }
+      Edit::Delete(m) => self.perform_delete_move(m),
+      Edit::Cut(m) => {
+        self.set_mode(Mode::Insert);
+        self.perform_delete_move(m);
       }
       Edit::DeleteLine => {
         self.change(Change::remove(
@@ -103,6 +97,17 @@ impl EditorState {
       }
     }
   }
+
+  // Perform the move after 'd' or 'c'.
+  fn perform_delete_move(&mut self, m: Move) {
+    let start = self.doc.cursor_offset(self.cursor);
+    self.perform_move(m);
+    let end = self.doc.cursor_offset(self.cursor);
+
+    let change = Change::remove(start..end);
+    self.keep_cursor_for_change(&change);
+    self.change(change);
+  }
 }
 
 #[cfg(test)]
@@ -123,7 +128,7 @@ mod tests {
     ]);
 
     editor.check_repeated(
-      |e| e.perform_edit(Edit::Delete),
+      |e| e.perform_edit(Edit::Delete(Move::Single(Direction::Right))),
       &[
         expect![@r#"
           f⟦o⟧
@@ -151,7 +156,7 @@ mod tests {
     "#]);
 
     editor.check_repeated(
-      |e| e.perform_edit(Edit::Delete),
+      |e| e.perform_edit(Edit::Delete(Move::Single(Direction::Right))),
       &[
         expect![@r#"
 
