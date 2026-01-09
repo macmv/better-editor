@@ -132,6 +132,12 @@ impl EditorState {
     }
   }
 
+  pub(crate) fn lsp_notify_did_save(&mut self) {
+    let Some(file) = &self.file else { return };
+
+    self.lsp.client.send(&command::DidSaveTextDocument { path: file.path().to_path_buf() });
+  }
+
   fn apply_bulk_lsp_edits(&mut self, edits: Vec<TextEdit>) {
     if edits.is_empty() {
       return;

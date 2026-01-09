@@ -35,10 +35,14 @@ impl EditorState {
 
   pub fn save(&mut self) -> io::Result<()> {
     if let Some(file) = &mut self.file {
-      file.save(&self.doc)
+      file.save(&self.doc)?;
     } else {
-      Err(io::Error::new(io::ErrorKind::NotFound, "no file open"))
+      return Err(io::Error::new(io::ErrorKind::NotFound, "no file open"));
     }
+
+    self.lsp_notify_did_save();
+
+    Ok(())
   }
 }
 

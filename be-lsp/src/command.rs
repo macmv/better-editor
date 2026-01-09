@@ -221,6 +221,26 @@ impl LspCommand for DidChangeTextDocument {
   }
 }
 
+pub struct DidSaveTextDocument {
+  pub path: PathBuf,
+}
+
+impl LspCommand for DidSaveTextDocument {
+  type Result = Infallible;
+
+  fn is_capable(&self, caps: &types::ServerCapabilities) -> bool {
+    caps.text_document_sync.is_some()
+  }
+
+  fn send(&self, client: &mut LspClient) -> Option<Task<Infallible>> {
+    client.notify::<types::notification::TextDocumentDidSave>(types::DidSaveTextDocumentParams {
+      text_document: doc_id(&self.path),
+      text:          None,
+    });
+    None
+  }
+}
+
 pub struct Completion {
   pub path:   PathBuf,
   pub cursor: Cursor,
