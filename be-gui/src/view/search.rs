@@ -5,12 +5,24 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::Render;
 
 pub struct Search {
+  index: Index,
+
   search: String,
   cursor: usize, // in bytes
 }
 
+// TODO:
+// - Source from LSP document symbols or other things.
+// - Use an actualy ngram index.
+// - Use fuzzy find.
+// - Make this lazily populate on another thread.
+// - Prioritize non-gitignore'd files.
+struct Index {
+  entries: Vec<String>,
+}
+
 impl Search {
-  pub fn new() -> Self { Search { search: String::new(), cursor: 0 } }
+  pub fn new() -> Self { Search { index: Index::new(), search: String::new(), cursor: 0 } }
 
   pub fn draw(&mut self, render: &mut Render) {
     let bounds = Rect::from_origin_size(Point::ZERO, render.size());
@@ -80,5 +92,35 @@ impl Search {
     let count =
       self.search[self.cursor..].graphemes(true).take(len).map(|g| g.len()).sum::<usize>();
     self.search.replace_range(self.cursor..self.cursor + count, "");
+  }
+}
+
+impl Index {
+  pub fn new() -> Self {
+    let mut files = vec![];
+
+    let _start = std::time::Instant::now();
+    recurse(".", &mut files);
+    dbg!(_start.elapsed());
+
+    Index { entries: files }
+  }
+}
+
+fn recurse(path: &str, files: &mut Vec<String>) {
+  for entry in std::fs::read_dir(path).unwrap() {
+    let entry = entry.unwrap();
+    let path = entry.path();
+
+    // TODO: Optimize `Index` so we don't need this.
+    if path.file_name().is_some_and(|name| name == "target" || name == ".git") {
+      continue;
+    }
+
+    if path.is_dir() {
+      recurse(path.to_str().unwrap(), files);
+    } else {
+      files.push(path.to_str().unwrap().to_string());
+    }
   }
 }
