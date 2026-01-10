@@ -27,7 +27,7 @@ struct State {
 struct Tab {
   title:   String,
   content: Pane,
-  search:  Option<view::Search>,
+  search:  Option<View>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -103,9 +103,7 @@ impl State {
         if let Some(search) = &mut tab.search {
           render.clipped(
             Rect::new(200.0, 200.0, render.size().width - 200.0, render.size().height - 200.0),
-            |render| {
-              search.draw(render);
-            },
+            |render| search.draw(render),
           );
         }
       },
@@ -138,9 +136,19 @@ impl State {
     }
   }
 
-  fn active_view(&self) -> &View { &self.views[&self.tabs[self.active].content.active()] }
+  fn active_view(&self) -> &View {
+    if let Some(search) = &self.tabs[self.active].search {
+      search
+    } else {
+      &self.views[&self.tabs[self.active].content.active()]
+    }
+  }
   fn active_view_mut(&mut self) -> &mut View {
-    self.views.get_mut(&self.tabs[self.active].content.active()).unwrap()
+    if self.tabs[self.active].search.is_some() {
+      self.tabs[self.active].search.as_mut().unwrap()
+    } else {
+      self.views.get_mut(&self.tabs[self.active].content.active()).unwrap()
+    }
   }
 
   fn on_key(&mut self, key: KeyStroke) {
@@ -198,7 +206,16 @@ impl State {
         }
       }
       Action::Navigate { nav: Navigation::OpenSearch } => {
-        self.active_tab_mut().search = Some(view::Search::new());
+        self.active_tab_mut().search = Some(View {
+          // TODO: Get the window size in here.
+          bounds:  Rect::new(0.0, 0.0, 1.0, 1.0),
+          content: ViewContent::Search(view::Search::new()),
+        });
+      }
+      Action::SetMode { mode: be_input::Mode::Normal, .. }
+        if self.active_tab().search.is_some() =>
+      {
+        self.active_tab_mut().search = None;
       }
       _ => self.active_view_mut().perform_action(action),
     }

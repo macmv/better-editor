@@ -36,6 +36,7 @@ pub enum ViewContent {
   Editor(EditorView),
   FileTree(FileTree),
   Shell(Shell),
+  Search(Search),
 }
 
 impl View {
@@ -50,6 +51,7 @@ impl View {
       ViewContent::Editor(editor) => editor.animated(),
       ViewContent::FileTree(_) => false,
       ViewContent::Shell(_) => false,
+      ViewContent::Search(_) => false,
     }
   }
 
@@ -62,6 +64,7 @@ impl View {
       ViewContent::Editor(editor) => editor.draw(render),
       ViewContent::FileTree(file_tree) => file_tree.draw(render),
       ViewContent::Shell(shell) => shell.draw(render),
+      ViewContent::Search(search) => search.draw(render),
     }
   }
 
@@ -70,6 +73,7 @@ impl View {
       ViewContent::Editor(editor) => editor.editor.mode(),
       ViewContent::FileTree(_) => Mode::Normal,
       ViewContent::Shell(_) => Mode::Insert,
+      ViewContent::Search(_) => Mode::Insert,
     }
   }
 
@@ -78,6 +82,7 @@ impl View {
       ViewContent::Editor(editor) => editor.editor.perform_action(action),
       ViewContent::FileTree(file_tree) => file_tree.perform_action(action),
       ViewContent::Shell(shell) => shell.perform_action(action),
+      ViewContent::Search(search) => search.perform_action(action),
     }
   }
 
@@ -92,6 +97,7 @@ impl View {
       ViewContent::Editor(editor) => editor.on_focus(focus),
       ViewContent::FileTree(file_tree) => file_tree.on_focus(focus),
       ViewContent::Shell(_) => {}
+      ViewContent::Search(_) => {}
     }
   }
 }
