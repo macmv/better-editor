@@ -102,7 +102,7 @@ impl State {
         tab.content.draw(&mut state.views, render);
         if let Some(search) = &mut tab.search {
           render.clipped(
-            Rect::new(200.0, 200.0, render.size().width - 200.0, render.size().height - 200.0),
+            Rect::new(100.0, 50.0, render.size().width - 100.0, render.size().height - 50.0),
             |render| search.draw(render),
           );
         }
