@@ -5,7 +5,8 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::Render;
 
 pub struct Search {
-  index: Index,
+  index:   Index,
+  results: Vec<String>,
 
   search: String,
   cursor: usize, // in bytes
@@ -22,7 +23,12 @@ struct Index {
 }
 
 impl Search {
-  pub fn new() -> Self { Search { index: Index::new(), search: String::new(), cursor: 0 } }
+  pub fn new() -> Self {
+    let mut search =
+      Search { index: Index::new(), results: vec![], search: String::new(), cursor: 0 };
+    search.update();
+    search
+  }
 
   pub fn draw(&mut self, render: &mut Render) {
     let bounds = Rect::from_origin_size(Point::ZERO, render.size());
@@ -35,6 +41,16 @@ impl Search {
       render.theme().background_raised_outline,
       Stroke::new(stroke),
     );
+
+    let result_count_fract =
+      (render.size().height - 60.0) / render.store.text.font_metrics().line_height;
+    let result_count = result_count_fract.floor() as usize;
+
+    for (i, result) in self.results.iter().rev().take(result_count).enumerate() {
+      let y = render.size().height - 60.0 - i as f64 * render.store.text.font_metrics().line_height;
+      let layout = render.layout_text(result, render.theme().text);
+      render.draw_text(&layout, Point::new(20.0, y));
+    }
 
     let bounds = Rect::new(
       20.0,
@@ -53,6 +69,11 @@ impl Search {
     render.fill(&(cursor + text_pos.to_vec2()), render.theme().text);
   }
 
+  fn update(&mut self) {
+    self.results.clear();
+    self.results.extend(self.index.entries.iter().filter(|f| f.contains(&self.search)).cloned());
+  }
+
   pub fn perform_action(&mut self, action: Action) {
     match action {
       Action::Move { m: Move::Single(Direction::Left), .. } => self.move_cursor(-1),
@@ -60,15 +81,18 @@ impl Search {
 
       Action::Edit { e: Edit::Insert(c), .. } => {
         self.search.insert(self.cursor, c);
+        self.update();
         self.move_cursor(1);
       }
       Action::Edit { e: Edit::Delete(Move::Single(Direction::Right)), .. } => {
         self.delete_graphemes(1);
+        self.update();
       }
       Action::Edit { e: Edit::Backspace, .. } => {
         if self.cursor > 0 {
           self.move_cursor(-1);
           self.delete_graphemes(1);
+          self.update();
         }
       }
 
