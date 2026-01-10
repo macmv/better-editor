@@ -5,13 +5,14 @@ use be_editor::{DiagnosticLevel, HighlightKey};
 use crate::{Color, oklch};
 
 pub struct Theme {
-  pub text:              Color,
-  pub background_raised: Color,
-  pub background:        Color,
-  pub background_lower:  Color,
-  pub diff_add:          Color,
-  pub diff_remove:       Color,
-  pub diff_change:       Color,
+  pub text:                      Color,
+  pub background_raised:         Color,
+  pub background:                Color,
+  pub background_lower:          Color,
+  pub background_raised_outline: Color,
+  pub diff_add:                  Color,
+  pub diff_remove:               Color,
+  pub diff_change:               Color,
 
   pub syntax: SyntaxTheme,
 }
@@ -66,13 +67,14 @@ impl<const N: usize> From<[(&str, Highlight); N]> for SyntaxTheme {
 impl Theme {
   pub fn default_theme() -> Theme {
     Theme {
-      text:              oklch(1.0, 0.0, 0.0),
-      background_raised: oklch(0.28, 0.03, 288.0),
-      background:        oklch(0.23, 0.03, 288.0),
-      background_lower:  oklch(0.20, 0.03, 288.0),
-      diff_add:          oklch(0.6, 0.1, 135.0),
-      diff_remove:       oklch(0.65, 0.1, 10.0),
-      diff_change:       oklch(0.65, 0.1, 70.0),
+      text:                      oklch(1.0, 0.0, 0.0),
+      background_raised:         oklch(0.28, 0.03, 288.0),
+      background:                oklch(0.23, 0.03, 288.0),
+      background_lower:          oklch(0.20, 0.03, 288.0),
+      background_raised_outline: oklch(0.40, 0.03, 288.0),
+      diff_add:                  oklch(0.6, 0.1, 135.0),
+      diff_remove:               oklch(0.65, 0.1, 10.0),
+      diff_change:               oklch(0.65, 0.1, 70.0),
 
       syntax: SyntaxTheme::from([
         ("constant", Highlight::from(oklch(0.8, 0.13, 50.0))),

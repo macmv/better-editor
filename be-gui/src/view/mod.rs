@@ -5,10 +5,12 @@ use crate::Render;
 
 mod editor;
 mod file_tree;
+mod search;
 mod shell;
 
 pub use editor::EditorView;
 pub use file_tree::FileTree;
+pub use search::Search;
 pub use shell::Shell;
 
 pub struct View {

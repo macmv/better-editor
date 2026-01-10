@@ -27,6 +27,7 @@ struct State {
 struct Tab {
   title:   String,
   content: Pane,
+  search:  Option<view::Search>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -43,7 +44,11 @@ impl State {
     };
 
     let shell = state.new_view(view::Shell::new());
-    state.tabs.push(Tab { title: "zsh".to_owned(), content: pane::Pane::View(shell) });
+    state.tabs.push(Tab {
+      title:   "zsh".to_owned(),
+      content: pane::Pane::View(shell),
+      search:  None,
+    });
 
     let file_tree = state.new_view(view::FileTree::current_directory(store.notifier()));
     let editor = state.new_view(view::EditorView::new(store));
@@ -55,10 +60,15 @@ impl State {
         active:  1,
         items:   vec![Pane::View(file_tree), Pane::View(editor)],
       }),
+      search:  None,
     });
 
     let shell = state.new_view(view::Shell::new());
-    state.tabs.push(Tab { title: "zsh".to_owned(), content: pane::Pane::View(shell) });
+    state.tabs.push(Tab {
+      title:   "zsh".to_owned(),
+      content: pane::Pane::View(shell),
+      search:  None,
+    });
 
     state
   }
@@ -87,7 +97,18 @@ impl State {
       self,
       Axis::Horizontal,
       Distance::Pixels(-20.0),
-      |state, render| state.tabs[state.active].content.draw(&mut state.views, render),
+      |state, render| {
+        let tab = &mut state.tabs[state.active];
+        tab.content.draw(&mut state.views, render);
+        if let Some(search) = &mut tab.search {
+          render.clipped(
+            Rect::new(200.0, 200.0, render.size().width - 200.0, render.size().height - 200.0),
+            |render| {
+              search.draw(render);
+            },
+          );
+        }
+      },
       |state, render| state.draw_tabs(render),
     );
   }
@@ -175,6 +196,9 @@ impl State {
           self.views.get_mut(&prev_focus).unwrap().on_focus(false);
           self.views.get_mut(&new_focus).unwrap().on_focus(true);
         }
+      }
+      Action::Navigate { nav: Navigation::OpenSearch } => {
+        self.active_tab_mut().search = Some(view::Search::new());
       }
       _ => self.active_view_mut().perform_action(action),
     }
