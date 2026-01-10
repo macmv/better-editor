@@ -1,12 +1,15 @@
+use std::path::PathBuf;
+
 use be_input::{Action, Direction, Edit, Move};
 use kurbo::{Point, Rect, RoundedRect, Stroke};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::Render;
+use crate::{Notify, Render};
 
 pub struct Search {
   index:   Index,
   results: Vec<String>,
+  notify:  Notify,
 
   search: String,
   cursor: usize, // in bytes
@@ -23,9 +26,9 @@ struct Index {
 }
 
 impl Search {
-  pub fn new() -> Self {
+  pub fn new(notify: Notify) -> Self {
     let mut search =
-      Search { index: Index::new(), results: vec![], search: String::new(), cursor: 0 };
+      Search { index: Index::new(), results: vec![], search: String::new(), cursor: 0, notify };
     search.update();
     search
   }
@@ -79,6 +82,11 @@ impl Search {
       Action::Move { m: Move::Single(Direction::Left), .. } => self.move_cursor(-1),
       Action::Move { m: Move::Single(Direction::Right), .. } => self.move_cursor(1),
 
+      Action::Edit { e: Edit::Insert('\n'), .. } => {
+        if let Some(result) = self.results.last() {
+          self.notify.open_file(PathBuf::from(result));
+        }
+      }
       Action::Edit { e: Edit::Insert(c), .. } => {
         self.search.insert(self.cursor, c);
         self.update();

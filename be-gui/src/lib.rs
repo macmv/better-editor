@@ -22,6 +22,8 @@ struct State {
 
   next_view_id: ViewId,
   views:        HashMap<ViewId, View>,
+
+  notify: Notify,
 }
 
 struct Tab {
@@ -41,6 +43,7 @@ impl State {
       tabs:         vec![],
       next_view_id: ViewId(0),
       views:        HashMap::new(),
+      notify:       store.notifier(),
     };
 
     let shell = state.new_view(view::Shell::new());
@@ -209,7 +212,7 @@ impl State {
         self.active_tab_mut().search = Some(View {
           // TODO: Get the window size in here.
           bounds:  Rect::new(0.0, 0.0, 1.0, 1.0),
-          content: ViewContent::Search(view::Search::new()),
+          content: ViewContent::Search(view::Search::new(self.notify.clone())),
         });
       }
       Action::SetMode { mode: be_input::Mode::Normal, .. }
@@ -257,7 +260,10 @@ impl State {
   fn on_event(&mut self, event: Event) {
     match event {
       Event::Refresh => {}
-      Event::OpenFile(path) => self.open(&path),
+      Event::OpenFile(path) => {
+        self.tabs[self.active].search = None;
+        self.open(&path);
+      }
       Event::Exit => {} // Handled by `window`
     }
   }
