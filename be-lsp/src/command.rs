@@ -107,10 +107,12 @@ pub fn decode_range(
 }
 
 pub fn decode_position(encoding: PositionEncoding, doc: &Document, pos: types::Position) -> usize {
-  let character = match encoding {
+  let line = be_doc::Line((pos.line as usize).clamp(0, doc.len_lines() - 1));
+
+  let mut character = match encoding {
     PositionEncoding::Utf8 => pos.character as usize,
     PositionEncoding::Utf16 => {
-      let line = doc.line(be_doc::Line(pos.line as usize));
+      let line = doc.line(line);
       let mut total = 0;
       let mut character = 0;
       for c in line.chars() {
@@ -124,7 +126,11 @@ pub fn decode_position(encoding: PositionEncoding, doc: &Document, pos: types::P
     }
   };
 
-  doc.byte_of_line(be_doc::Line(pos.line as usize)) + character as usize
+  character = character.clamp(0, doc.line(line).byte_len());
+  let offset = doc.byte_of_line(line) + character as usize;
+  // the `clamp()` calls above should catch this.
+  assert!(offset <= doc.rope.byte_len(), "offset out of bounds");
+  offset
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
