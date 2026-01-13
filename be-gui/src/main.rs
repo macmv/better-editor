@@ -30,6 +30,8 @@ fn main() {
     .level_for("wgpu_hal", LevelFilter::Warn)
     .level_for("sctk", LevelFilter::Warn)
     .level_for("vello", LevelFilter::Warn)
+    .level_for("globset", LevelFilter::Warn)
+    .level_for("ignore", LevelFilter::Warn)
     .chain(std::io::stdout())
     .chain(file)
     .apply()
