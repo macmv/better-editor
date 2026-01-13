@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use be_input::{Action, Direction, Edit, Move};
 use kurbo::{Point, Rect, RoundedRect, Stroke};
+use nucleo::{Injector, Nucleo};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{Notify, Render};
@@ -17,23 +18,30 @@ pub struct Search {
 
 // TODO:
 // - Source from LSP document symbols or other things.
-// - Use an actualy ngram index.
-// - Use fuzzy find.
-// - Make this lazily populate on another thread.
 // - Prioritize non-gitignore'd files.
 struct Index {
-  entries: Vec<String>,
+  nucleo: Nucleo<String>,
 }
 
 impl Search {
   pub fn new(notify: Notify) -> Self {
     let mut search =
       Search { index: Index::new(), results: vec![], search: String::new(), cursor: 0, notify };
-    search.update();
+    search.change_pattern(false);
     search
   }
 
   pub fn draw(&mut self, render: &mut Render) {
+    let status = self.index.nucleo.tick(1);
+    if status.changed {
+      let snap = self.index.nucleo.snapshot();
+
+      self.results.clear();
+      for i in (0..snap.matched_item_count().clamp(0, 100)).rev() {
+        self.results.push(snap.get_matched_item(i).unwrap().data.clone());
+      }
+    }
+
     let bounds = Rect::from_origin_size(Point::ZERO, render.size());
 
     let radius = 20.0;
@@ -72,9 +80,14 @@ impl Search {
     render.fill(&(cursor + text_pos.to_vec2()), render.theme().text);
   }
 
-  fn update(&mut self) {
-    self.results.clear();
-    self.results.extend(self.index.entries.iter().filter(|f| f.contains(&self.search)).cloned());
+  fn change_pattern(&mut self, append: bool) {
+    self.index.nucleo.pattern.reparse(
+      0,
+      &self.search,
+      nucleo::pattern::CaseMatching::Smart,
+      nucleo::pattern::Normalization::Smart,
+      append,
+    );
   }
 
   pub fn perform_action(&mut self, action: Action) {
@@ -88,19 +101,20 @@ impl Search {
         }
       }
       Action::Edit { e: Edit::Insert(c), .. } => {
+        let append = self.cursor == self.search.len();
         self.search.insert(self.cursor, c);
-        self.update();
+        self.change_pattern(append);
         self.move_cursor(1);
       }
       Action::Edit { e: Edit::Delete(Move::Single(Direction::Right)), .. } => {
         self.delete_graphemes(1);
-        self.update();
+        self.change_pattern(false);
       }
       Action::Edit { e: Edit::Backspace, .. } => {
         if self.cursor > 0 {
           self.move_cursor(-1);
           self.delete_graphemes(1);
-          self.update();
+          self.change_pattern(false);
         }
       }
 
@@ -129,30 +143,27 @@ impl Search {
 
 impl Index {
   pub fn new() -> Self {
-    let mut files = vec![];
+    let nucleo = Nucleo::new(nucleo::Config::DEFAULT, std::sync::Arc::new(|| {}), None, 1);
 
-    let _start = std::time::Instant::now();
-    recurse(".", &mut files);
-    dbg!(_start.elapsed());
+    let mut injector = nucleo.injector();
+    // TODO: Thread pool.
+    std::thread::spawn(move || recurse(".", &mut injector));
 
-    Index { entries: files }
+    Index { nucleo }
   }
 }
 
-fn recurse(path: &str, files: &mut Vec<String>) {
+fn recurse(path: &str, injector: &mut Injector<String>) {
   for entry in std::fs::read_dir(path).unwrap() {
     let entry = entry.unwrap();
     let path = entry.path();
 
-    // TODO: Optimize `Index` so we don't need this.
-    if path.file_name().is_some_and(|name| name == "target" || name == ".git") {
-      continue;
-    }
-
     if path.is_dir() {
-      recurse(path.to_str().unwrap(), files);
+      recurse(path.to_str().unwrap(), injector);
     } else {
-      files.push(path.to_str().unwrap().to_string());
+      injector.push(path.to_str().unwrap().to_string(), |path, columns| {
+        columns[0] = path.as_str().into();
+      });
     }
   }
 }
