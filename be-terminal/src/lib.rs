@@ -322,26 +322,3 @@ impl Deref for Cursor {
 impl DerefMut for Cursor {
   fn deref_mut(&mut self) -> &mut Self::Target { &mut self.pos }
 }
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn terminal_works() {
-    let mut terminal = Terminal::new(Size { rows: 40, cols: 80 });
-
-    std::thread::sleep(std::time::Duration::from_millis(100));
-
-    terminal.update();
-    println!("===");
-    /*
-    for line in terminal.state.grid.lines() {
-      println!("{}", line);
-    }
-    */
-    println!("===");
-
-    panic!();
-  }
-}
