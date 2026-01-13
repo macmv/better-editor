@@ -535,7 +535,42 @@ fn parse_color(mut iter: impl Iterator<Item = u16>) -> Option<TerminalColor> {
       g: iter.next()? as u8,
       b: iter.next()? as u8,
     }),
-    Some(5) => None, // TODO: Indexed colors.
+    Some(5) => {
+      Some(match iter.next()? as u8 {
+        0 => TerminalColor::Builtin { color: BuiltinColor::Black, bright: false },
+        1 => TerminalColor::Builtin { color: BuiltinColor::Red, bright: false },
+        2 => TerminalColor::Builtin { color: BuiltinColor::Green, bright: false },
+        3 => TerminalColor::Builtin { color: BuiltinColor::Yellow, bright: false },
+        4 => TerminalColor::Builtin { color: BuiltinColor::Blue, bright: false },
+        5 => TerminalColor::Builtin { color: BuiltinColor::Magenta, bright: false },
+        6 => TerminalColor::Builtin { color: BuiltinColor::Cyan, bright: false },
+        7 => TerminalColor::Builtin { color: BuiltinColor::White, bright: false },
+        8 => TerminalColor::Builtin { color: BuiltinColor::Black, bright: true },
+        9 => TerminalColor::Builtin { color: BuiltinColor::Red, bright: true },
+        10 => TerminalColor::Builtin { color: BuiltinColor::Green, bright: true },
+        11 => TerminalColor::Builtin { color: BuiltinColor::Yellow, bright: true },
+        12 => TerminalColor::Builtin { color: BuiltinColor::Blue, bright: true },
+        13 => TerminalColor::Builtin { color: BuiltinColor::Magenta, bright: true },
+        14 => TerminalColor::Builtin { color: BuiltinColor::Cyan, bright: true },
+        15 => TerminalColor::Builtin { color: BuiltinColor::White, bright: true },
+
+        idx @ (16..=231) => {
+          // 6x6x6 color cube
+          const LEVELS: [u8; 6] = [0, 95, 135, 175, 215, 255];
+          let n = idx - 16;
+          let r = n / 36;
+          let g = (n % 36) / 6;
+          let b = n % 6;
+          TerminalColor::Rgb { r: LEVELS[r as usize], g: LEVELS[g as usize], b: LEVELS[b as usize] }
+        }
+
+        idx @ (232..=255) => {
+          // Grayscale ramp: 24 steps from 8 to 238 inclusive, step 10.
+          let v = 8 + (idx - 232) * 10;
+          TerminalColor::Rgb { r: v, g: v, b: v }
+        }
+      })
+    }
 
     _ => None,
   }
