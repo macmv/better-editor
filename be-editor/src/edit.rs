@@ -1,5 +1,5 @@
 use be_doc::Change;
-use be_input::{Mode, Move, VerticalDirection};
+use be_input::{Direction, Mode, Move, VerticalDirection};
 
 use crate::{CommandMode, EditorState};
 
@@ -100,6 +100,15 @@ impl EditorState {
 
   // Perform the move after 'd' or 'c'.
   fn perform_delete_move(&mut self, m: Move) {
+    if matches!(m, Move::Single(Direction::Right)) {
+      let range = self.doc.grapheme_slice(self.cursor, 1);
+      if !self.doc.range(range.clone()).chars().any(|c| c == '\n') {
+        self.change(Change::remove(range));
+        self.clamp_column();
+      }
+      return;
+    }
+
     let inclusive = match m {
       Move::EndWord => true,
       _ => false,
