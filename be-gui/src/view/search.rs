@@ -25,7 +25,8 @@ struct Index {
 
 impl Search {
   pub fn new(notify: Notify) -> Self {
-    let mut search = Search { index: Index::new(), search: String::new(), cursor: 0, notify };
+    let mut search =
+      Search { index: Index::new(notify.clone()), search: String::new(), cursor: 0, notify };
     search.change_pattern(false);
     search
   }
@@ -157,9 +158,9 @@ impl Search {
 }
 
 impl Index {
-  pub fn new() -> Self {
+  pub fn new(notify: Notify) -> Self {
     let config = nucleo::Config::DEFAULT;
-    let nucleo = Nucleo::new(config.clone(), std::sync::Arc::new(|| {}), None, 1);
+    let nucleo = Nucleo::new(config.clone(), std::sync::Arc::new(move || notify.wake()), None, 1);
     let matcher = nucleo::Matcher::new(config);
 
     let mut injector = nucleo.injector();
