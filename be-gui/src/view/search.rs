@@ -8,9 +8,8 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::{Notify, Render};
 
 pub struct Search {
-  index:   Index,
-  results: Vec<String>,
-  notify:  Notify,
+  index:  Index,
+  notify: Notify,
 
   search: String,
   cursor: usize, // in bytes
@@ -25,22 +24,14 @@ struct Index {
 
 impl Search {
   pub fn new(notify: Notify) -> Self {
-    let mut search =
-      Search { index: Index::new(), results: vec![], search: String::new(), cursor: 0, notify };
+    let mut search = Search { index: Index::new(), search: String::new(), cursor: 0, notify };
     search.change_pattern(false);
     search
   }
 
   pub fn draw(&mut self, render: &mut Render) {
-    let status = self.index.nucleo.tick(1);
-    if status.changed {
-      let snap = self.index.nucleo.snapshot();
-
-      self.results.clear();
-      for i in (0..snap.matched_item_count().clamp(0, 100)).rev() {
-        self.results.push(snap.get_matched_item(i).unwrap().data.clone());
-      }
-    }
+    self.index.nucleo.tick(1);
+    let snap = self.index.nucleo.snapshot();
 
     let bounds = Rect::from_origin_size(Point::ZERO, render.size());
 
@@ -57,9 +48,11 @@ impl Search {
       (render.size().height - 60.0) / render.store.text.font_metrics().line_height;
     let result_count = result_count_fract.floor() as usize;
 
-    for (i, result) in self.results.iter().rev().take(result_count).enumerate() {
+    for i in 0..snap.matched_item_count().clamp(0, result_count as u32) {
+      let result = snap.get_matched_item(i).unwrap();
+
       let y = render.size().height - 60.0 - i as f64 * render.store.text.font_metrics().line_height;
-      let layout = render.layout_text(result, render.theme().text);
+      let layout = render.layout_text(result.data, render.theme().text);
       render.draw_text(&layout, Point::new(20.0, y));
     }
 
@@ -96,8 +89,8 @@ impl Search {
       Action::Move { m: Move::Single(Direction::Right), .. } => self.move_cursor(1),
 
       Action::Edit { e: Edit::Insert('\n'), .. } => {
-        if let Some(result) = self.results.last() {
-          self.notify.open_file(PathBuf::from(result));
+        if let Some(result) = self.index.nucleo.snapshot().get_matched_item(0) {
+          self.notify.open_file(PathBuf::from(result.data));
         }
       }
       Action::Edit { e: Edit::Insert(c), .. } => {
