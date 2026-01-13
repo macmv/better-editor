@@ -182,6 +182,7 @@ impl winit::application::ApplicationHandler<Event> for App {
           puffin::GlobalProfiler::lock().new_frame();
           init.app.render(&texture, &init.device, &init.queue, init.scale);
 
+          init.window.pre_present_notify();
           texture.present();
 
           if init.app.state.animated() {
