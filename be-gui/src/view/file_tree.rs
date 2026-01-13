@@ -107,6 +107,44 @@ impl FileTree {
     visit_dir(&mut self.tree, &mut 0, self.active)
   }
 
+  pub fn open(&mut self, path: &Path) {
+    let mut curr = &mut self.tree;
+    let mut new_active = 0;
+
+    let Ok(path) = path.strip_prefix(".") else { return };
+    let mut components = path.components().peekable();
+
+    while let Some(component) = components.next() {
+      match component {
+        std::path::Component::Normal(name) => {
+          let Some(items) = curr.items.as_mut() else { return };
+          let Some(i) = items.iter().position(|i| *i.name() == *name) else { return };
+          new_active += i + 1;
+
+          match &mut items[i] {
+            Item::Directory(dir) => {
+              curr = dir;
+              curr.expand();
+            }
+            Item::File(_) => {
+              // If we're done with the path, then break and update `active`. Otherwise, we
+              // found a file early, and the path is invalid.
+              if components.peek().is_none() {
+                break;
+              } else {
+                return;
+              }
+            }
+          }
+        }
+
+        _ => return,
+      }
+    }
+
+    self.active = new_active;
+  }
+
   pub fn perform_action(&mut self, action: Action) {
     match action {
       Action::Move { count: _, m } => match m {
@@ -183,6 +221,13 @@ impl Directory {
 }
 
 impl Item {
+  fn name(&self) -> Cow<'_, str> {
+    match self {
+      Item::Directory(d) => d.name(),
+      Item::File(f) => Cow::Borrowed(&f.name),
+    }
+  }
+
   fn visible_len(&self) -> usize {
     match self {
       Item::Directory(d) => d.len_visible(),

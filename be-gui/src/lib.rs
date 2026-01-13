@@ -9,7 +9,7 @@ pub use render::*;
 use pane::Pane;
 use view::View;
 
-use crate::view::ViewContent;
+use crate::view::{FileTree, ViewContent};
 
 mod pane;
 mod theme;
@@ -116,6 +116,9 @@ impl State {
   fn open(&mut self, path: &std::path::Path) {
     if let ViewContent::Editor(e) = &mut self.active_view_mut().content {
       let _ = e.editor.open(path);
+      if let Some(tree) = self.current_file_tree_mut() {
+        tree.open(path);
+      }
     } else if let Some(e) =
       self.views.values_mut().filter(|v| v.visible()).find_map(|v| match &mut v.content {
         ViewContent::Editor(e) => Some(e),
@@ -135,7 +138,18 @@ impl State {
 
       self.views.get_mut(&prev_focus).unwrap().on_focus(false);
       self.views.get_mut(&new_focus).unwrap().on_focus(true);
+
+      if let Some(tree) = self.current_file_tree_mut() {
+        tree.open(path);
+      }
     }
+  }
+
+  fn current_file_tree_mut(&mut self) -> Option<&mut FileTree> {
+    self.views.values_mut().filter(|v| v.visible()).find_map(|v| match &mut v.content {
+      ViewContent::FileTree(e) => Some(e),
+      _ => None,
+    })
   }
 
   fn active_view(&self) -> &View {
