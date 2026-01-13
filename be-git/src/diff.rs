@@ -459,11 +459,11 @@ fn foo() -> Bar {
     let mut diff = Diff::compute(Algorithm::Histogram, &input);
     diff.postprocess_no_heuristic(&input);
 
+    // TODO: Test colors nicely.
     println!(
       "{}",
       diff.unified_diff(&ColorLinePrinter(&input.interner), UnifiedDiffConfig::default(), &input,)
     );
-    panic!();
   }
 
   #[test]
