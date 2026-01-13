@@ -121,8 +121,8 @@ impl EditorState {
   fn on_open_file(&mut self) {
     let Some(_) = self.file.as_ref() else { return };
 
-    self.move_to_col(Column(0));
     self.move_to_line(Line(0));
+    self.move_to_col(Column(0));
 
     self.detect_filetype();
     self.on_open_file_highlight();
