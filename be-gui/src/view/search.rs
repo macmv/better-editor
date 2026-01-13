@@ -172,16 +172,20 @@ impl Index {
 }
 
 fn recurse(path: &str, injector: &mut Injector<String>) {
-  for entry in std::fs::read_dir(path).unwrap() {
-    let entry = entry.unwrap();
-    let path = entry.path();
-
-    if path.is_dir() {
-      recurse(path.to_str().unwrap(), injector);
-    } else {
-      injector.push(path.to_str().unwrap().to_string(), |path, columns| {
-        columns[0] = path.as_str().into();
-      });
+  // We've already got libgit integration, so maybe we should just use that.
+  // However, `ignore` is a lot simpler to use, and I'd rather use a rust
+  // dependency than a C one.
+  for entry in ignore::Walk::new(path) {
+    match entry {
+      Ok(entry) => {
+        let path = entry.path();
+        if !path.is_dir() {
+          injector.push(path.to_str().unwrap().to_string(), |path, columns| {
+            columns[0] = path.as_str().into();
+          });
+        }
+      }
+      Err(err) => println!("Error: {}", err),
     }
   }
 }
