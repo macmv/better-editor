@@ -2,6 +2,7 @@ use be_input::{Action, Direction, Edit, Mode, Move};
 use be_terminal::{StyleFlags, Terminal, TerminalColor};
 use kurbo::Rect;
 use parley::FontWeight;
+use peniko::color::AlphaColor;
 
 use crate::{Color, Render, TextLayout, oklch, theme::Theme};
 
@@ -187,6 +188,7 @@ fn terminal_color(_theme: &Theme, color: Option<TerminalColor>) -> Option<Color>
     Some(TerminalColor::Builtin { color: Magenta, bright: _ }) => oklch(0.8, 0.13, 350.0),
     Some(TerminalColor::Builtin { color: Cyan, bright: _ }) => oklch(0.85, 0.1, 200.0),
     Some(TerminalColor::Builtin { color: White, bright: _ }) => oklch(1.0, 0.0, 0.0),
+    Some(TerminalColor::Rgb { r, g, b }) => AlphaColor::from_rgb8(r, g, b).convert(),
     _ => return None,
   })
 }
