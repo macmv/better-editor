@@ -13,6 +13,7 @@ pub struct Theme {
   pub diff_add:                  Color,
   pub diff_remove:               Color,
   pub diff_change:               Color,
+  pub search_matched:            Color,
 
   pub syntax: SyntaxTheme,
 }
@@ -75,6 +76,7 @@ impl Theme {
       diff_add:                  oklch(0.6, 0.1, 135.0),
       diff_remove:               oklch(0.65, 0.1, 10.0),
       diff_change:               oklch(0.65, 0.1, 70.0),
+      search_matched:            oklch(0.7, 0.12, 220.0),
 
       syntax: SyntaxTheme::from([
         ("constant", Highlight::from(oklch(0.8, 0.13, 50.0))),

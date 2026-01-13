@@ -19,7 +19,8 @@ pub struct Search {
 // - Source from LSP document symbols or other things.
 // - Prioritize non-gitignore'd files.
 struct Index {
-  nucleo: Nucleo<String>,
+  nucleo:  Nucleo<String>,
+  matcher: nucleo::Matcher, // Used when rendering to highlight matches.
 }
 
 impl Search {
@@ -52,7 +53,28 @@ impl Search {
       let result = snap.get_matched_item(i).unwrap();
 
       let y = render.size().height - 60.0 - i as f64 * render.store.text.font_metrics().line_height;
-      let layout = render.layout_text(result.data, render.theme().text);
+      let matched_color = render.theme().search_matched;
+      let mut builder =
+        render.store.text.layout_builder(result.data, render.theme().text, render.scale());
+
+      let mut indices = vec![];
+      self.index.nucleo.pattern.column_pattern(0).indices(
+        result.matcher_columns[0].slice_u32(..),
+        &mut self.index.matcher,
+        &mut indices,
+      );
+
+      for i in indices {
+        builder
+          .apply(i as usize..i as usize + 1, parley::StyleProperty::Brush(matched_color.into()));
+        builder.apply(
+          i as usize..i as usize + 1,
+          parley::StyleProperty::FontWeight(parley::FontWeight::BOLD),
+        );
+      }
+
+      let (built, backgrounds) = builder.build(result.data);
+      let layout = render.build_layout(built, backgrounds);
       render.draw_text(&layout, Point::new(20.0, y));
     }
 
@@ -136,13 +158,15 @@ impl Search {
 
 impl Index {
   pub fn new() -> Self {
-    let nucleo = Nucleo::new(nucleo::Config::DEFAULT, std::sync::Arc::new(|| {}), None, 1);
+    let config = nucleo::Config::DEFAULT;
+    let nucleo = Nucleo::new(config.clone(), std::sync::Arc::new(|| {}), None, 1);
+    let matcher = nucleo::Matcher::new(config);
 
     let mut injector = nucleo.injector();
     // TODO: Thread pool.
     std::thread::spawn(move || recurse(".", &mut injector));
 
-    Index { nucleo }
+    Index { nucleo, matcher }
   }
 }
 
