@@ -17,3 +17,6 @@ members = [
 
 [workspace.dependencies]
 expect-test = { version = "0.1.0", path = "../expect-test" }
+
+[profile.dev]
+opt-level = 1
