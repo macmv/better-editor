@@ -20,7 +20,7 @@ impl Document {
       FindIter(FindIterImpl::TwoWay {
         rope:    &self.rope,
         offset:  start,
-        two_way: TwoWay::new(pattern.as_bytes()),
+        two_way: TwoWay::new(pattern),
       })
     }
   }
@@ -30,10 +30,7 @@ impl<'a> FindIter<'a> {
   pub fn needle(&self) -> &'a str {
     match self {
       FindIter(FindIterImpl::Empty) => "",
-      FindIter(FindIterImpl::TwoWay { two_way, .. }) => {
-        // SAFETY: `needle` is guaranteed to be valid UTF-8
-        unsafe { std::str::from_utf8_unchecked(two_way.needle) }
-      }
+      FindIter(FindIterImpl::TwoWay { two_way, .. }) => two_way.needle,
     }
   }
 }
@@ -66,7 +63,7 @@ impl Iterator for FindIter<'_> {
 
 #[derive(Clone, Copy, Debug)]
 struct TwoWay<'a> {
-  needle:       &'a [u8],
+  needle:       &'a str,
   critical_pos: usize,
   shift:        Shift,
 }
@@ -101,9 +98,9 @@ fn is_suffix(s: &[u8], suffix: &[u8]) -> bool {
 }
 
 impl<'a> TwoWay<'a> {
-  fn new(needle: &'a [u8]) -> Self {
-    let min_suffix = Suffix::forward(needle, SuffixKind::Minimal);
-    let max_suffix = Suffix::forward(needle, SuffixKind::Maximal);
+  fn new(needle: &'a str) -> Self {
+    let min_suffix = Suffix::forward(needle.as_bytes(), SuffixKind::Minimal);
+    let max_suffix = Suffix::forward(needle.as_bytes(), SuffixKind::Maximal);
 
     let (period_lower_bound, critical_pos) = if min_suffix.pos > max_suffix.pos {
       (min_suffix.period, min_suffix.pos)
@@ -111,8 +108,8 @@ impl<'a> TwoWay<'a> {
       (max_suffix.period, max_suffix.pos)
     };
 
-    let shift = Shift::forward(needle, period_lower_bound, critical_pos);
-    Self { needle, critical_pos, shift }
+    let shift = Shift::forward(needle.as_bytes(), period_lower_bound, critical_pos);
+    TwoWay { needle, critical_pos, shift }
   }
 
   fn find_in(&self, haystack: RopeSlice<'_>) -> Option<usize> {
@@ -129,7 +126,7 @@ impl<'a> TwoWay<'a> {
 
     while pos + self.needle.len() <= haystack.byte_len() {
       let mut i = cmp::max(self.critical_pos, mem);
-      while i < self.needle.len() && self.needle[i] == haystack.byte(pos + i) {
+      while i < self.needle.len() && self.needle.as_bytes()[i] == haystack.byte(pos + i) {
         i += 1;
       }
 
@@ -142,10 +139,10 @@ impl<'a> TwoWay<'a> {
 
       // right half matched; verify left half backwards
       let mut j = self.critical_pos;
-      while j > mem && self.needle[j] == haystack.byte(pos + j) {
+      while j > mem && self.needle.as_bytes()[j] == haystack.byte(pos + j) {
         j -= 1;
       }
-      if j <= mem && self.needle[mem] == haystack.byte(pos + mem) {
+      if j <= mem && self.needle.as_bytes()[mem] == haystack.byte(pos + mem) {
         return Some(pos);
       }
 
@@ -163,7 +160,7 @@ impl<'a> TwoWay<'a> {
     'outer: while pos + self.needle.len() <= haystack.byte_len() {
       // scan right half forward
       let mut i = self.critical_pos;
-      while i < self.needle.len() && self.needle[i] == haystack.byte(pos + i) {
+      while i < self.needle.len() && self.needle.as_bytes()[i] == haystack.byte(pos + i) {
         i += 1;
       }
       if i < self.needle.len() {
@@ -173,7 +170,7 @@ impl<'a> TwoWay<'a> {
 
       // verify left half backwards
       for j in (0..self.critical_pos).rev() {
-        if self.needle[j] != haystack.byte(pos + j) {
+        if self.needle.as_bytes()[j] != haystack.byte(pos + j) {
           pos += shift;
           continue 'outer;
         }
