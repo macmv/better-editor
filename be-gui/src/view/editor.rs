@@ -197,83 +197,85 @@ impl EditorView {
 
     indent_guides.finish(render);
 
-    if self.focused {
-      let mode = match self.editor.mode() {
-        Mode::Normal if self.temporary_underline => Some(CursorMode::Underline),
-        Mode::Normal | Mode::Visual => Some(CursorMode::Block),
-        Mode::Insert => Some(CursorMode::Line),
-        Mode::Replace => Some(CursorMode::Underline),
-        Mode::Command => None,
-      };
+    let mode = match self.editor.mode() {
+      Mode::Normal if self.temporary_underline => Some(CursorMode::Underline),
+      Mode::Normal | Mode::Visual => Some(CursorMode::Block),
+      Mode::Insert => Some(CursorMode::Line),
+      Mode::Replace => Some(CursorMode::Underline),
+      Mode::Command => None,
+    };
 
-      if let Some(mode) = mode {
-        let line = self.editor.cursor().line.as_usize();
-        let layout = &self.cached_layouts[&line];
+    if let Some(mode) = mode {
+      let line = self.editor.cursor().line.as_usize();
+      let layout = &self.cached_layouts[&line];
 
-        let cursor = layout
-          .cursor(self.editor.doc().cursor_column_offset(self.editor.cursor()), mode)
-          + Vec2::new(20.0, start_y + (line - min_line.as_usize()) as f64 * line_height);
+      let cursor = layout
+        .cursor(self.editor.doc().cursor_column_offset(self.editor.cursor()), mode)
+        + Vec2::new(20.0, start_y + (line - min_line.as_usize()) as f64 * line_height);
+      if self.focused {
         render.fill(&cursor.ceil(), render.theme().text);
+      } else {
+        render.stroke(&cursor.inset(-0.5 * render.scale()), render.theme().text, Stroke::new(1.0));
+      }
 
-        if let Some(completions) = self.editor.completions() {
-          let layouts = completions
-            .iter()
-            .take(20)
-            .map(|completion| render.layout_text(&completion, render.theme().text))
-            .collect::<Vec<_>>();
+      if let Some(completions) = self.editor.completions() {
+        let layouts = completions
+          .iter()
+          .take(20)
+          .map(|completion| render.layout_text(&completion, render.theme().text))
+          .collect::<Vec<_>>();
 
-          let inner_width = layouts
-            .iter()
-            .map(|layout| layout.size().width)
-            .max_by(|a, b| a.total_cmp(b))
-            .unwrap_or(0.0);
-          let inner_height = layouts.len() as f64 * line_height;
+        let inner_width = layouts
+          .iter()
+          .map(|layout| layout.size().width)
+          .max_by(|a, b| a.total_cmp(b))
+          .unwrap_or(0.0);
+        let inner_height = layouts.len() as f64 * line_height;
 
-          const MARGIN_X: f64 = 10.0;
-          const MARGIN_Y: f64 = 5.0;
+        const MARGIN_X: f64 = 10.0;
+        const MARGIN_Y: f64 = 5.0;
 
-          let start_x = cursor.x0;
-          let start_y;
-          let mut y;
-          let rect;
+        let start_x = cursor.x0;
+        let start_y;
+        let mut y;
+        let rect;
 
-          if cursor.y1 + inner_height + MARGIN_Y * 2.0 > render.size().height {
-            // draw above the cursor
-            start_y = cursor.y0;
-            y = start_y - inner_height - MARGIN_Y;
+        if cursor.y1 + inner_height + MARGIN_Y * 2.0 > render.size().height {
+          // draw above the cursor
+          start_y = cursor.y0;
+          y = start_y - inner_height - MARGIN_Y;
 
-            rect = Rect::new(
-              start_x - MARGIN_X,
-              start_y - inner_height - MARGIN_Y * 2.0,
-              start_x + inner_width + MARGIN_X,
-              start_y,
-            );
-          } else {
-            // draw below the cursor
-            start_y = cursor.y1;
-            y = start_y + MARGIN_Y;
-
-            rect = Rect::new(
-              start_x - MARGIN_X,
-              start_y,
-              start_x + inner_width + MARGIN_X,
-              start_y + inner_height + MARGIN_Y * 2.0,
-            );
-          }
-
-          render.drop_shadow(
-            rect,
-            MARGIN_Y,
-            2.0,
-            // keep the chroma and hue so they blend nicely.
-            render.theme().background.map(|_, c, h, _| [0.0, c, h, 0.2]),
+          rect = Rect::new(
+            start_x - MARGIN_X,
+            start_y - inner_height - MARGIN_Y * 2.0,
+            start_x + inner_width + MARGIN_X,
+            start_y,
           );
-          render.fill(&RoundedRect::from_rect(rect, MARGIN_Y), render.theme().background_raised);
+        } else {
+          // draw below the cursor
+          start_y = cursor.y1;
+          y = start_y + MARGIN_Y;
 
-          for layout in layouts {
-            render.draw_text(&layout, (start_x, y));
-            y += line_height;
-          }
+          rect = Rect::new(
+            start_x - MARGIN_X,
+            start_y,
+            start_x + inner_width + MARGIN_X,
+            start_y + inner_height + MARGIN_Y * 2.0,
+          );
+        }
+
+        render.drop_shadow(
+          rect,
+          MARGIN_Y,
+          2.0,
+          // keep the chroma and hue so they blend nicely.
+          render.theme().background.map(|_, c, h, _| [0.0, c, h, 0.2]),
+        );
+        render.fill(&RoundedRect::from_rect(rect, MARGIN_Y), render.theme().background_raised);
+
+        for layout in layouts {
+          render.draw_text(&layout, (start_x, y));
+          y += line_height;
         }
       }
     }
