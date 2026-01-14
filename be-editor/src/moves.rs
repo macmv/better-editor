@@ -94,6 +94,17 @@ impl EditorState {
         }
       }
 
+      Move::PrevResult => {
+        if let Some(search) = self.search_text.as_ref() {
+          if let Some(res) =
+            self.doc.rfind_from(self.doc.cursor_offset(self.cursor) + 1, search).next()
+          {
+            let cursor = self.doc.offset_to_cursor(res);
+            self.cursor = cursor;
+          }
+        }
+      }
+
       _ => {}
     }
   }

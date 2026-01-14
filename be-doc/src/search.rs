@@ -1,7 +1,10 @@
 use crop::{Rope, RopeSlice};
 
 use crate::Document;
-use std::cmp;
+use std::{
+  cmp,
+  ops::{Index, RangeBounds},
+};
 
 pub struct FindIter<'a>(FindIterImpl<'a>);
 
@@ -12,6 +15,12 @@ enum FindIterImpl<'a> {
 
 struct RopeAccess<'a> {
   slice:    RopeSlice<'a>,
+  reversed: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ByteAccess<'a> {
+  str:      &'a str,
   reversed: bool,
 }
 
@@ -28,7 +37,7 @@ impl Document {
       FindIter(FindIterImpl::TwoWay {
         rope:     &self.rope,
         offset:   start,
-        two_way:  TwoWay::new(pattern),
+        two_way:  TwoWay::new(ByteAccess { str: pattern, reversed: false }),
         reversed: false,
       })
     }
@@ -41,7 +50,7 @@ impl Document {
       FindIter(FindIterImpl::TwoWay {
         rope:     &self.rope,
         offset:   start,
-        two_way:  TwoWay::new(pattern),
+        two_way:  TwoWay::new(ByteAccess { str: pattern, reversed: true }),
         reversed: true,
       })
     }
@@ -52,7 +61,7 @@ impl<'a> FindIter<'a> {
   pub fn needle(&self) -> &'a str {
     match self {
       FindIter(FindIterImpl::Empty) => "",
-      FindIter(FindIterImpl::TwoWay { two_way, .. }) => two_way.needle,
+      FindIter(FindIterImpl::TwoWay { two_way, .. }) => two_way.needle.str,
     }
   }
 }
@@ -105,9 +114,85 @@ impl RopeAccess<'_> {
   fn byte_len(&self) -> usize { self.slice.byte_len() }
 }
 
+impl ByteAccess<'_> {
+  fn len(&self) -> usize { self.str.len() }
+
+  fn raw_index(&self, i: usize) -> usize { if self.reversed { self.len() - i - 1 } else { i } }
+
+  fn split_at(&self, critical_pos: usize) -> (ByteAccess<'_>, ByteAccess<'_>) {
+    if self.reversed {
+      (
+        ByteAccess { str: &self.str[self.len() - critical_pos..], reversed: true },
+        ByteAccess { str: &self.str[..self.len() - critical_pos], reversed: true },
+      )
+    } else {
+      (
+        ByteAccess { str: &self.str[..critical_pos], reversed: false },
+        ByteAccess { str: &self.str[critical_pos..], reversed: false },
+      )
+    }
+  }
+
+  fn range(&self, range: impl RangeBounds<usize>) -> ByteAccess<'_> {
+    let start = match range.start_bound() {
+      std::ops::Bound::Included(&n) => n,
+      std::ops::Bound::Excluded(&n) => n + 1,
+      std::ops::Bound::Unbounded => 0,
+    };
+    let end = match range.end_bound() {
+      std::ops::Bound::Included(&n) => n,
+      std::ops::Bound::Excluded(&n) => n - 1,
+      std::ops::Bound::Unbounded => self.str.len(),
+    };
+
+    if self.reversed {
+      ByteAccess {
+        str:      &self.str[self.raw_index(end)..=self.raw_index(start)],
+        reversed: true,
+      }
+    } else {
+      ByteAccess { str: &self.str[start..=end], reversed: false }
+    }
+  }
+
+  #[cfg(test)]
+  fn rev(&self) -> ByteAccess<'_> { ByteAccess { str: self.str, reversed: !self.reversed } }
+}
+
+impl Index<usize> for ByteAccess<'_> {
+  type Output = u8;
+  fn index(&self, index: usize) -> &Self::Output {
+    if self.reversed {
+      &self.str.as_bytes()[self.str.len() - index - 1]
+    } else {
+      &self.str.as_bytes()[index]
+    }
+  }
+}
+
+impl PartialEq<&str> for ByteAccess<'_> {
+  fn eq(&self, other: &&str) -> bool {
+    if self.reversed {
+      self.str.len() == other.len() && self.str.bytes().rev().eq(other.bytes())
+    } else {
+      self.str == *other
+    }
+  }
+}
+
+impl PartialEq for ByteAccess<'_> {
+  fn eq(&self, other: &Self) -> bool {
+    if self.reversed == other.reversed {
+      self.str == other.str
+    } else {
+      self.len() == other.len() && self.str.bytes().rev().eq(other.str.bytes())
+    }
+  }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct TwoWay<'a> {
-  needle:       &'a str,
+  needle:       ByteAccess<'a>,
   critical_pos: usize,
   shift:        Shift,
 }
@@ -137,14 +222,14 @@ enum Shift {
   Large { shift: usize },
 }
 
-fn is_suffix(s: &[u8], suffix: &[u8]) -> bool {
-  suffix.len() <= s.len() && &s[s.len() - suffix.len()..] == suffix
+fn is_suffix(s: ByteAccess, suffix: ByteAccess) -> bool {
+  suffix.len() <= s.len() && s.range(s.len() - suffix.len()..) == suffix
 }
 
 impl<'a> TwoWay<'a> {
-  fn new(needle: &'a str) -> Self {
-    let min_suffix = Suffix::forward(needle.as_bytes(), SuffixKind::Minimal);
-    let max_suffix = Suffix::forward(needle.as_bytes(), SuffixKind::Maximal);
+  fn new(needle: ByteAccess<'a>) -> Self {
+    let min_suffix = Suffix::forward(needle, SuffixKind::Minimal);
+    let max_suffix = Suffix::forward(needle, SuffixKind::Maximal);
 
     let (period_lower_bound, critical_pos) = if min_suffix.pos > max_suffix.pos {
       (min_suffix.period, min_suffix.pos)
@@ -152,7 +237,7 @@ impl<'a> TwoWay<'a> {
       (max_suffix.period, max_suffix.pos)
     };
 
-    let shift = Shift::forward(needle.as_bytes(), period_lower_bound, critical_pos);
+    let shift = Shift::forward(needle, period_lower_bound, critical_pos);
     TwoWay { needle, critical_pos, shift }
   }
 
@@ -170,7 +255,7 @@ impl<'a> TwoWay<'a> {
 
     while pos + self.needle.len() <= haystack.byte_len() {
       let mut i = cmp::max(self.critical_pos, mem);
-      while i < self.needle.len() && self.needle.as_bytes()[i] == haystack.byte(pos + i) {
+      while i < self.needle.len() && self.needle[i] == haystack.byte(pos + i) {
         i += 1;
       }
 
@@ -183,10 +268,10 @@ impl<'a> TwoWay<'a> {
 
       // right half matched; verify left half backwards
       let mut j = self.critical_pos;
-      while j > mem && self.needle.as_bytes()[j] == haystack.byte(pos + j) {
+      while j > mem && self.needle[j] == haystack.byte(pos + j) {
         j -= 1;
       }
-      if j <= mem && self.needle.as_bytes()[mem] == haystack.byte(pos + mem) {
+      if j <= mem && self.needle[mem] == haystack.byte(pos + mem) {
         return Some(pos);
       }
 
@@ -204,7 +289,7 @@ impl<'a> TwoWay<'a> {
     'outer: while pos + self.needle.len() <= haystack.byte_len() {
       // scan right half forward
       let mut i = self.critical_pos;
-      while i < self.needle.len() && self.needle.as_bytes()[i] == haystack.byte(pos + i) {
+      while i < self.needle.len() && self.needle[i] == haystack.byte(pos + i) {
         i += 1;
       }
       if i < self.needle.len() {
@@ -214,7 +299,7 @@ impl<'a> TwoWay<'a> {
 
       // verify left half backwards
       for j in (0..self.critical_pos).rev() {
-        if self.needle.as_bytes()[j] != haystack.byte(pos + j) {
+        if self.needle[j] != haystack.byte(pos + j) {
           pos += shift;
           continue 'outer;
         }
@@ -226,7 +311,7 @@ impl<'a> TwoWay<'a> {
 }
 
 impl Shift {
-  fn forward(needle: &[u8], period_lower_bound: usize, critical_pos: usize) -> Shift {
+  fn forward(needle: ByteAccess, period_lower_bound: usize, critical_pos: usize) -> Shift {
     let large = cmp::max(critical_pos, needle.len() - critical_pos);
 
     // If the critical factorization is too far right, just use the large shift.
@@ -237,7 +322,7 @@ impl Shift {
     // Check the "small period" condition:
     // u = needle[..critical_pos], v = needle[critical_pos..]
     let (u, v) = needle.split_at(critical_pos);
-    if !is_suffix(&v[..period_lower_bound], u) {
+    if !is_suffix(v.range(..period_lower_bound), u) {
       return Shift::Large { shift: large };
     }
 
@@ -246,7 +331,7 @@ impl Shift {
 }
 
 impl Suffix {
-  fn forward(needle: &[u8], kind: SuffixKind) -> Suffix {
+  fn forward(needle: ByteAccess, kind: SuffixKind) -> Suffix {
     let mut suffix = Suffix { pos: 0, period: 1 };
     let mut candidate_start = 1usize;
     let mut offset = 0usize;
@@ -317,5 +402,34 @@ mod tests {
     let doc = Document::from("foo bar baz ooo quoox");
 
     assert_eq!(doc.rfind("oo").collect::<Vec<_>>(), &[18, 13, 1]);
+  }
+
+  #[test]
+  fn byte_access_works() {
+    let acc = ByteAccess { str: "hello", reversed: false };
+    assert_eq!(acc.len(), 5);
+    assert_eq!(acc, "hello");
+
+    assert_eq!(acc.rev().len(), 5);
+    assert_eq!(acc.rev(), "olleh");
+  }
+
+  #[test]
+  fn byte_access_range() {
+    let acc = ByteAccess { str: "hello", reversed: false };
+    assert_eq!(acc.range(1..3), "el");
+    assert_eq!(acc.rev().range(..3), "oll");
+  }
+
+  #[test]
+  fn byte_access_split() {
+    let acc = ByteAccess { str: "hello", reversed: false };
+    assert_eq!(acc.split_at(2).0, "he");
+    assert_eq!(acc.split_at(2).1, "llo");
+
+    assert_eq!(acc.rev().split_at(1).0, "o");
+    assert_eq!(acc.rev().split_at(1).1, "lleh");
+    assert_eq!(acc.rev().split_at(2).0, "ol");
+    assert_eq!(acc.rev().split_at(2).1, "leh");
   }
 }
