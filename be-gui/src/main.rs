@@ -37,8 +37,12 @@ fn main() {
     .apply()
     .unwrap();
 
-  puffin::set_scopes_on(true);
-  let _s = puffin_http::Server::new("127.0.0.1:8585").unwrap();
+  let _s = if std::env::var("BE_PROFILE").is_ok() {
+    puffin::set_scopes_on(true);
+    Some(puffin_http::Server::new("127.0.0.1:8585").unwrap())
+  } else {
+    None
+  };
 
   be_gui::run();
 }
