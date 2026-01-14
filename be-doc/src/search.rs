@@ -117,8 +117,6 @@ impl RopeAccess<'_> {
 impl ByteAccess<'_> {
   fn len(&self) -> usize { self.str.len() }
 
-  fn raw_index(&self, i: usize) -> usize { if self.reversed { self.len() - i - 1 } else { i } }
-
   fn split_at(&self, critical_pos: usize) -> (ByteAccess<'_>, ByteAccess<'_>) {
     if self.reversed {
       (
@@ -134,24 +132,32 @@ impl ByteAccess<'_> {
   }
 
   fn range(&self, range: impl RangeBounds<usize>) -> ByteAccess<'_> {
-    let start = match range.start_bound() {
-      std::ops::Bound::Included(&n) => n,
-      std::ops::Bound::Excluded(&n) => n + 1,
-      std::ops::Bound::Unbounded => 0,
-    };
-    let end = match range.end_bound() {
-      std::ops::Bound::Included(&n) => n,
-      std::ops::Bound::Excluded(&n) => n - 1,
-      std::ops::Bound::Unbounded => self.str.len(),
-    };
-
     if self.reversed {
-      ByteAccess {
-        str:      &self.str[self.raw_index(end)..=self.raw_index(start)],
-        reversed: true,
-      }
+      let start = match range.start_bound() {
+        std::ops::Bound::Included(&n) => self.len() - n,
+        std::ops::Bound::Excluded(&n) => self.len() - n - 1,
+        std::ops::Bound::Unbounded => self.len(),
+      };
+      let end = match range.end_bound() {
+        std::ops::Bound::Included(&n) => self.len() - n - 1,
+        std::ops::Bound::Excluded(&n) => self.len() - n,
+        std::ops::Bound::Unbounded => 0,
+      };
+
+      ByteAccess { str: &self.str[end..start], reversed: true }
     } else {
-      ByteAccess { str: &self.str[start..=end], reversed: false }
+      let start = match range.start_bound() {
+        std::ops::Bound::Included(&n) => n,
+        std::ops::Bound::Excluded(&n) => n + 1,
+        std::ops::Bound::Unbounded => 0,
+      };
+      let end = match range.end_bound() {
+        std::ops::Bound::Included(&n) => n + 1,
+        std::ops::Bound::Excluded(&n) => n,
+        std::ops::Bound::Unbounded => self.str.len(),
+      };
+
+      ByteAccess { str: &self.str[start..end], reversed: false }
     }
   }
 
@@ -400,8 +406,10 @@ mod tests {
   #[test]
   fn rfind_works() {
     let doc = Document::from("foo bar baz ooo quoox");
-
     assert_eq!(doc.rfind("oo").collect::<Vec<_>>(), &[18, 13, 1]);
+
+    let doc = Document::from("fob bar baz obo quobx");
+    assert_eq!(doc.rfind("ob").collect::<Vec<_>>(), &[18, 12, 1]);
   }
 
   #[test]
@@ -419,6 +427,10 @@ mod tests {
     let acc = ByteAccess { str: "hello", reversed: false };
     assert_eq!(acc.range(1..3), "el");
     assert_eq!(acc.rev().range(..3), "oll");
+
+    let acc = ByteAccess { str: "hello", reversed: false };
+    assert_eq!(acc.range(1..=3), "ell");
+    assert_eq!(acc.rev().range(..=3), "olle");
   }
 
   #[test]
