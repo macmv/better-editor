@@ -72,6 +72,12 @@ impl State {
       state.tabs.push(Tab { title: String::new(), content: view, search: None });
     }
 
+    for view in state.tabs[state.active].content.views() {
+      state.views.get_mut(&view).unwrap().on_visible(true);
+    }
+
+    state.active_view_mut().on_focus(true);
+
     state
   }
 

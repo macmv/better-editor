@@ -26,7 +26,7 @@ impl EditorView {
     let mut view = EditorView {
       editor:              EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n"),
       scroll:              Point::ZERO,
-      focused:             true,
+      focused:             false,
       temporary_underline: false,
       cached_layouts:      HashMap::new(),
       cached_scale:        0.0,
