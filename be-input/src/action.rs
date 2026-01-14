@@ -122,6 +122,8 @@ impl Action {
         (Mode::Insert | Mode::Command, Key::ArrowLeft) => m!(Single(Direction::Left)),
         (Mode::Insert | Mode::Command, Key::ArrowRight) => m!(Single(Direction::Right)),
 
+        (Mode::Visual, Key::Escape) => Ok(Action::SetMode { mode: Mode::Normal, delta: 0 }),
+
         (Mode::Normal, Key::Char(c @ '1'..='9')) => {
           count += u32::from(c) - u32::from('0');
 
