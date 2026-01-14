@@ -4,14 +4,10 @@ use fern::Dispatch;
 use log::LevelFilter;
 
 fn main() {
-  let cache = std::env::home_dir().unwrap().join(".cache");
-  std::fs::create_dir_all(cache.join("be")).unwrap();
-  let file = OpenOptions::new()
-    .write(true)
-    .create(true)
-    .append(true)
-    .open(cache.join("be").join("main.log"))
-    .unwrap();
+  let cache = be_config::cache_root().unwrap();
+  std::fs::create_dir_all(&cache).unwrap();
+  let file =
+    OpenOptions::new().write(true).create(true).append(true).open(cache.join("main.log")).unwrap();
 
   Dispatch::new()
     .format(|out, message, record| {
