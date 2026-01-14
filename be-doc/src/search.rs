@@ -7,20 +7,42 @@ pub struct FindIter<'a>(FindIterImpl<'a>);
 
 enum FindIterImpl<'a> {
   Empty,
-  TwoWay { rope: &'a Rope, offset: usize, two_way: TwoWay<'a> },
+  TwoWay { rope: &'a Rope, offset: usize, two_way: TwoWay<'a>, reversed: bool },
+}
+
+struct RopeAccess<'a> {
+  slice:    RopeSlice<'a>,
+  reversed: bool,
 }
 
 impl Document {
   pub fn find<'a>(&'a self, pattern: &'a str) -> FindIter<'a> { self.find_from(0, pattern) }
+  pub fn rfind<'a>(&'a self, pattern: &'a str) -> FindIter<'a> {
+    self.rfind_from(self.rope.byte_len(), pattern)
+  }
 
   pub fn find_from<'a>(&'a self, start: usize, pattern: &'a str) -> FindIter<'a> {
     if pattern.is_empty() {
       FindIter(FindIterImpl::Empty)
     } else {
       FindIter(FindIterImpl::TwoWay {
-        rope:    &self.rope,
-        offset:  start,
-        two_way: TwoWay::new(pattern),
+        rope:     &self.rope,
+        offset:   start,
+        two_way:  TwoWay::new(pattern),
+        reversed: false,
+      })
+    }
+  }
+
+  pub fn rfind_from<'a>(&'a self, start: usize, pattern: &'a str) -> FindIter<'a> {
+    if pattern.is_empty() {
+      FindIter(FindIterImpl::Empty)
+    } else {
+      FindIter(FindIterImpl::TwoWay {
+        rope:     &self.rope,
+        offset:   start,
+        two_way:  TwoWay::new(pattern),
+        reversed: true,
       })
     }
   }
@@ -39,13 +61,23 @@ impl Iterator for FindIter<'_> {
   type Item = usize;
 
   fn next(&mut self) -> Option<Self::Item> {
-    match self {
+    match *self {
       FindIter(FindIterImpl::Empty) => None,
-      FindIter(FindIterImpl::TwoWay { rope, offset, two_way }) => {
-        if let Some(advance) = two_way.find_in(rope.byte_slice(*offset..)) {
-          let ret = *offset + advance;
-          *offset += advance + two_way.needle.len();
-          Some(ret)
+      FindIter(FindIterImpl::TwoWay { rope, ref mut offset, two_way, reversed }) => {
+        let haystack = RopeAccess {
+          slice: if reversed { rope.byte_slice(..*offset) } else { rope.byte_slice(*offset..) },
+          reversed,
+        };
+
+        if let Some(advance) = two_way.find_in(haystack) {
+          if reversed {
+            *offset -= advance + two_way.needle.len();
+            Some(*offset)
+          } else {
+            let ret = *offset + advance;
+            *offset += advance + two_way.needle.len();
+            Some(ret)
+          }
         } else {
           None
         }
@@ -59,6 +91,18 @@ impl Iterator for FindIter<'_> {
       FindIter(FindIterImpl::TwoWay { .. }) => (0, None),
     }
   }
+}
+
+impl RopeAccess<'_> {
+  fn byte(&self, pos: usize) -> u8 {
+    if self.reversed {
+      self.slice.byte(self.slice.byte_len() - pos - 1)
+    } else {
+      self.slice.byte(pos)
+    }
+  }
+
+  fn byte_len(&self) -> usize { self.slice.byte_len() }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -112,7 +156,7 @@ impl<'a> TwoWay<'a> {
     TwoWay { needle, critical_pos, shift }
   }
 
-  fn find_in(&self, haystack: RopeSlice<'_>) -> Option<usize> {
+  fn find_in(&self, haystack: RopeAccess) -> Option<usize> {
     match self.shift {
       Shift::Small { period } => self.find_small(haystack, period),
       Shift::Large { shift } => self.find_large(haystack, shift),
@@ -120,7 +164,7 @@ impl<'a> TwoWay<'a> {
   }
 
   // "Small period" (periodic) case.
-  fn find_small(&self, haystack: RopeSlice<'_>, period: usize) -> Option<usize> {
+  fn find_small(&self, haystack: RopeAccess, period: usize) -> Option<usize> {
     let mut pos = 0usize;
     let mut mem = 0usize; // called `shift` in some references: how much of the left part we can skip
 
@@ -154,7 +198,7 @@ impl<'a> TwoWay<'a> {
   }
 
   // "Large period" (non-periodic / fallback) case.
-  fn find_large(&self, haystack: RopeSlice, shift: usize) -> Option<usize> {
+  fn find_large(&self, haystack: RopeAccess, shift: usize) -> Option<usize> {
     let mut pos = 0usize;
 
     'outer: while pos + self.needle.len() <= haystack.byte_len() {
@@ -266,5 +310,12 @@ mod tests {
     let doc = Document::from("foo bar baz ooo quoox");
 
     assert_eq!(doc.find("").collect::<Vec<_>>(), &[]);
+  }
+
+  #[test]
+  fn rfind_works() {
+    let doc = Document::from("foo bar baz ooo quoox");
+
+    assert_eq!(doc.rfind("oo").collect::<Vec<_>>(), &[18, 13, 1]);
   }
 }
