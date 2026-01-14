@@ -22,6 +22,11 @@ enum Item {
   File(File),
 }
 
+enum ItemRef<'a> {
+  Directory(&'a Directory),
+  File(&'a File),
+}
+
 #[derive(Eq)]
 struct Directory {
   path:     PathBuf,
@@ -252,7 +257,7 @@ impl FileTree {
       line_height:  render.store.text.font_metrics().line_height,
       active:       if self.focused { Some(self.active) } else { None },
     }
-    .draw_directory(&self.tree, render);
+    .draw_item(ItemRef::Directory(&self.tree), render);
   }
 }
 
@@ -266,12 +271,21 @@ struct TreeDraw {
   active: Option<usize>,
 }
 
+impl Item {
+  fn as_ref(&self) -> ItemRef<'_> {
+    match self {
+      Item::File(f) => ItemRef::File(f),
+      Item::Directory(d) => ItemRef::Directory(d),
+    }
+  }
+}
+
 impl TreeDraw {
   fn pos(&self) -> Point {
     Point::new(self.indent as f64 * self.indent_width, self.line as f64 * self.line_height)
   }
 
-  fn draw_directory(&mut self, dir: &Directory, render: &mut Render) {
+  fn draw_item(&mut self, item: ItemRef, render: &mut Render) {
     if self.active == Some(self.line) {
       render.fill(
         &Rect::new(0.0, self.pos().y, render.size().width, self.pos().y + self.line_height),
@@ -279,6 +293,13 @@ impl TreeDraw {
       );
     }
 
+    match item {
+      ItemRef::File(file) => self.draw_file(file, render),
+      ItemRef::Directory(dir) => self.draw_directory(dir, render),
+    }
+  }
+
+  fn draw_directory(&mut self, dir: &Directory, render: &mut Render) {
     let text = render.layout_text(&format!(" {}", dir.name()), render.theme().text);
     render.draw_text(&text, self.pos() + Vec2::new(self.indent_width, 0.0));
 
@@ -288,23 +309,13 @@ impl TreeDraw {
       for item in items {
         self.line += 1;
         self.indent += 1;
-        match item {
-          Item::File(file) => self.draw_file(file, render),
-          Item::Directory(dir) => self.draw_directory(dir, render),
-        }
+        self.draw_item(item.as_ref(), render);
         self.indent -= 1;
       }
     }
   }
 
   fn draw_file(&self, file: &File, render: &mut Render) {
-    if self.active == Some(self.line) {
-      render.fill(
-        &Rect::new(0.0, self.pos().y, render.size().width, self.pos().y + self.line_height),
-        render.theme().background_raised,
-      );
-    }
-
     let text = render.layout_text(&file.name, render.theme().text);
     render.draw_text(&text, self.pos() + Vec2::new(self.indent_width, 0.0));
   }
