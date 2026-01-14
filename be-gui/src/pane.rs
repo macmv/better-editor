@@ -140,7 +140,9 @@ impl Split {
   fn focus(&mut self, direction: Direction) -> Option<ViewId> {
     let focused = &mut self.items[self.active];
 
-    if focused.focus(direction).is_none() {
+    if let Some(view) = focused.focus(direction) {
+      Some(view)
+    } else {
       match (self.axis, direction) {
         (Axis::Vertical, Direction::Right) if self.active < self.items.len() - 1 => {
           self.active += 1
@@ -155,8 +157,6 @@ impl Split {
       }
 
       Some(self.items[self.active].active())
-    } else {
-      None
     }
   }
 }
