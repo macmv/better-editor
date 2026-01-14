@@ -46,32 +46,31 @@ impl State {
       notify:       store.notifier(),
     };
 
-    let shell = state.new_view(view::Shell::new());
-    state.tabs.push(Tab {
-      title:   "zsh".to_owned(),
-      content: pane::Pane::View(shell),
-      search:  None,
-    });
+    let layout = store.config.borrow().layout.clone();
 
-    let file_tree = state.new_view(view::FileTree::current_directory(store.notifier()));
-    let editor = state.new_view(view::EditorView::new(store));
-    state.tabs.push(Tab {
-      title:   "editor".to_owned(),
-      content: Pane::Split(pane::Split {
-        axis:    Axis::Vertical,
-        percent: vec![0.2],
-        active:  1,
-        items:   vec![Pane::View(file_tree), Pane::View(editor)],
-      }),
-      search:  None,
-    });
+    fn build_view(state: &mut State, store: &RenderStore, tab: be_config::TabSettings) -> Pane {
+      match tab {
+        be_config::TabSettings::Split(split) => Pane::Split(pane::Split {
+          axis:    match split.axis {
+            be_config::Axis::Vertical => Axis::Vertical,
+            be_config::Axis::Horizontal => Axis::Horizontal,
+          },
+          percent: split.percent,
+          active:  split.active,
+          items:   split.children.into_iter().map(|c| build_view(state, store, c)).collect(),
+        }),
+        be_config::TabSettings::Shell => Pane::View(state.new_view(view::Shell::new())),
+        be_config::TabSettings::Editor => Pane::View(state.new_view(view::EditorView::new(store))),
+        be_config::TabSettings::FileTree => {
+          Pane::View(state.new_view(view::FileTree::current_directory(store.notifier())))
+        }
+      }
+    }
 
-    let shell = state.new_view(view::Shell::new());
-    state.tabs.push(Tab {
-      title:   "zsh".to_owned(),
-      content: pane::Pane::View(shell),
-      search:  None,
-    });
+    for tab in layout.tab {
+      let view = build_view(&mut state, store, tab);
+      state.tabs.push(Tab { title: String::new(), content: view, search: None });
+    }
 
     state
   }

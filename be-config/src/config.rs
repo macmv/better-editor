@@ -34,6 +34,16 @@ impl<T> Partial for HashMap<String, T> {
   }
 }
 
+impl<T> Partial for Vec<T> {
+  type Partial = Option<Vec<T>>;
+
+  fn replace_with(&mut self, partial: Self::Partial) {
+    if let Some(partial) = partial {
+      *self = partial;
+    }
+  }
+}
+
 macro_rules! config {
   (
     #[partial = $partial_name:ident]
@@ -77,6 +87,7 @@ config!(
   pub struct Config {
     pub font:     FontSettings,
     pub editor:   EditorSettings,
+    pub layout:   LayoutSettings,
     pub language: HashMap<String, LanguageSettings>,
   }
 );
@@ -89,6 +100,39 @@ config!(
     pub size:   f64,
   }
 );
+
+config!(
+  #[partial = LayoutSettingsPartial]
+  #[derive(Clone)]
+  pub struct LayoutSettings {
+    pub tab: Vec<TabSettings>,
+  }
+);
+
+#[derive(Clone, serde::Deserialize)]
+#[serde(tag = "pane", rename_all = "kebab-case")]
+pub enum TabSettings {
+  Split(SplitSettings),
+  FileTree,
+  Editor,
+  Shell,
+}
+
+#[derive(Clone, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct SplitSettings {
+  pub axis:     Axis,
+  pub percent:  Vec<f64>,
+  pub active:   usize,
+  pub children: Vec<TabSettings>,
+}
+
+#[derive(Clone, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Axis {
+  Horizontal,
+  Vertical,
+}
 
 config!(
   #[partial = EditorSettingsPartial]

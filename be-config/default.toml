@@ -6,6 +6,22 @@ family = "monospace"
 scroll-offset = 0
 indent-width = 2
 
+[[layout.tab]]
+pane = "shell"
+
+[[layout.tab]]
+pane = "split"
+axis = "vertical"
+percent = [0.2]
+active = 1
+children = [
+  { pane = "file-tree" },
+  { pane = "editor" },
+]
+
+[[layout.tab]]
+pane = "shell"
+
 [language.rust]
 tree-sitter = "https://github.com/tree-sitter/tree-sitter-rust"
 lsp.command = "rust-analyzer"
