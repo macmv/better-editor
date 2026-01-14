@@ -11,17 +11,7 @@ enum FindIterImpl<'a> {
 }
 
 impl Document {
-  pub fn find<'a>(&'a self, pattern: &'a str) -> FindIter<'a> {
-    if pattern.is_empty() {
-      FindIter(FindIterImpl::Empty)
-    } else {
-      FindIter(FindIterImpl::TwoWay {
-        rope:    &self.rope,
-        offset:  0,
-        two_way: TwoWay::new(pattern.as_bytes()),
-      })
-    }
-  }
+  pub fn find<'a>(&'a self, pattern: &'a str) -> FindIter<'a> { self.find_from(0, pattern) }
 
   pub fn find_from<'a>(&'a self, start: usize, pattern: &'a str) -> FindIter<'a> {
     if pattern.is_empty() {
