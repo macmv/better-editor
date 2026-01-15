@@ -75,6 +75,18 @@ impl LineDiffSimilarity {
   pub fn hunks(&'_ self) -> impl Iterator<Item = &LineHunkSimilarity> + use<'_> {
     self.hunks.iter()
   }
+
+  pub fn next_hunk(&self, from: be_doc::Line) -> Option<be_doc::Line> {
+    self.hunks.iter().find(|h| h.after.start > from.as_usize()).map(|h| be_doc::Line(h.after.start))
+  }
+
+  pub fn prev_hunk(&self, from: be_doc::Line) -> Option<be_doc::Line> {
+    self
+      .hunks
+      .iter()
+      .rfind(|h| h.after.start < from.as_usize())
+      .map(|h| be_doc::Line(h.after.start))
+  }
 }
 
 impl LineHunk {

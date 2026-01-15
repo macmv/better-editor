@@ -105,6 +105,42 @@ impl EditorState {
         }
       }
 
+      Move::NextChange => {
+        if let Some(changes) = &self.changes {
+          if let Some(line) = changes.next_hunk(self.cursor.line) {
+            self.move_to_line(line);
+          }
+        }
+      }
+
+      Move::PrevChange => {
+        if let Some(changes) = &self.changes {
+          if let Some(line) = changes.prev_hunk(self.cursor.line) {
+            self.move_to_line(line);
+          }
+        }
+      }
+
+      Move::NextDiagnostic => {
+        let offset = self.doc.cursor_offset(self.cursor);
+
+        if let Some(d) = self.lsp.diagnostics.iter().find(|d| d.range.start > offset) {
+          let cursor = self.doc.offset_to_cursor(d.range.start);
+          self.move_to_line(cursor.line);
+          self.move_to_col(cursor.column);
+        }
+      }
+
+      Move::PrevDiagnostic => {
+        let offset = self.doc.cursor_offset(self.cursor);
+
+        if let Some(d) = self.lsp.diagnostics.iter().rfind(|d| d.range.start < offset) {
+          let cursor = self.doc.offset_to_cursor(d.range.start);
+          self.move_to_line(cursor.line);
+          self.move_to_col(cursor.column);
+        }
+      }
+
       _ => {}
     }
   }

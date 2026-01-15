@@ -39,6 +39,12 @@ pub enum Move {
 
   NextResult,
   PrevResult,
+
+  NextChange,
+  PrevChange,
+
+  NextDiagnostic,
+  PrevDiagnostic,
 }
 
 pub enum Edit {
@@ -203,6 +209,16 @@ fn parse_move(
     },
     Key::Char('F') => match iter.next().ok_or(ActionError::Incomplete)?.key {
       Key::Char(c) => Backward(c),
+      _ => return Err(ActionError::Unrecognized),
+    },
+    Key::Char('[') => match iter.next().ok_or(ActionError::Incomplete)?.key {
+      Key::Char('c') => PrevChange,
+      Key::Char('g') => PrevDiagnostic,
+      _ => return Err(ActionError::Unrecognized),
+    },
+    Key::Char(']') => match iter.next().ok_or(ActionError::Incomplete)?.key {
+      Key::Char('c') => NextChange,
+      Key::Char('g') => NextDiagnostic,
       _ => return Err(ActionError::Unrecognized),
     },
 
