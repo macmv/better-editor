@@ -50,10 +50,18 @@ impl EditorState {
         self.perform_delete_move(m);
       }
       Edit::DeleteLine => {
-        self.change(Change::remove(
-          self.doc.byte_of_line(self.cursor.line)..self.doc.byte_of_line(self.cursor.line + 1),
-        ));
-        self.clamp_column();
+        let end = if self.cursor.line == self.max_line() {
+          if self.cursor.line == 0 {
+            self.doc.byte_of_line_end(self.cursor.line)
+          } else {
+            self.doc.rope.byte_len()
+          }
+        } else {
+          self.doc.byte_of_line(self.cursor.line + 1)
+        };
+
+        self.change(Change::remove(self.doc.byte_of_line(self.cursor.line)..end));
+        self.clamp_cursor();
       }
       Edit::CutLine => {
         self.set_mode(Mode::Insert);
@@ -226,5 +234,26 @@ mod tests {
         "#],
       ],
     )
+  }
+
+  #[test]
+  fn delete_line_at_end() {
+    let mut editor = editor("foo\nbar\n");
+    editor.perform_move(Move::FileEnd);
+    editor.check_repeated(
+      |e| e.perform_edit(Edit::DeleteLine),
+      &[
+        expect![@r#"
+          foo
+          ⟦b⟧ar
+        "#],
+        expect![@r#"
+          ⟦f⟧oo
+        "#],
+        expect![@r#"
+          ⟦ ⟧
+        "#],
+      ],
+    );
   }
 }
