@@ -26,8 +26,7 @@ pub enum Move {
   NextWord,
   EndWord,
   PrevWord,
-  Backward(char),
-  Forward(char),
+  Char(char, ChangeDirection),
 
   LineStart,
   LineStartOfText,
@@ -205,11 +204,11 @@ fn parse_move(
     },
     Key::Char('G') => FileEnd,
     Key::Char('f') => match iter.next().ok_or(ActionError::Incomplete)?.key {
-      Key::Char(c) => Forward(c),
+      Key::Char(c) => Char(c, ChangeDirection::Next),
       _ => return Err(ActionError::Unrecognized),
     },
     Key::Char('F') => match iter.next().ok_or(ActionError::Incomplete)?.key {
-      Key::Char(c) => Backward(c),
+      Key::Char(c) => Char(c, ChangeDirection::Prev),
       _ => return Err(ActionError::Unrecognized),
     },
     Key::Char('[') => match iter.next().ok_or(ActionError::Incomplete)?.key {
