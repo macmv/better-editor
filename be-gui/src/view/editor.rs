@@ -122,25 +122,58 @@ impl EditorView {
     let mut index = start;
     let mut i = min_line.as_usize();
 
+    let mut line_numbers = vec![];
+    let mut line_number_width = 0.0_f64;
+
     let start_y = -(self.scroll.y % line_height);
-    let mut y = start_y;
-    let mut indent_guides =
-      IndentGuides::new(self.editor.config.borrow().editor.indent_width as usize, y);
-    loop {
+    while index < end {
       if self.layout_line(render, i, index).is_none() {
         break;
       };
+
+      let color = if self.focused && self.editor.cursor().line.as_usize() == i {
+        render.theme().text
+      } else {
+        render.theme().text_dim
+      };
+
+      let line_number_text = i.to_string();
+      let layout = render.layout_text(&line_number_text, color);
+      line_number_width = line_number_width.max(layout.size().width);
+      line_numbers.push(layout);
+
+      i += 1;
+      index += self.editor.doc().rope.byte_slice(index..).raw_lines().next().unwrap().byte_len();
+    }
+
+    const LINE_NUMBER_MARGIN_LEFT: f64 = 10.0;
+    const LINE_NUMBER_MARGIN_RIGHT: f64 = 10.0;
+
+    let margin = line_number_width + LINE_NUMBER_MARGIN_LEFT + LINE_NUMBER_MARGIN_RIGHT;
+
+    index = start;
+    i = min_line.as_usize();
+    let mut y = start_y;
+    let mut indent_guides =
+      IndentGuides::new(self.editor.config.borrow().editor.indent_width as usize, start_y, margin);
+    while index < end {
       indent_guides
         .visit(self.editor.guess_indent(be_doc::Line(i), be_input::VerticalDirection::Up), render);
 
+      let layout = &line_numbers[i - min_line.as_usize()];
+      render.draw_text(
+        layout,
+        Point::new(LINE_NUMBER_MARGIN_LEFT + line_number_width - layout.size().width, y),
+      );
+
       let layout = self.cached_layouts.get(&i).unwrap();
-      render.draw_text(&layout, Point::new(20.0, y));
+      render.draw_text(&layout, Point::new(margin, y));
 
       let mut shape =
         Circle::new((0.0, y + render.store.text.font_metrics().line_height / 2.0), 1.5);
       for (i, c) in self.editor.doc().line(be_doc::Line(i)).chars().rev().enumerate() {
         if c == ' ' {
-          shape.center.x = 20.0 + layout.size().width
+          shape.center.x = margin + layout.size().width
             - (i as f64 * render.store.text.font_metrics().character_width)
             - render.store.text.font_metrics().character_width / 2.0;
           render.fill(&shape, render.theme().background_raised);
@@ -152,9 +185,6 @@ impl EditorView {
       y += line_height;
       i += 1;
       index += self.editor.doc().rope.byte_slice(index..).raw_lines().next().unwrap().byte_len();
-      if index >= end {
-        break;
-      }
     }
 
     if let Some(changes) = &self.editor.changes {
@@ -211,7 +241,7 @@ impl EditorView {
 
       let cursor = layout
         .cursor(self.editor.doc().cursor_column_offset(self.editor.cursor()), mode)
-        + Vec2::new(20.0, start_y + (line - min_line.as_usize()) as f64 * line_height);
+        + Vec2::new(margin, start_y + (line - min_line.as_usize()) as f64 * line_height);
       if self.focused {
         render.fill(&cursor.ceil(), render.theme().text);
       } else {
@@ -426,14 +456,15 @@ impl EditorView {
 struct IndentGuides {
   indent_width:  usize,
   scroll_offset: f64,
+  margin:        f64,
 
   starts:       Vec<usize>,
   current_line: usize,
 }
 
 impl IndentGuides {
-  pub fn new(indent_width: usize, scroll_offset: f64) -> Self {
-    IndentGuides { indent_width, scroll_offset, starts: vec![], current_line: 0 }
+  pub fn new(indent_width: usize, scroll_offset: f64, margin: f64) -> Self {
+    IndentGuides { indent_width, scroll_offset, margin, starts: vec![], current_line: 0 }
   }
 
   pub fn visit(&mut self, level: IndentLevel, render: &mut Render) {
@@ -464,7 +495,7 @@ impl IndentGuides {
       * render.store.text.font_metrics().character_width
       * self.indent_width as f64)
       .round()
-      + 20.0
+      + self.margin
       + INDENT_GUIDE_WIDTH / 2.0;
     let min_y = start as f64 * render.store.text.font_metrics().line_height
       + self.scroll_offset
