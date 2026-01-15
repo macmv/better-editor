@@ -83,6 +83,97 @@ impl EditorState {
         }
       }
 
+      Move::MatchingBracket => {
+        let offset = self.doc.cursor_offset(self.cursor);
+
+        #[derive(Default)]
+        struct BraceCollector {
+          // Signed because braces can be mismatched.
+          parens:   i32,
+          brackets: i32,
+          braces:   i32,
+        }
+
+        impl BraceCollector {
+          fn visit(&mut self, c: char) {
+            match c {
+              '(' => self.parens += 1,
+              ')' => self.parens -= 1,
+              '[' => self.brackets += 1,
+              ']' => self.brackets -= 1,
+              '{' => self.braces += 1,
+              '}' => self.braces -= 1,
+              _ => {}
+            }
+          }
+
+          fn count_of(&self, c: char) -> i32 {
+            match c {
+              '(' | ')' => self.parens,
+              '[' | ']' => self.brackets,
+              '{' | '}' => self.braces,
+              _ => unreachable!(),
+            }
+          }
+        }
+
+        let mut search_forward = true;
+        let mut found = None;
+
+        let mut i = offset;
+        for c in self.doc.range(offset..).chars() {
+          match c {
+            '\n' => {
+              break;
+            }
+            '(' | '[' | '{' => {
+              search_forward = true;
+              found = Some((i, opposite_brace(c)));
+              break;
+            }
+            ')' | ']' | '}' => {
+              search_forward = false;
+              found = Some((i + c.len_utf8(), opposite_brace(c)));
+              break;
+            }
+
+            _ => i += c.len_utf8(),
+          }
+        }
+
+        if let Some((found, to_match)) = found {
+          let slice =
+            if search_forward { self.doc.range(found..) } else { self.doc.range(..found) };
+          let iter = MaybeReversed::from_forward(slice.chars(), search_forward);
+
+          let mut collector = BraceCollector::default();
+
+          let mut matched = false;
+          let mut index = found;
+          for c in iter {
+            collector.visit(c);
+            if c == to_match && collector.count_of(to_match) == 0 {
+              matched = true;
+              if !search_forward {
+                index -= c.len_utf8();
+              }
+              break;
+            }
+
+            if search_forward {
+              index += c.len_utf8();
+            } else {
+              index -= c.len_utf8();
+            }
+          }
+
+          if matched {
+            self.cursor = self.doc.offset_to_cursor(index);
+            self.clamp_cursor();
+          }
+        }
+      }
+
       Move::Result(dir) => {
         if let Some(search) = self.search_text.as_ref() {
           let offset = self.doc.cursor_offset(self.cursor) + 1;
@@ -140,6 +231,46 @@ impl EditorState {
   }
 
   fn cursor_kind(&self) -> WordKind { word_kind(self.cursor_char()) }
+}
+
+enum MaybeReversed<T> {
+  Forward(T),
+  Reversed(std::iter::Rev<T>),
+}
+
+impl<T> MaybeReversed<T>
+where
+  T: DoubleEndedIterator,
+{
+  fn from_forward(iter: T, forward: bool) -> MaybeReversed<T> {
+    if forward { MaybeReversed::Forward(iter) } else { MaybeReversed::Reversed(iter.rev()) }
+  }
+}
+
+impl<T> Iterator for MaybeReversed<T>
+where
+  T: DoubleEndedIterator,
+{
+  type Item = T::Item;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    match self {
+      MaybeReversed::Forward(iter) => iter.next(),
+      MaybeReversed::Reversed(iter) => iter.next(),
+    }
+  }
+}
+
+fn opposite_brace(c: char) -> char {
+  match c {
+    '(' => ')',
+    ')' => '(',
+    '[' => ']',
+    ']' => '[',
+    '{' => '}',
+    '}' => '{',
+    _ => unreachable!(),
+  }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -222,5 +353,76 @@ mod tests {
         expect![@"⟦f⟧n foo() -> Self { bar }"],
       ],
     );
+  }
+
+  #[test]
+  fn matching_bracket() {
+    let mut editor = editor("fn foo(bar)");
+    editor.check_repeated(
+      |e| e.perform_move(Move::MatchingBracket),
+      &[expect![@"fn foo(bar⟦)⟧"], expect![@"fn foo⟦(⟧bar)"], expect![@"fn foo(bar⟦)⟧"]],
+    );
+  }
+
+  #[test]
+  fn matching_bracket_nested() {
+    let mut editor = editor("fn foo(bar(baz))");
+    editor.check_repeated(
+      |e| e.perform_move(Move::MatchingBracket),
+      &[
+        expect![@"fn foo(bar(baz)⟦)⟧"],
+        expect![@"fn foo⟦(⟧bar(baz))"],
+        expect![@"fn foo(bar(baz)⟦)⟧"],
+      ],
+    );
+
+    editor.perform_move(Move::Single(be_input::Direction::Left));
+    editor.check(expect![@"fn foo(bar(baz⟦)⟧)"]);
+    editor.check_repeated(
+      |e| e.perform_move(Move::MatchingBracket),
+      &[
+        expect![@"fn foo(bar⟦(⟧baz))"],
+        expect![@"fn foo(bar(baz⟦)⟧)"],
+        expect![@"fn foo(bar⟦(⟧baz))"],
+      ],
+    );
+  }
+
+  #[test]
+  fn matching_bracket_multi_line() {
+    let mut editor = editor("fn foo{\n  bar\n}\n");
+    editor.check_repeated(
+      |e| e.perform_move(Move::MatchingBracket),
+      &[
+        expect![@r#"
+          fn foo{
+            bar
+          ⟦}⟧
+        "#],
+        expect![@r#"
+          fn foo⟦{⟧
+            bar
+          }
+        "#],
+        expect![@r#"
+          fn foo{
+            bar
+          ⟦}⟧
+        "#],
+      ],
+    );
+
+    editor.perform_move(Move::Single(be_input::Direction::Up));
+    editor.check(expect![@r#"
+      fn foo{
+      ⟦ ⟧ bar
+      }
+    "#]);
+    editor.perform_move(Move::MatchingBracket);
+    editor.check(expect![@r#"
+      fn foo{
+      ⟦ ⟧ bar
+      }
+    "#]);
   }
 }
