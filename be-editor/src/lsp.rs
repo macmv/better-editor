@@ -11,7 +11,7 @@ pub struct LspState {
   pub store:  Rc<RefCell<be_lsp::LanguageServerStore>>,
   pub client: LanguageClientState,
 
-  document_version:       i32,
+  document_version:       u32,
   pub completions:        CompletionsState,
   pub(crate) diagnostics: Vec<Diagnostic>,
 

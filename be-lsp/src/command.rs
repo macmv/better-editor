@@ -179,7 +179,7 @@ impl LspCommand for DidOpenTextDocument {
 
 pub struct DidChangeTextDocument {
   pub path:              PathBuf,
-  pub version:           i32,
+  pub version:           u32,
   pub doc_before_change: Document,
   pub changes:           Vec<Change>,
 }
@@ -199,6 +199,7 @@ impl LspCommand for DidChangeTextDocument {
       for change in &self.changes {
         file.doc.apply(change);
       }
+      file.version = self.version;
 
       self
         .changes
@@ -217,7 +218,7 @@ impl LspCommand for DidChangeTextDocument {
       types::DidChangeTextDocumentParams {
         text_document: types::VersionedTextDocumentIdentifier {
           text_document_identifier: doc_id(&self.path),
-          version:                  self.version,
+          version:                  self.version as i32,
         },
         content_changes,
       },
@@ -423,6 +424,14 @@ fn on_publish_diagnostics(state: &mut LspState, params: lsp::PublishDiagnosticsP
 
   let encoding = state.position_encoding();
   let Some(file) = state.file_mut(&path) else { return };
+  if let Some(version) = params.version {
+    if file.version as i32 != version {
+      return;
+    }
+  } else {
+    warn!("cannot handle publish diagnostics without version");
+    return;
+  }
 
   file.diagnostics.clear();
   file.diagnostics.extend(params.diagnostics.into_iter().map(|d| Diagnostic {

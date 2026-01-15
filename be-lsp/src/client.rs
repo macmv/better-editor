@@ -37,6 +37,7 @@ pub struct LspState {
 
 #[derive(Default)]
 pub struct FileState {
+  pub version:     u32,
   pub doc:         Document,
   pub diagnostics: Vec<Diagnostic>,
 }
