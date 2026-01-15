@@ -140,15 +140,14 @@ mod tests {
     let mut editor = editor("foo\nbar\n");
 
     editor.perform_move(Move::LineEnd);
-    editor.check(expect![@r#"
-      fo⟦o⟧
-      bar
-    "#
-    ]);
 
     editor.check_repeated(
       |e| e.perform_edit(Edit::Delete(Move::Single(Direction::Right))),
       &[
+        expect![@r#"
+          fo⟦o⟧
+          bar
+        "#],
         expect![@r#"
           f⟦o⟧
           bar
@@ -169,14 +168,14 @@ mod tests {
     );
 
     editor.perform_move(Move::Single(Direction::Down));
-    editor.check(expect![@r#"
-
-      ⟦b⟧ar
-    "#]);
 
     editor.check_repeated(
       |e| e.perform_edit(Edit::Delete(Move::Single(Direction::Right))),
       &[
+        expect![@r#"
+
+          ⟦b⟧ar
+        "#],
         expect![@r#"
 
           ⟦a⟧r
@@ -202,13 +201,13 @@ mod tests {
     let mut editor = editor("foo\nbar\n");
     editor.perform_move(Move::LineEnd);
     editor.perform_action(be_input::Action::SetMode { mode: be_input::Mode::Insert, delta: 1 });
-    editor.check(expect![@r#"
-      foo‖
-      bar
-    "#]);
     editor.check_repeated(
       |e| e.perform_edit(Edit::Backspace),
       &[
+        expect![@r#"
+          foo‖
+          bar
+        "#],
         expect![@r#"
           fo‖
           bar

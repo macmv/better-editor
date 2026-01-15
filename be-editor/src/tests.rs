@@ -37,8 +37,10 @@ impl TestEditor {
   pub fn check(&self, expect: Expect) { expect.assert_eq(&self.state()); }
 
   pub fn check_repeated(&mut self, f: impl Fn(&mut EditorState), expect: &[Expect]) {
-    for expect in expect {
-      f(&mut self.0);
+    for (i, expect) in expect.iter().enumerate() {
+      if i != 0 {
+        f(&mut self.0);
+      }
       expect.assert_eq(&self.state());
     }
   }
@@ -76,11 +78,16 @@ fn move_col_works() {
 #[test]
 fn move_col_handles_emojis() {
   let mut editor = editor("f💖oo");
-  editor.check(expect![@"⟦f⟧💖oo"]);
 
   editor.check_repeated(
     |e| e.move_col_rel(1),
-    &[expect![@"f⟦💖⟧oo"], expect![@"f💖⟦o⟧o"], expect![@"f💖o⟦o⟧"], expect![@"f💖o⟦o⟧"]],
+    &[
+      expect![@"⟦f⟧💖oo"],
+      expect![@"f⟦💖⟧oo"],
+      expect![@"f💖⟦o⟧o"],
+      expect![@"f💖o⟦o⟧"],
+      expect![@"f💖o⟦o⟧"],
+    ],
   );
 }
 
@@ -91,7 +98,10 @@ fn move_col_handles_graphemes() {
   assert_eq!(str.chars().count(), 4);
   let mut editor = editor(str);
 
-  editor.check_repeated(|e| e.move_col_rel(1), &[expect![@"f⟦é⟧o"], expect![@"fé⟦o⟧"]]);
+  editor.check_repeated(
+    |e| e.move_col_rel(1),
+    &[expect![@"⟦f⟧éo"], expect![@"f⟦é⟧o"], expect![@"fé⟦o⟧"]],
+  );
 }
 
 #[test]
@@ -129,5 +139,8 @@ fn move_graphemes_handles_graphemes() {
   assert_eq!(str.chars().count(), 4);
   let mut editor = editor(str);
 
-  editor.check_repeated(|e| e.move_graphemes(1), &[expect![@"f⟦é⟧o"], expect![@"fé⟦o⟧"]]);
+  editor.check_repeated(
+    |e| e.move_graphemes(1),
+    &[expect![@"⟦f⟧éo"], expect![@"f⟦é⟧o"], expect![@"fé⟦o⟧"]],
+  );
 }
