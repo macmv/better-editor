@@ -169,18 +169,7 @@ impl EditorView {
       let layout = self.cached_layouts.get(&i).unwrap();
       render.draw_text(&layout, Point::new(margin, y));
 
-      let mut shape =
-        Circle::new((0.0, y + render.store.text.font_metrics().line_height / 2.0), 1.5);
-      for (i, c) in self.editor.doc().line(be_doc::Line(i)).chars().rev().enumerate() {
-        if c == ' ' {
-          shape.center.x = margin + layout.size().width
-            - (i as f64 * render.store.text.font_metrics().character_width)
-            - render.store.text.font_metrics().character_width / 2.0;
-          render.fill(&shape, render.theme().background_raised);
-        } else {
-          break;
-        }
-      }
+      self.draw_trailing_spaces(i, margin + layout.size().width, y, render);
 
       y += line_height;
       i += 1;
@@ -381,6 +370,20 @@ impl EditorView {
         &layout,
         (render.size().width - layout.size().width, render.size().height - line_height * y as f64),
       );
+    }
+  }
+
+  fn draw_trailing_spaces(&self, i: usize, end_of_line: f64, y: f64, render: &mut Render) {
+    let mut shape = Circle::new((0.0, y + render.store.text.font_metrics().line_height / 2.0), 1.5);
+    for (i, c) in self.editor.doc().line(be_doc::Line(i)).chars().rev().enumerate() {
+      if c == ' ' {
+        shape.center.x = end_of_line
+          - (i as f64 * render.store.text.font_metrics().character_width)
+          - render.store.text.font_metrics().character_width / 2.0;
+        render.fill(&shape, render.theme().background_raised);
+      } else {
+        break;
+      }
     }
   }
 
