@@ -176,43 +176,7 @@ impl EditorView {
       index += self.editor.doc().rope.byte_slice(index..).raw_lines().next().unwrap().byte_len();
     }
 
-    if let Some(changes) = &self.editor.changes {
-      for hunk in changes.hunks() {
-        if be_doc::Line(hunk.after.end) < min_line || be_doc::Line(hunk.after.start) > max_line {
-          continue;
-        }
-
-        for change in hunk.changes.iter().rev() {
-          if be_doc::Line(change.after().end) < min_line
-            || be_doc::Line(change.after().start) > max_line
-          {
-            continue;
-          }
-
-          if change.after().is_empty() {
-            let y = start_y + (change.after().start - min_line.as_usize()) as f64 * line_height;
-
-            let shape = Triangle::new((0.0, y - 4.0), (0.0, y + 4.0), (4.0, y));
-            render.fill(&shape, render.theme().diff_remove);
-          } else {
-            let min_y =
-              start_y + (change.after().start as f64 - min_line.as_usize() as f64) * line_height;
-            let max_y =
-              start_y + (change.after().end as f64 - min_line.as_usize() as f64) * line_height;
-
-            let shape = Rect::new(0.0, min_y, 4.0, max_y);
-            render.fill(
-              &shape,
-              if change.before().is_empty() {
-                render.theme().diff_add
-              } else {
-                render.theme().diff_change
-              },
-            );
-          }
-        }
-      }
-    }
+    self.draw_change_gutter(start_y, min_line, max_line, render);
 
     indent_guides.finish(render);
 
@@ -383,6 +347,54 @@ impl EditorView {
         render.fill(&shape, render.theme().background_raised);
       } else {
         break;
+      }
+    }
+  }
+
+  fn draw_change_gutter(
+    &self,
+    start_y: f64,
+    min_line: be_doc::Line,
+    max_line: be_doc::Line,
+    render: &mut Render,
+  ) {
+    let line_height = render.store.text.font_metrics().line_height;
+
+    if let Some(changes) = &self.editor.changes {
+      for hunk in changes.hunks() {
+        if be_doc::Line(hunk.after.end) < min_line || be_doc::Line(hunk.after.start) > max_line {
+          continue;
+        }
+
+        for change in hunk.changes.iter().rev() {
+          if be_doc::Line(change.after().end) < min_line
+            || be_doc::Line(change.after().start) > max_line
+          {
+            continue;
+          }
+
+          if change.after().is_empty() {
+            let y = start_y + (change.after().start - min_line.as_usize()) as f64 * line_height;
+
+            let shape = Triangle::new((0.0, y - 4.0), (0.0, y + 4.0), (4.0, y));
+            render.fill(&shape, render.theme().diff_remove);
+          } else {
+            let min_y =
+              start_y + (change.after().start as f64 - min_line.as_usize() as f64) * line_height;
+            let max_y =
+              start_y + (change.after().end as f64 - min_line.as_usize() as f64) * line_height;
+
+            let shape = Rect::new(0.0, min_y, 4.0, max_y);
+            render.fill(
+              &shape,
+              if change.before().is_empty() {
+                render.theme().diff_add
+              } else {
+                render.theme().diff_change
+              },
+            );
+          }
+        }
       }
     }
   }
