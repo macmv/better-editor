@@ -1,5 +1,5 @@
 use be_doc::{Column, Line};
-use be_input::{Direction, Move};
+use be_input::{ChangeDirection, Direction, Move};
 
 use crate::EditorState;
 
@@ -83,58 +83,37 @@ impl EditorState {
         }
       }
 
-      Move::NextResult => {
+      Move::Result(dir) => {
         if let Some(search) = self.search_text.as_ref() {
-          if let Some(res) =
-            self.doc.find_from(self.doc.cursor_offset(self.cursor) + 1, search).next()
-          {
+          let offset = self.doc.cursor_offset(self.cursor) + 1;
+          if let Some(res) = match dir {
+            ChangeDirection::Next => self.doc.find_from(offset, search).next(),
+            ChangeDirection::Prev => self.doc.rfind_from(offset, search).next(),
+          } {
             let cursor = self.doc.offset_to_cursor(res);
             self.cursor = cursor;
           }
         }
       }
 
-      Move::PrevResult => {
-        if let Some(search) = self.search_text.as_ref() {
-          if let Some(res) =
-            self.doc.rfind_from(self.doc.cursor_offset(self.cursor) + 1, search).next()
-          {
-            let cursor = self.doc.offset_to_cursor(res);
-            self.cursor = cursor;
-          }
-        }
-      }
-
-      Move::NextChange => {
+      Move::Change(dir) => {
         if let Some(changes) = &self.changes {
-          if let Some(line) = changes.next_hunk(self.cursor.line) {
+          if let Some(line) = match dir {
+            ChangeDirection::Next => changes.next_hunk(self.cursor.line),
+            ChangeDirection::Prev => changes.prev_hunk(self.cursor.line),
+          } {
             self.move_to_line(line);
           }
         }
       }
 
-      Move::PrevChange => {
-        if let Some(changes) = &self.changes {
-          if let Some(line) = changes.prev_hunk(self.cursor.line) {
-            self.move_to_line(line);
-          }
-        }
-      }
-
-      Move::NextDiagnostic => {
+      Move::Diagnostic(dir) => {
         let offset = self.doc.cursor_offset(self.cursor);
 
-        if let Some(d) = self.lsp.diagnostics.iter().find(|d| d.range.start > offset) {
-          let cursor = self.doc.offset_to_cursor(d.range.start);
-          self.move_to_line(cursor.line);
-          self.move_to_col(cursor.column);
-        }
-      }
-
-      Move::PrevDiagnostic => {
-        let offset = self.doc.cursor_offset(self.cursor);
-
-        if let Some(d) = self.lsp.diagnostics.iter().rfind(|d| d.range.start < offset) {
+        if let Some(d) = match dir {
+          ChangeDirection::Next => self.lsp.diagnostics.iter().find(|d| d.range.start > offset),
+          ChangeDirection::Prev => self.lsp.diagnostics.iter().rfind(|d| d.range.start < offset),
+        } {
           let cursor = self.doc.offset_to_cursor(d.range.start);
           self.move_to_line(cursor.line);
           self.move_to_col(cursor.column);

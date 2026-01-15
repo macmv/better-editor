@@ -37,14 +37,15 @@ pub enum Move {
   FileStart,
   FileEnd,
 
-  NextResult,
-  PrevResult,
+  Result(ChangeDirection),
+  Change(ChangeDirection),
+  Diagnostic(ChangeDirection),
+}
 
-  NextChange,
-  PrevChange,
-
-  NextDiagnostic,
-  PrevDiagnostic,
+#[derive(Debug, Copy, Clone)]
+pub enum ChangeDirection {
+  Next,
+  Prev,
 }
 
 pub enum Edit {
@@ -196,8 +197,8 @@ fn parse_move(
     Key::Char('^') => LineStartOfText,
     Key::Char('$') => LineEnd,
     Key::Char('%') => MatchingBracket,
-    Key::Char('n') => NextResult,
-    Key::Char('N') => PrevResult,
+    Key::Char('n') => Result(ChangeDirection::Next),
+    Key::Char('N') => Result(ChangeDirection::Prev),
     Key::Char('g') => match iter.next().ok_or(ActionError::Incomplete)?.key {
       Key::Char('g') => FileStart,
       _ => return Err(ActionError::Unrecognized),
@@ -212,13 +213,13 @@ fn parse_move(
       _ => return Err(ActionError::Unrecognized),
     },
     Key::Char('[') => match iter.next().ok_or(ActionError::Incomplete)?.key {
-      Key::Char('c') => PrevChange,
-      Key::Char('g') => PrevDiagnostic,
+      Key::Char('c') => Change(ChangeDirection::Prev),
+      Key::Char('g') => Diagnostic(ChangeDirection::Prev),
       _ => return Err(ActionError::Unrecognized),
     },
     Key::Char(']') => match iter.next().ok_or(ActionError::Incomplete)?.key {
-      Key::Char('c') => NextChange,
-      Key::Char('g') => NextDiagnostic,
+      Key::Char('c') => Change(ChangeDirection::Next),
+      Key::Char('g') => Diagnostic(ChangeDirection::Next),
       _ => return Err(ActionError::Unrecognized),
     },
 
