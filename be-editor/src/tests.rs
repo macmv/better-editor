@@ -1,4 +1,5 @@
 use crate::EditorState;
+use be_input::Mode;
 use expect_test::Expect;
 use std::{
   fmt,
@@ -17,11 +18,17 @@ impl TestEditor {
 
     let g = s[cursor_offset..].graphemes(true).next().unwrap();
 
-    if g == "\n" {
-      s.insert_str(cursor_offset, "⟦ ⟧");
-    } else {
-      s.insert(cursor_offset + g.len(), '⟧');
-      s.insert(cursor_offset, '⟦');
+    match self.0.mode {
+      Mode::Insert => s.insert_str(cursor_offset, "‖"),
+      Mode::Normal => {
+        if g == "\n" {
+          s.insert_str(cursor_offset, "⟦ ⟧");
+        } else {
+          s.insert(cursor_offset + g.len(), '⟧');
+          s.insert(cursor_offset, '⟦');
+        }
+      }
+      _ => {}
     }
 
     s

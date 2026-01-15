@@ -203,26 +203,26 @@ mod tests {
     editor.perform_move(Move::LineEnd);
     editor.perform_action(be_input::Action::SetMode { mode: be_input::Mode::Insert, delta: 1 });
     editor.check(expect![@r#"
-      foo⟦ ⟧
+      foo‖
       bar
     "#]);
     editor.check_repeated(
       |e| e.perform_edit(Edit::Backspace),
       &[
         expect![@r#"
-          fo⟦ ⟧
+          fo‖
           bar
         "#],
         expect![@r#"
-          f⟦ ⟧
+          f‖
           bar
         "#],
         expect![@r#"
-          ⟦ ⟧
+          ‖
           bar
         "#],
         expect![@r#"
-          ⟦ ⟧
+          ‖
           bar
         "#],
       ],
