@@ -68,6 +68,18 @@ impl EditorView {
       self.cached_layouts.remove(&line.as_usize());
     }
 
+    let line_height = render.store.text.font_metrics().line_height;
+
+    render.split(
+      self,
+      kurbo::Axis::Horizontal,
+      crate::Distance::Pixels(-line_height),
+      |state, render| state.draw_editor(render),
+      |state, render| state.draw_status(render),
+    );
+  }
+
+  fn draw_editor(&mut self, render: &mut Render) {
     render.fill(
       &Rect::new(0.0, 0.0, render.size().width, render.size().height),
       render.theme().background,
@@ -203,16 +215,15 @@ impl EditorView {
 
       self.draw_completions(cursor, render);
     }
+  }
 
+  fn draw_status(&mut self, render: &mut Render) {
     render.fill(
-      &Rect::new(
-        0.0,
-        render.size().height - line_height,
-        render.size().width,
-        render.size().height,
-      ),
+      &Rect::new(0.0, 0.0, render.size().width, render.size().height),
       render.theme().background_raised,
     );
+
+    let line_height = render.store.text.font_metrics().line_height;
 
     if let Some(command) = self.editor.command() {
       let text_pos = Point::new(20.0, render.size().height - line_height);
