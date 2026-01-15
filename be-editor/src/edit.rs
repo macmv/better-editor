@@ -72,8 +72,10 @@ impl EditorState {
         self.clamp_column();
       }
       Edit::Backspace => {
-        self.move_graphemes(-1);
-        self.change(Change::remove(self.doc.grapheme_slice(self.cursor, 1)));
+        if self.doc.cursor_offset(self.cursor) > 0 {
+          self.move_graphemes(-1);
+          self.change(Change::remove(self.doc.grapheme_slice(self.cursor, 1)));
+        }
       }
       Edit::Undo => {
         if self.history_position < self.history.len() {
@@ -193,5 +195,37 @@ mod tests {
         "#],
       ],
     );
+  }
+
+  #[test]
+  fn backspace_stops_at_start() {
+    let mut editor = editor("foo\nbar\n");
+    editor.perform_move(Move::LineEnd);
+    editor.perform_action(be_input::Action::SetMode { mode: be_input::Mode::Insert, delta: 1 });
+    editor.check(expect![@r#"
+      foo⟦ ⟧
+      bar
+    "#]);
+    editor.check_repeated(
+      |e| e.perform_edit(Edit::Backspace),
+      &[
+        expect![@r#"
+          fo⟦ ⟧
+          bar
+        "#],
+        expect![@r#"
+          f⟦ ⟧
+          bar
+        "#],
+        expect![@r#"
+          ⟦ ⟧
+          bar
+        "#],
+        expect![@r#"
+          ⟦ ⟧
+          bar
+        "#],
+      ],
+    )
   }
 }
