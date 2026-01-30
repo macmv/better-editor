@@ -166,6 +166,17 @@ impl Document {
   pub fn range(&self, range: impl RangeBounds<usize>) -> RopeSlice<'_> {
     self.rope.byte_slice(range)
   }
+
+  /// Returns the line of the given byte.
+  pub fn line_of_byte(&self, mut byte: usize) -> usize {
+    // NB: `crop::line_of_byte` panics on non-char boundaries, so advance to the
+    // next char.
+    while !self.rope.is_char_boundary(byte) {
+      byte += 1;
+    }
+
+    self.rope.line_of_byte(byte)
+  }
 }
 
 impl Column {
@@ -239,5 +250,22 @@ mod tests {
         "in doc {doc:?}"
       );
     }
+  }
+
+  #[test]
+  fn line_of_byte_doesnt_panic() {
+    let doc = Document::from("💖a💖");
+    // first emoji
+    assert_eq!(doc.line_of_byte(0), 0);
+    assert_eq!(doc.line_of_byte(1), 0);
+    assert_eq!(doc.line_of_byte(2), 0);
+    assert_eq!(doc.line_of_byte(3), 0);
+    // 'a'
+    assert_eq!(doc.line_of_byte(4), 0);
+    // second emoji
+    assert_eq!(doc.line_of_byte(5), 0);
+    assert_eq!(doc.line_of_byte(6), 0);
+    assert_eq!(doc.line_of_byte(7), 0);
+    assert_eq!(doc.line_of_byte(8), 0);
   }
 }
