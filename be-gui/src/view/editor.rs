@@ -520,8 +520,8 @@ impl IndentGuides {
 
   fn draw_line(&self, start: usize, end: usize, render: &mut Render) {
     const INDENT_GUIDE_WIDTH: f64 = 1.0;
-    const INDENT_GUIDE_START_OFFSET: f64 = 5.0;
-    const INDENT_GUIDE_END_OFFSET: f64 = 0.0;
+    const INDENT_GUIDE_START_OFFSET: f64 = 1.0;
+    const INDENT_GUIDE_END_OFFSET: f64 = 1.0;
 
     let x = (self.starts.len() as f64
       * render.store.text.font_metrics().character_width
