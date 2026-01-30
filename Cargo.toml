@@ -1,19 +1,6 @@
 [workspace]
 resolver = "3"
-members = [
-  "be-async",
-  "be-task",
-  "be-crdt",
-  "be-config",
-  "be-input",
-  "be-doc",
-  "be-git",
-  "be-editor",
-  "be-lsp",
-  "be-terminal",
-  "be-animation",
-  "be-gui",
-]
+members = ["be-*"]
 
 [workspace.dependencies]
 expect-test = { version = "0.1.0", path = "../expect-test" }
