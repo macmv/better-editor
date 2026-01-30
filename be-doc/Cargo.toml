@@ -4,5 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+be-macros = { version = "0.1.0", path = "../be-macros" }
 crop = { version = "0.4.3", features = ["graphemes"] }
 unicode-width = { version = "0.2.2", default-features = false }

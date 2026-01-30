@@ -173,6 +173,7 @@ dependencies = [
 name = "be-doc"
 version = "0.1.0"
 dependencies = [
+ "be-macros",
  "crop",
  "unicode-width",
 ]
@@ -257,6 +258,13 @@ dependencies = [
  "polling",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "be-macros"
+version = "0.1.0"
+dependencies = [
+ "log",
 ]
 
 [[package]]
