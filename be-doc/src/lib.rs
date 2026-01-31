@@ -240,7 +240,7 @@ impl Document {
 
   /// Returns the line of the given byte.
   #[track_caller]
-  pub fn line_of_byte(&self, mut byte: usize) -> usize {
+  pub fn line_of_byte(&self, mut byte: usize) -> Line {
     byte = self.clamp_inclusive(byte);
 
     // NB: `crop::line_of_byte` panics on non-char boundaries, so advance to the
@@ -252,7 +252,7 @@ impl Document {
 
     byte = self.clamp_inclusive(byte);
 
-    self.rope.line_of_byte(byte)
+    Line(self.rope.line_of_byte(byte))
   }
 
   #[track_caller]
