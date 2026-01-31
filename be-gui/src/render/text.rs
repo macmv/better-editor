@@ -107,6 +107,11 @@ impl TextStore {
     builder.push_default(parley::StyleProperty::FontStack(
       self.config.borrow().font.family.as_str().into(),
     ));
+    // NB: Disable ligatures with this:
+    /*
+    builder
+      .push_default(parley::StyleProperty::FontFeatures(parley::FontSettings::from("'calt' 0")));
+    */
 
     LayoutBuilder { builder, backgrounds: vec![] }
   }
