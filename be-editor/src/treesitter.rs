@@ -2,6 +2,7 @@ use std::{ffi::CString, mem::ManuallyDrop, ops::Range, path::PathBuf};
 
 use be_config::Config;
 use be_doc::Document;
+use be_macros::ResultExt;
 use tree_sitter::{
   Language, Node, Parser, Query, QueryCaptures, QueryCursor, StreamingIterator, TextProvider, Tree,
 };
@@ -41,10 +42,10 @@ pub fn load_grammar(config: &Config, ft: &FileType) -> Option<Highlighter> {
   #[cfg(target_os = "macos")]
   let so_name = "libtree-sitter.dylib";
 
-  let grammar_path = install_grammar(ft, repo, so_name).unwrap();
+  let grammar_path = install_grammar(ft, repo, so_name)?;
 
-  let spec = std::fs::read_to_string(grammar_path.join("tree-sitter.json")).unwrap();
-  let spec = serde_json::from_str::<TreeSitterSpec>(&spec).unwrap();
+  let spec = std::fs::read_to_string(grammar_path.join("tree-sitter.json")).fatal()?;
+  let spec = serde_json::from_str::<TreeSitterSpec>(&spec).fatal()?;
 
   if spec.grammars.is_empty() {
     return None;
@@ -56,13 +57,13 @@ pub fn load_grammar(config: &Config, ft: &FileType) -> Option<Highlighter> {
   let language = LoadedLanguage::load(so_path, &grammar.name);
 
   let mut parser = Parser::new();
-  parser.set_language(&language.language).unwrap();
+  parser.set_language(&language.language).fatal()?;
 
   let highlights_query = Query::new(
     &language.language,
-    &std::fs::read_to_string(grammar_path.join(&grammar.highlights[0])).unwrap(),
+    &std::fs::read_to_string(grammar_path.join(&grammar.highlights[0])).fatal()?,
   )
-  .unwrap();
+  .fatal()?;
 
   Some(Highlighter { parser, tree: None, highlights_query, _language: language })
 }

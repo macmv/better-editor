@@ -187,6 +187,7 @@ dependencies = [
  "be-git",
  "be-input",
  "be-lsp",
+ "be-macros",
  "be-task",
  "expect-test",
  "libc",
