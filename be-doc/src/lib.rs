@@ -178,7 +178,7 @@ impl Document {
       fatal!("byte {} is out of bounds", offset);
     }
 
-    let line = Line(self.rope.line_of_byte(offset).clamp(0, self.len_lines().saturating_sub(1)));
+    let line = Line(self.line_of_byte(offset).0.clamp(0, self.len_lines().saturating_sub(1)));
     let column = Column(self.range(self.byte_of_line(line)..offset).graphemes().count());
     let mut cursor = Cursor { line, column, target_column: VisualColumn(0) };
     cursor.target_column = self.visual_column(cursor);

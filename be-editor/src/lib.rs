@@ -223,7 +223,7 @@ impl EditorState {
         - self.doc.range(change.range.clone()).chars().filter(|c| *c == '\n').count() as isize;
 
       if line_delta == 0 {
-        let target_line = be_doc::Line(self.doc.rope.line_of_byte(change.range.end));
+        let target_line = self.doc.line_of_byte(change.range.end);
         if self.cursor.line == target_line {
           let column_delta = change.text.graphemes(true).count() as isize
             - self.doc.range(change.range.clone()).graphemes().count() as isize;
@@ -336,13 +336,13 @@ impl EditorState {
   fn damage_line(&mut self, line: Line) { self.damages.insert(line); }
 
   fn damage_range(&mut self, range: Range<usize>) {
-    let start_line = self.doc.rope.line_of_byte(range.start);
-    let end_line = self.doc.rope.line_of_byte(range.end);
+    let start_line = self.doc.line_of_byte(range.start);
+    let end_line = self.doc.line_of_byte(range.end);
 
     if self.doc.range(range.clone()).chars().any(|c| c == '\n') {
       self.damage_all = true;
     } else {
-      for line in start_line..=end_line {
+      for line in start_line.0..=end_line.0 {
         self.damage_line(Line(line));
       }
     }
