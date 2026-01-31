@@ -40,13 +40,16 @@ impl Repo {
     let path = path.canonicalize().unwrap();
 
     if let Ok(rel) = path.strip_prefix(&self.root) {
-      let doc = if let Some(git) = &self.git {
-        git.lookup_in_head(&path)
+      let file = if let Some(git) = &self.git {
+        ChangedFile {
+          original: git.lookup_in_head(&path).unwrap_or_else(|| Document::new()),
+          current:  Document::read(&path).unwrap(),
+        }
       } else {
-        Document::read(&path).unwrap()
+        ChangedFile::new(Document::read(&path).unwrap())
       };
 
-      self.files.insert(rel.to_path_buf(), ChangedFile::new(doc));
+      self.files.insert(rel.to_path_buf(), file);
     }
   }
 

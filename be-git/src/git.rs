@@ -16,14 +16,14 @@ impl GitRepo {
     Ok(GitRepo { repo: Repository::open(&path)?, root: path })
   }
 
-  pub fn lookup_in_head(&self, path: &Path) -> Document {
-    let rel = path.strip_prefix(&self.root).unwrap();
+  pub fn lookup_in_head(&self, path: &Path) -> Option<Document> {
+    let rel = path.strip_prefix(&self.root).ok()?;
 
     let head = self.repo.head().unwrap().peel_to_tree().unwrap();
-    let entry = head.get_path(rel).unwrap();
+    let entry = head.get_path(rel).ok()?;
     let blob = self.repo.find_blob(entry.id()).unwrap();
 
-    Document { rope: be_doc::crop::Rope::from(String::from_utf8_lossy(blob.content())) }
+    Some(Document { rope: be_doc::crop::Rope::from(String::from_utf8_lossy(blob.content())) })
   }
 
   pub fn changes_in(&self, path: &Path) -> Option<Changes> {
