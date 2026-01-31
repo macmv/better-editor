@@ -67,9 +67,19 @@ impl State {
       }
     }
 
+    fn tab_title(tab: &be_config::TabSettings) -> Option<String> {
+      match tab {
+        be_config::TabSettings::Split(split) => split.children.iter().find_map(|t| tab_title(t)),
+        be_config::TabSettings::Shell => Some("shell".into()),
+        be_config::TabSettings::Editor => Some("editor".into()),
+        be_config::TabSettings::FileTree => None,
+      }
+    }
+
     for tab in layout.tab {
+      let title = tab_title(&tab);
       let view = build_view(&mut state, store, tab);
-      state.tabs.push(Tab { title: String::new(), content: view, search: None });
+      state.tabs.push(Tab { title: title.unwrap_or_default(), content: view, search: None });
     }
 
     for view in state.tabs[state.active].content.views() {
