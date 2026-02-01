@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashSet, ops::Range, path::Path, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, ops::Range, rc::Rc};
 
 use be_config::Config;
 use be_doc::{Change, Column, Cursor, Document, Edit, Line, crop::RopeSlice};
@@ -50,9 +50,9 @@ pub struct EditorState {
   history_position: usize,
   history:          Vec<Edit>,
 
-  pub config:   Rc<RefCell<Config>>,
-  pub lsp:      lsp::LspState,
-  pub exit_cmd: Option<Box<dyn Fn()>>,
+  pub config:  Rc<RefCell<Config>>,
+  pub lsp:     lsp::LspState,
+  pub run_cmd: Option<Box<dyn Fn(&str)>>,
 
   // TODO: Share this
   repo:        Option<Repo>,
@@ -384,46 +384,16 @@ impl EditorState {
         self.status = None;
       }
       CommandMode::Command => {
-        let (cmd, args) = command.text.split_once(' ').unwrap_or((&command.text, ""));
+        if let Some(cmd) = &self.run_cmd {
+          cmd(&command.text);
+        }
 
-        let res = match cmd {
-          "w" => {
-            self.lsp_on_save();
-
-            if self.lsp.save_task.is_some() {
-              Ok("saving...".to_string())
-            } else {
-              self
-                .save()
-                .map(|()| format!("{}: written", self.file.as_ref().unwrap().path().display()))
-            }
-          }
-          "q" => {
-            if let Some(cmd) = &self.exit_cmd {
-              cmd();
-            }
-            Ok("exiting".to_string())
-          }
-          "e" => self
-            .open(Path::new(args))
-            .map(|()| format!("{}: opened", self.file.as_ref().unwrap().path().display())),
-          "noh" => {
-            self.search_text = None;
-            self.damage_all = true;
-            self.status = None;
-            return;
-          }
-
-          _ => Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("unknown command: {}", cmd),
-          )),
-        };
-
+        /*
         match res {
           Ok(m) => self.status = Some(Status::for_success(m)),
           Err(e) => self.status = Some(Status::for_error(e)),
         }
+        */
       }
     }
   }
@@ -557,6 +527,30 @@ impl EditorState {
       }
     }
     None
+  }
+
+  pub fn begin_save(&mut self) {
+    self.lsp_on_save();
+
+    if self.lsp.save_task.is_some() {
+      self.status = Some(Status::for_success("saving..."));
+    } else {
+      match self.save() {
+        Ok(()) => {
+          self.status = Some(Status::for_success(format!(
+            "{}: written",
+            self.file.as_ref().unwrap().path().display()
+          )))
+        }
+        Err(e) => self.status = Some(Status::for_error(e)),
+      }
+    }
+  }
+
+  pub fn clear_search(&mut self) {
+    self.search_text = None;
+    self.damage_all = true;
+    self.status = None;
   }
 }
 

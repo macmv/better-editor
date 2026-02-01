@@ -286,14 +286,55 @@ impl State {
     }
   }
 
-  fn on_event(&mut self, event: Event) {
+  fn active_editor(&mut self) -> Option<&mut be_editor::EditorState> {
+    if let ViewContent::Editor(e) = &mut self.active_view_mut().content {
+      Some(&mut e.editor)
+    } else {
+      None
+    }
+  }
+
+  /// Handles an event. Returns `true` if the app should close.
+  fn on_event(&mut self, event: Event) -> bool {
     match event {
       Event::Refresh => {}
       Event::OpenFile(path) => {
         self.tabs[self.active].search = None;
         self.open(&path);
       }
-      Event::Exit => {} // Handled by `window`
+      Event::RunCommand(cmd) => {
+        let (cmd, args) = cmd.split_once(' ').unwrap_or((&cmd, ""));
+
+        match cmd {
+          "w" => {
+            if let Some(editor) = self.active_editor() {
+              editor.begin_save();
+            }
+          }
+          "q" => return true,
+          "e" => {
+            if let Some(editor) = self.active_editor() {
+              let _ = editor.open(std::path::Path::new(args));
+              /*
+              .map(|()| format!("{}: opened",
+              self.file.as_ref().unwrap().path().display()));
+              */
+            }
+          }
+          "noh" => {
+            if let Some(editor) = self.active_editor() {
+              editor.clear_search();
+            }
+          }
+
+          _ => {
+            println!("unknown command: {}", cmd);
+          }
+        }
+      }
+      Event::Exit => return true,
     }
+
+    false
   }
 }

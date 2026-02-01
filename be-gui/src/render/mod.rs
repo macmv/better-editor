@@ -20,6 +20,7 @@ pub enum Event {
   Refresh,
   OpenFile(PathBuf),
   Exit,
+  RunCommand(String),
 }
 
 pub struct RenderStore {
@@ -449,6 +450,8 @@ impl Notify {
   pub fn open_file(&self, path: PathBuf) { self.proxy.send_event(Event::OpenFile(path)).unwrap(); }
 
   pub fn exit(&self) { self.proxy.send_event(Event::Exit).unwrap(); }
+
+  pub fn run_cmd(&self, cmd: String) { self.proxy.send_event(Event::RunCommand(cmd)).unwrap(); }
 }
 
 #[derive(Debug, Copy, Clone)]

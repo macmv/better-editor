@@ -39,8 +39,8 @@ impl EditorView {
     view.editor.config = store.config.clone();
     view.editor.lsp.store = store.lsp.clone();
     let notifier = store.notifier();
-    view.editor.exit_cmd = Some(Box::new(move || {
-      notifier.exit();
+    view.editor.run_cmd = Some(Box::new(move |cmd| {
+      notifier.run_cmd(cmd.to_string());
     }));
 
     view
