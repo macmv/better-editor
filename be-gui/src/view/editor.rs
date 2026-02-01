@@ -147,7 +147,7 @@ impl EditorView {
         render.theme().text_dim
       };
 
-      let line_number_text = i.to_string();
+      let line_number_text = (i + 1).to_string();
       let layout = render.layout_text(&line_number_text, color);
       line_number_width = line_number_width.max(layout.size().width);
       line_numbers.push(layout);
