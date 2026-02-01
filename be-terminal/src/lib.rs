@@ -246,7 +246,10 @@ impl Terminal {
           }
         }
         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
-        Err(e) => println!("{}", e),
+        Err(e) => {
+          println!("{}", e);
+          break;
+        }
       }
     }
   }
