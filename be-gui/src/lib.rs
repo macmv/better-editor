@@ -324,6 +324,8 @@ impl State {
               editor.clear_search();
             }
           }
+          "vs" => self.tabs[self.active].content.split(Axis::Vertical, &mut self.views),
+          "hs" => self.tabs[self.active].content.split(Axis::Horizontal, &mut self.views),
 
           _ => {
             println!("unknown command: {}", cmd);

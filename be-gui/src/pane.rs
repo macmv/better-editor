@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use be_input::Direction;
 use kurbo::{Axis, Point, Rect};
 
-use crate::{Distance, Layout, Render, ViewId, view::View};
+use crate::{Distance, Layout, Render, ViewCollection, ViewId, view::View};
 
 pub enum Pane {
   View(ViewId),
@@ -57,6 +57,35 @@ impl Pane {
     match self {
       Pane::View(_) => None,
       Pane::Split(split) => split.focus(direction),
+    }
+  }
+
+  pub fn split(&mut self, axis: Axis, views: &mut ViewCollection) {
+    match self {
+      Pane::View(v) => {
+        let v2 = views.new_view(crate::view::Shell::new());
+
+        *self = Pane::Split(Split {
+          axis,
+          percent: vec![0.5],
+          active: 0,
+          items: vec![Pane::View(*v), Pane::View(v2)],
+        });
+      }
+
+      Pane::Split(s) => match &mut s.items[s.active] {
+        active @ Pane::Split(_) => active.split(axis, views),
+        active @ Pane::View(_) if s.axis != axis => active.split(axis, views),
+        _ => {
+          let fract = s.items.len() as f64 / (s.items.len() + 1) as f64;
+          s.items.insert(s.active + 1, Pane::View(views.new_view(crate::view::Shell::new())));
+          s.active += 1;
+          for p in &mut s.percent {
+            *p *= fract;
+          }
+          s.percent.push(1.0 - fract);
+        }
+      },
     }
   }
 
