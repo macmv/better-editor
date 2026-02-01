@@ -53,8 +53,6 @@ impl EditorView {
   pub fn draw(&mut self, render: &mut Render) {
     puffin::profile_function!();
 
-    self.editor.update();
-
     if self.cached_scale != render.scale() {
       self.cached_layouts.clear();
       self.cached_scale = render.scale();

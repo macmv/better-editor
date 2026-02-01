@@ -4,7 +4,7 @@ use kurbo::{Rect, Stroke};
 use parley::FontWeight;
 use peniko::color::AlphaColor;
 
-use crate::{Color, Render, TextLayout, oklch, theme::Theme};
+use crate::{Color, Render, TextLayout, Updater, oklch, theme::Theme};
 
 pub struct Shell {
   terminal:  Terminal,
@@ -47,6 +47,12 @@ impl Shell {
       Action::SetMode { mode: Mode::Normal, .. } => self.terminal.perform_escape(),
 
       _ => {}
+    }
+  }
+
+  pub fn update(&mut self, updater: &mut Updater) {
+    if self.terminal.update() {
+      updater.close_view();
     }
   }
 

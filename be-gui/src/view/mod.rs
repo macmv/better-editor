@@ -1,7 +1,7 @@
 use be_input::{Action, Mode};
 use kurbo::Rect;
 
-use crate::Render;
+use crate::{Render, Updater};
 
 mod editor;
 mod file_tree;
@@ -52,6 +52,15 @@ impl View {
       ViewContent::FileTree(_) => false,
       ViewContent::Shell(_) => false,
       ViewContent::Search(_) => false,
+    }
+  }
+
+  pub fn update(&mut self, updater: &mut Updater) {
+    match &mut self.content {
+      ViewContent::Editor(editor) => editor.editor.update(),
+      ViewContent::FileTree(_) => {}
+      ViewContent::Shell(shell) => shell.update(updater),
+      ViewContent::Search(search) => search.update(),
     }
   }
 

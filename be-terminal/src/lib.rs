@@ -229,7 +229,7 @@ impl Terminal {
 
   pub fn line(&self, index: usize) -> Option<Line<'_>> { self.state.grid.line(index) }
 
-  pub fn update(&mut self) {
+  pub fn update(&mut self) -> bool {
     loop {
       let mut buf = [0u8; 1024];
 
@@ -246,12 +246,17 @@ impl Terminal {
           }
         }
         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+        // EIO error -> pty closed
+        Err(e) if e.raw_os_error() == Some(rustix::io::Errno::IO.raw_os_error()) => return true,
+
         Err(e) => {
           println!("{}", e);
           break;
         }
       }
     }
+
+    false
   }
 }
 

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use be_input::Direction;
 use kurbo::{Axis, Point, Rect};
 
-use crate::{Distance, Layout, Render, ViewCollection, ViewId, view::View};
+use crate::{Distance, Layout, Render, Updater, ViewCollection, ViewId, view::View};
 
 pub enum Pane {
   View(ViewId),
@@ -26,6 +26,21 @@ impl Pane {
     match self {
       Pane::View(id) => views[id].animated(),
       Pane::Split(split) => split.items.iter().any(|item| item.animated(views)),
+    }
+  }
+
+  pub fn update(&mut self, views: &mut HashMap<ViewId, View>, updater: &mut Updater) {
+    match self {
+      Pane::View(id) => {
+        updater.active = Some(*id);
+        views.get_mut(id).unwrap().update(updater);
+        updater.active = None;
+      }
+      Pane::Split(split) => {
+        for item in &mut split.items {
+          item.update(views, updater);
+        }
+      }
     }
   }
 
@@ -57,6 +72,40 @@ impl Pane {
     match self {
       Pane::View(_) => None,
       Pane::Split(split) => split.focus(direction),
+    }
+  }
+
+  pub fn close(&mut self, view: ViewId) {
+    match self {
+      Pane::View(v) => {
+        if view == *v {
+          panic!("cannot close a view that is itself");
+        }
+      }
+
+      Pane::Split(split) => {
+        if let Some(idx) =
+          split.items.iter().position(|item| matches!(item, Pane::View(v) if *v == view))
+        {
+          if split.items.len() == 2 {
+            split.items.remove(idx);
+            *self = split.items.pop().unwrap();
+          } else {
+            // TODO: Even out the percentages.
+            if idx == split.items.len() - 1 {
+              split.percent.pop();
+            } else {
+              split.percent.remove(idx);
+            }
+
+            split.items.remove(idx);
+          }
+        } else {
+          for item in &mut split.items {
+            item.close(view);
+          }
+        }
+      }
     }
   }
 

@@ -36,6 +36,11 @@ struct Tab {
   search:  Option<View>,
 }
 
+pub struct Updater {
+  to_close: Vec<ViewId>,
+  active:   Option<ViewId>,
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct ViewId(u64);
 
@@ -107,6 +112,15 @@ impl State {
   }
 
   fn animated(&self) -> bool { self.tabs[self.active].content.animated(&self.views.views) }
+
+  fn update(&mut self) {
+    let tab = &mut self.tabs[self.active];
+    let mut updater = Updater { to_close: vec![], active: None };
+    tab.content.update(&mut self.views.views, &mut updater);
+    for to_close in updater.to_close.drain(..) {
+      tab.content.close(to_close);
+    }
+  }
 
   fn draw(&mut self, render: &mut Render) {
     render.split(
@@ -354,5 +368,15 @@ impl ViewCollection {
 
   pub fn visible_mut(&mut self) -> impl Iterator<Item = &mut View> {
     self.views.values_mut().filter(|v| v.visible())
+  }
+}
+
+impl Updater {
+  pub fn close_view(&mut self) {
+    if let Some(id) = self.active {
+      self.to_close.push(id);
+    } else {
+      panic!("no active view set");
+    }
   }
 }

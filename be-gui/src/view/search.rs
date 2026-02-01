@@ -31,8 +31,9 @@ impl Search {
     search
   }
 
+  pub fn update(&mut self) { self.index.nucleo.tick(1); }
+
   pub fn draw(&mut self, render: &mut Render) {
-    self.index.nucleo.tick(1);
     let snap = self.index.nucleo.snapshot();
 
     let bounds = Rect::from_origin_size(Point::ZERO, render.size());
