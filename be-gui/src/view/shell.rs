@@ -1,6 +1,6 @@
 use be_input::{Action, Direction, Edit, Mode, Move};
 use be_terminal::{StyleFlags, Terminal, TerminalColor};
-use kurbo::Rect;
+use kurbo::{Rect, Stroke};
 use parley::FontWeight;
 use peniko::color::AlphaColor;
 
@@ -9,6 +9,7 @@ use crate::{Color, Render, TextLayout, oklch, theme::Theme};
 pub struct Shell {
   terminal:  Terminal,
   set_waker: bool,
+  focused:   bool,
 
   cached_layouts: Vec<LineLayout>,
   cached_scale:   f64,
@@ -24,10 +25,13 @@ impl Shell {
     Shell {
       terminal:       Terminal::new(be_terminal::Size { rows: 40, cols: 80 }),
       set_waker:      false,
+      focused:        false,
       cached_layouts: vec![],
       cached_scale:   0.0,
     }
   }
+
+  pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
 
   pub fn perform_action(&mut self, action: Action) {
     match action {
@@ -112,16 +116,15 @@ impl Shell {
 
     if self.terminal.state().cursor.visible {
       let cursor = self.terminal.state().cursor;
-      render.fill(
-        &Rect::from_origin_size(
-          (
-            (cursor.col as f64 * character_width).round(),
-            (cursor.row as f64 * line_height).round(),
-          ),
-          (character_width.ceil(), line_height.ceil()),
-        ),
-        render.theme().text,
+      let cursor = Rect::from_origin_size(
+        ((cursor.col as f64 * character_width).round(), (cursor.row as f64 * line_height).round()),
+        (character_width.ceil(), line_height.ceil()),
       );
+      if self.focused {
+        render.fill(&cursor.ceil(), render.theme().text);
+      } else {
+        render.stroke(&cursor.inset(-0.5 * render.scale()), render.theme().text, Stroke::new(1.0));
+      }
     }
   }
 

@@ -96,7 +96,7 @@ impl View {
     match &mut self.content {
       ViewContent::Editor(editor) => editor.on_focus(focus),
       ViewContent::FileTree(file_tree) => file_tree.on_focus(focus),
-      ViewContent::Shell(_) => {}
+      ViewContent::Shell(shell) => shell.on_focus(focus),
       ViewContent::Search(_) => {}
     }
   }
