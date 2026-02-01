@@ -7,7 +7,7 @@ scroll-offset = 0
 indent-width = 2
 
 [[layout.tab]]
-pane = "shell"
+pane = "terminal"
 
 [[layout.tab]]
 pane = "split"
@@ -20,7 +20,7 @@ children = [
 ]
 
 [[layout.tab]]
-pane = "shell"
+pane = "terminal"
 
 [language.rust]
 tree-sitter = "https://github.com/tree-sitter/tree-sitter-rust"

@@ -112,7 +112,7 @@ impl Pane {
   pub fn split(&mut self, axis: Axis, views: &mut ViewCollection) {
     match self {
       Pane::View(v) => {
-        let v2 = views.new_view(crate::view::Shell::new());
+        let v2 = views.new_view(crate::view::TerminalView::new());
 
         *self = Pane::Split(Split {
           axis,
@@ -127,7 +127,8 @@ impl Pane {
         active @ Pane::View(_) if s.axis != axis => active.split(axis, views),
         _ => {
           let fract = s.items.len() as f64 / (s.items.len() + 1) as f64;
-          s.items.insert(s.active + 1, Pane::View(views.new_view(crate::view::Shell::new())));
+          s.items
+            .insert(s.active + 1, Pane::View(views.new_view(crate::view::TerminalView::new())));
           s.active += 1;
           for p in &mut s.percent {
             *p *= fract;

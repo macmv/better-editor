@@ -115,7 +115,7 @@ pub enum TabSettings {
   Split(SplitSettings),
   FileTree,
   Editor,
-  Shell,
+  Terminal,
 }
 
 #[derive(Clone, serde::Deserialize)]

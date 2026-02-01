@@ -6,7 +6,7 @@ use peniko::color::AlphaColor;
 
 use crate::{Color, Render, TextLayout, Updater, oklch, theme::Theme};
 
-pub struct Shell {
+pub struct TerminalView {
   terminal:  Terminal,
   set_waker: bool,
   focused:   bool,
@@ -20,9 +20,9 @@ struct LineLayout {
   background: Vec<(f64, f64, Color)>,
 }
 
-impl Shell {
+impl TerminalView {
   pub fn new() -> Self {
-    Shell {
+    TerminalView {
       terminal:       Terminal::new(be_terminal::Size { rows: 40, cols: 80 }),
       set_waker:      false,
       focused:        false,

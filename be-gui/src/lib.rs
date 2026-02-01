@@ -67,7 +67,9 @@ impl State {
           active:  split.active,
           items:   split.children.into_iter().map(|c| build_view(state, store, c)).collect(),
         }),
-        be_config::TabSettings::Shell => Pane::View(state.views.new_view(view::Shell::new())),
+        be_config::TabSettings::Terminal => {
+          Pane::View(state.views.new_view(view::TerminalView::new()))
+        }
         be_config::TabSettings::Editor => {
           Pane::View(state.views.new_view(view::EditorView::new(store)))
         }
@@ -80,7 +82,7 @@ impl State {
     fn tab_title(tab: &be_config::TabSettings) -> Option<String> {
       match tab {
         be_config::TabSettings::Split(split) => split.children.iter().find_map(|t| tab_title(t)),
-        be_config::TabSettings::Shell => Some("shell".into()),
+        be_config::TabSettings::Terminal => Some("terminal".into()),
         be_config::TabSettings::Editor => Some("editor".into()),
         be_config::TabSettings::FileTree => None,
       }
