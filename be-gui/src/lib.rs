@@ -20,10 +20,14 @@ struct State {
   active: usize,
   tabs:   Vec<Tab>,
 
-  next_view_id: ViewId,
-  views:        HashMap<ViewId, View>,
+  views: ViewCollection,
 
   notify: Notify,
+}
+
+struct ViewCollection {
+  next_view_id: ViewId,
+  views:        HashMap<ViewId, View>,
 }
 
 struct Tab {
@@ -38,12 +42,11 @@ pub struct ViewId(u64);
 impl State {
   pub fn new(store: &RenderStore) -> Self {
     let mut state = State {
-      keys:         vec![],
-      active:       1,
-      tabs:         vec![],
-      next_view_id: ViewId(0),
-      views:        HashMap::new(),
-      notify:       store.notifier(),
+      keys:   vec![],
+      active: 1,
+      tabs:   vec![],
+      views:  ViewCollection::new(),
+      notify: store.notifier(),
     };
 
     let layout = store.config.borrow().layout.clone();
@@ -59,10 +62,12 @@ impl State {
           active:  split.active,
           items:   split.children.into_iter().map(|c| build_view(state, store, c)).collect(),
         }),
-        be_config::TabSettings::Shell => Pane::View(state.new_view(view::Shell::new())),
-        be_config::TabSettings::Editor => Pane::View(state.new_view(view::EditorView::new(store))),
+        be_config::TabSettings::Shell => Pane::View(state.views.new_view(view::Shell::new())),
+        be_config::TabSettings::Editor => {
+          Pane::View(state.views.new_view(view::EditorView::new(store)))
+        }
         be_config::TabSettings::FileTree => {
-          Pane::View(state.new_view(view::FileTree::current_directory(store.notifier())))
+          Pane::View(state.views.new_view(view::FileTree::current_directory(store.notifier())))
         }
       }
     }
@@ -83,7 +88,7 @@ impl State {
     }
 
     for view in state.tabs[state.active].content.views() {
-      state.views.get_mut(&view).unwrap().on_visible(true);
+      state.views.get_mut(view).unwrap().on_visible(true);
     }
 
     state.active_view_mut().on_focus(true);
@@ -91,24 +96,17 @@ impl State {
     state
   }
 
-  fn new_view(&mut self, view: impl Into<View>) -> ViewId {
-    let id = self.next_view_id;
-    self.next_view_id.0 += 1;
-    self.views.insert(id, view.into());
-    id
-  }
-
   fn layout(&mut self, layout: &mut Layout) {
     layout.split(
       self,
       Axis::Horizontal,
       Distance::Pixels(-20.0),
-      |state, layout| state.tabs[state.active].content.layout(&mut state.views, layout),
+      |state, layout| state.tabs[state.active].content.layout(&mut state.views.views, layout),
       |_, _| {},
     );
   }
 
-  fn animated(&self) -> bool { self.tabs[self.active].content.animated(&self.views) }
+  fn animated(&self) -> bool { self.tabs[self.active].content.animated(&self.views.views) }
 
   fn draw(&mut self, render: &mut Render) {
     render.split(
@@ -117,7 +115,7 @@ impl State {
       Distance::Pixels(-20.0),
       |state, render| {
         let tab = &mut state.tabs[state.active];
-        tab.content.draw(&mut state.views, render);
+        tab.content.draw(&mut state.views.views, render);
         if let Some(search) = &mut tab.search {
           render.clipped(
             Rect::new(100.0, 50.0, render.size().width - 100.0, render.size().height - 50.0),
@@ -136,7 +134,7 @@ impl State {
         tree.open(path);
       }
     } else if let Some(e) =
-      self.views.values_mut().filter(|v| v.visible()).find_map(|v| match &mut v.content {
+      self.views.views.values_mut().filter(|v| v.visible()).find_map(|v| match &mut v.content {
         ViewContent::Editor(e) => Some(e),
         _ => None,
       })
@@ -152,8 +150,8 @@ impl State {
 
       let new_focus = self.active_tab().content.active();
 
-      self.views.get_mut(&prev_focus).unwrap().on_focus(false);
-      self.views.get_mut(&new_focus).unwrap().on_focus(true);
+      self.views.get_mut(prev_focus).unwrap().on_focus(false);
+      self.views.get_mut(new_focus).unwrap().on_focus(true);
 
       if let Some(tree) = self.current_file_tree_mut() {
         tree.open(path);
@@ -162,7 +160,7 @@ impl State {
   }
 
   fn current_file_tree_mut(&mut self) -> Option<&mut FileTree> {
-    self.views.values_mut().filter(|v| v.visible()).find_map(|v| match &mut v.content {
+    self.views.visible_mut().find_map(|v| match &mut v.content {
       ViewContent::FileTree(e) => Some(e),
       _ => None,
     })
@@ -172,14 +170,14 @@ impl State {
     if let Some(search) = &self.tabs[self.active].search {
       search
     } else {
-      &self.views[&self.tabs[self.active].content.active()]
+      self.views.get(self.tabs[self.active].content.active()).unwrap()
     }
   }
   fn active_view_mut(&mut self) -> &mut View {
     if self.tabs[self.active].search.is_some() {
       self.tabs[self.active].search.as_mut().unwrap()
     } else {
-      self.views.get_mut(&self.tabs[self.active].content.active()).unwrap()
+      self.views.get_mut(self.tabs[self.active].content.active()).unwrap()
     }
   }
 
@@ -219,22 +217,22 @@ impl State {
         let new_active = self.active;
 
         // Ordering: lose focus, lose visibility, gain visibility, gain focus.
-        self.views.get_mut(&self.tabs[prev_active].content.active()).unwrap().on_focus(false);
+        self.views.get_mut(self.tabs[prev_active].content.active()).unwrap().on_focus(false);
 
         for view in self.tabs[prev_active].content.views() {
-          self.views.get_mut(&view).unwrap().on_visible(false);
+          self.views.get_mut(view).unwrap().on_visible(false);
         }
         for view in self.tabs[new_active].content.views() {
-          self.views.get_mut(&view).unwrap().on_visible(true);
+          self.views.get_mut(view).unwrap().on_visible(true);
         }
 
-        self.views.get_mut(&self.tabs[prev_active].content.active()).unwrap().on_focus(true);
+        self.views.get_mut(self.tabs[prev_active].content.active()).unwrap().on_focus(true);
       }
       Action::Navigate { nav: Navigation::Direction(dir) } => {
         let prev_focus = self.active_tab().content.active();
         if let Some(new_focus) = self.active_tab_mut().content.focus(dir) {
-          self.views.get_mut(&prev_focus).unwrap().on_focus(false);
-          self.views.get_mut(&new_focus).unwrap().on_focus(true);
+          self.views.get_mut(prev_focus).unwrap().on_focus(false);
+          self.views.get_mut(new_focus).unwrap().on_focus(true);
         }
       }
       Action::Navigate { nav: Navigation::OpenSearch } => {
@@ -336,5 +334,23 @@ impl State {
     }
 
     false
+  }
+}
+
+impl ViewCollection {
+  pub fn new() -> Self { Self { next_view_id: ViewId(0), views: HashMap::new() } }
+
+  pub fn get(&self, id: ViewId) -> Option<&View> { self.views.get(&id) }
+  pub fn get_mut(&mut self, id: ViewId) -> Option<&mut View> { self.views.get_mut(&id) }
+
+  pub fn new_view(&mut self, view: impl Into<View>) -> ViewId {
+    let id = self.next_view_id;
+    self.next_view_id.0 += 1;
+    self.views.insert(id, view.into());
+    id
+  }
+
+  pub fn visible_mut(&mut self) -> impl Iterator<Item = &mut View> {
+    self.views.values_mut().filter(|v| v.visible())
   }
 }
