@@ -116,6 +116,9 @@ impl State {
   fn update(&mut self) {
     let tab = &mut self.tabs[self.active];
     let mut updater = Updater { to_close: vec![], active: None };
+    if let Some(search) = &mut tab.search {
+      search.update(&mut updater);
+    }
     tab.content.update(&mut self.views.views, &mut updater);
     for to_close in updater.to_close.drain(..) {
       tab.content.close(to_close);
