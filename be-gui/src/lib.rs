@@ -153,6 +153,19 @@ impl State {
         state.widgets = layout.widgets.take().unwrap();
       },
     );
+
+    self.widgets.widgets.retain(|id, widget| {
+      if !layout.seen.contains(id) {
+        self.widgets.paths.remove(&widget.path);
+        false
+      } else {
+        true
+      }
+    });
+
+    for widget in self.widgets.visible_mut() {
+      widget.layout(layout);
+    }
   }
 
   fn animated(&self) -> bool { self.tabs[self.active].content.animated(&self.views.views) }
@@ -437,11 +450,11 @@ impl WidgetCollection {
 
   pub fn get_path(&self, path: &WidgetPath) -> Option<WidgetId> { self.paths.get(path).copied() }
 
-  pub fn create(&mut self, path: WidgetPath, store: WidgetStore) -> WidgetId {
+  pub fn create(&mut self, store: WidgetStore) -> WidgetId {
     let id = self.next_widget_id;
     self.next_widget_id.0 += 1;
+    self.paths.insert(store.path.clone(), id);
     self.widgets.insert(id, store);
-    self.paths.insert(path, id);
     id
   }
 

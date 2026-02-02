@@ -4,11 +4,12 @@ mod button;
 
 pub use button::Button;
 
-use crate::{Layout, Render};
+use crate::{Layout, Render, WidgetPath};
 
 pub struct WidgetStore {
   pub content: Box<dyn Widget>,
   pub bounds:  Rect,
+  pub path:    WidgetPath,
 }
 
 pub trait Widget {
@@ -17,8 +18,8 @@ pub trait Widget {
 }
 
 impl WidgetStore {
-  pub fn new(content: impl Widget + 'static) -> Self {
-    WidgetStore { content: Box::new(content), bounds: Rect::ZERO }
+  pub fn new(path: WidgetPath, content: impl Widget + 'static) -> Self {
+    WidgetStore { content: Box::new(content), bounds: Rect::ZERO, path }
   }
 
   pub fn visible(&self) -> bool { !self.bounds.is_zero_area() }

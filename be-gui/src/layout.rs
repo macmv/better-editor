@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use kurbo::{Axis, Point, Rect, Size, Vec2};
 use smol_str::SmolStr;
 
@@ -16,6 +18,7 @@ pub struct Layout<'a> {
   path:  WidgetPath,
 
   pub(crate) widgets: Option<WidgetCollection>,
+  pub(crate) seen:    HashSet<WidgetId>,
 
   pub active:   Option<ViewId>,
   pub to_close: Vec<ViewId>,
@@ -29,6 +32,7 @@ impl<'a> Layout<'a> {
       size,
       stack: vec![],
       path: WidgetPath(vec![]),
+      seen: HashSet::new(),
       widgets: None,
       active: None,
       to_close: vec![],
@@ -60,13 +64,15 @@ impl<'a> Layout<'a> {
 
     let widgets = self.widgets.as_mut().expect("widgets not setup");
 
-    if let Some(id) = widgets.get_path(&path) {
-      return id;
+    let id = if let Some(id) = widgets.get_path(&path) {
+      id
     } else {
-      let mut store = WidgetStore::new(widget());
+      let mut store = WidgetStore::new(path, widget());
       store.bounds = Rect::from_origin_size(pos, Size::new(20.0, 100.0));
-      widgets.create(path, store)
-    }
+      widgets.create(store)
+    };
+    self.seen.insert(id);
+    id
   }
 
   pub fn split<S>(
