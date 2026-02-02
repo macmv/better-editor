@@ -321,15 +321,10 @@ impl State {
   }
 
   fn layout_tabs(&self, layout: &mut Layout) {
-    let mut x = 10.0;
     for (i, tab) in self.tabs.iter().enumerate() {
-      layout.add_widget(
-        smol_str::format_smolstr!("tab-{}", i),
-        || crate::widget::Button::new(&tab.title),
-        Point::new(x, 0.0),
-      );
-
-      x += 100.0;
+      layout.add_widget(smol_str::format_smolstr!("tab-{}", i), || {
+        crate::widget::Button::new(&tab.title)
+      });
     }
   }
 

@@ -1,4 +1,4 @@
-use kurbo::Rect;
+use kurbo::{Rect, Size};
 
 mod button;
 
@@ -13,7 +13,11 @@ pub struct WidgetStore {
 }
 
 pub trait Widget {
-  fn layout(&mut self, layout: &mut Layout);
+  fn layout(&mut self, layout: &mut Layout) -> Option<Size> {
+    let _ = layout;
+    None
+  }
+
   fn draw(&mut self, render: &mut Render);
 }
 
@@ -26,7 +30,14 @@ impl WidgetStore {
 
   pub fn animated(&self) -> bool { false }
 
-  pub fn layout(&mut self, layout: &mut Layout) { self.content.layout(layout); }
+  pub fn layout(&mut self, layout: &mut Layout) {
+    if let Some(bounds) = self.content.layout(layout) {
+      let current = layout.current_bounds();
+      self.bounds = current.with_origin(current.origin() + bounds.to_vec2());
+    } else {
+      self.bounds = layout.current_bounds();
+    }
+  }
 
   pub fn draw(&mut self, render: &mut Render) {
     if !self.visible() {

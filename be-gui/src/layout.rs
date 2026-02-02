@@ -57,7 +57,6 @@ impl<'a> Layout<'a> {
     &mut self,
     name: impl Into<SmolStr>,
     widget: impl FnOnce() -> W,
-    pos: Point,
   ) -> WidgetId {
     let mut path = self.path.clone();
     path.0.push(name.into());
@@ -67,9 +66,7 @@ impl<'a> Layout<'a> {
     let id = if let Some(id) = widgets.get_path(&path) {
       id
     } else {
-      let mut store = WidgetStore::new(path, widget());
-      store.bounds = Rect::from_origin_size(pos, Size::new(20.0, 100.0));
-      widgets.create(store)
+      widgets.create(WidgetStore::new(path, widget()))
     };
     self.seen.insert(id);
     id
