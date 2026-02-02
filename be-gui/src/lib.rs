@@ -120,6 +120,8 @@ impl State {
   }
 
   fn layout(&mut self, layout: &mut Layout) {
+    layout.widgets = Some(std::mem::replace(&mut self.widgets, WidgetCollection::new()));
+
     layout.split(
       self,
       Axis::Horizontal,
@@ -127,8 +129,6 @@ impl State {
       "main",
       "tabs",
       |state, layout| {
-        layout.widgets = Some(std::mem::replace(&mut state.widgets, WidgetCollection::new()));
-
         let tab = &mut state.tabs[state.active];
         if let Some(search) = &mut tab.search {
           search.layout(layout);
@@ -142,17 +142,13 @@ impl State {
           // Re-run layout after removing closed views.
           tab.content.layout(&mut state.views.views, layout);
         }
-
-        state.widgets = layout.widgets.take().unwrap();
       },
       |state, layout| {
-        layout.widgets = Some(std::mem::replace(&mut state.widgets, WidgetCollection::new()));
-
         state.layout_tabs(layout);
-
-        state.widgets = layout.widgets.take().unwrap();
       },
     );
+
+    self.widgets = layout.widgets.take().unwrap();
 
     self.widgets.widgets.retain(|id, widget| {
       if !layout.seen.contains(id) {
