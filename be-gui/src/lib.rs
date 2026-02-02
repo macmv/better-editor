@@ -16,15 +16,18 @@ mod layout;
 mod pane;
 mod theme;
 mod view;
+mod widget;
 
 pub use layout::Layout;
+pub use widget::{Widget, WidgetStore};
 
 struct State {
   keys:   Vec<KeyStroke>,
   active: usize,
   tabs:   Vec<Tab>,
 
-  views: ViewCollection,
+  views:   ViewCollection,
+  widgets: WidgetCollection,
 
   notify: Notify,
 }
@@ -32,6 +35,11 @@ struct State {
 struct ViewCollection {
   next_view_id: ViewId,
   views:        HashMap<ViewId, View>,
+}
+
+struct WidgetCollection {
+  next_widget_id: WidgetId,
+  widgets:        HashMap<WidgetId, WidgetStore>,
 }
 
 struct Tab {
@@ -43,14 +51,18 @@ struct Tab {
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct ViewId(u64);
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct WidgetId(u64);
+
 impl State {
   pub fn new(store: &RenderStore) -> Self {
     let mut state = State {
-      keys:   vec![],
-      active: 1,
-      tabs:   vec![],
-      views:  ViewCollection::new(),
-      notify: store.notifier(),
+      keys:    vec![],
+      active:  1,
+      tabs:    vec![],
+      views:   ViewCollection::new(),
+      widgets: WidgetCollection::new(),
+      notify:  store.notifier(),
     };
 
     let layout = store.config.borrow().settings.layout.clone();
@@ -365,7 +377,7 @@ impl State {
 }
 
 impl ViewCollection {
-  pub fn new() -> Self { Self { next_view_id: ViewId(0), views: HashMap::new() } }
+  pub fn new() -> Self { ViewCollection { next_view_id: ViewId(0), views: HashMap::new() } }
 
   pub fn get(&self, id: ViewId) -> Option<&View> { self.views.get(&id) }
   pub fn get_mut(&mut self, id: ViewId) -> Option<&mut View> { self.views.get_mut(&id) }
@@ -379,5 +391,23 @@ impl ViewCollection {
 
   pub fn visible_mut(&mut self) -> impl Iterator<Item = &mut View> {
     self.views.values_mut().filter(|v| v.visible())
+  }
+}
+
+impl WidgetCollection {
+  pub fn new() -> Self { WidgetCollection { next_widget_id: WidgetId(0), widgets: HashMap::new() } }
+
+  pub fn get(&self, id: WidgetId) -> Option<&WidgetStore> { self.widgets.get(&id) }
+  pub fn get_mut(&mut self, id: WidgetId) -> Option<&mut WidgetStore> { self.widgets.get_mut(&id) }
+
+  pub fn new_view(&mut self, view: impl Widget + 'static) -> WidgetId {
+    let id = self.next_widget_id;
+    self.next_widget_id.0 += 1;
+    self.widgets.insert(id, WidgetStore::new(view));
+    id
+  }
+
+  pub fn visible_mut(&mut self) -> impl Iterator<Item = &mut WidgetStore> {
+    self.widgets.values_mut().filter(|v| v.visible())
   }
 }
