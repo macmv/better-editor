@@ -55,7 +55,7 @@ impl State {
       notify: store.notifier(),
     };
 
-    let layout = store.config.borrow().layout.clone();
+    let layout = store.config.borrow().settings.layout.clone();
 
     fn build_view(state: &mut State, store: &RenderStore, tab: be_config::TabSettings) -> Pane {
       match tab {

@@ -1,3 +1,4 @@
+use be_config::LanguageName;
 use be_task::Task;
 use parking_lot::Mutex;
 use std::{
@@ -48,7 +49,7 @@ pub enum LanguageServerKey {
   /// project for a given language is opened.
   ///
   /// TODO: Shared language keys?
-  Language(String),
+  Language(LanguageName),
 }
 
 #[derive(Default)]

@@ -1,0 +1,5 @@
+display-name = "Toml"
+extensions = ["toml"]
+
+[tree-sitter]
+repo = "https://github.com/tree-sitter-grammars/tree-sitter-toml"

@@ -48,12 +48,12 @@ pub enum DiagnosticLevel {
 
 impl EditorState {
   pub(crate) fn connect_to_lsp(&mut self) {
-    let Some(ft) = &self.filetype else { return };
+    let Some(ft) = self.filetype else { return };
     let config = self.config.borrow();
-    let Some(language) = config.language.get(ft.name()) else { return };
+    let Some(language) = config.languages.get(&ft) else { return };
     let Some(lsp) = &language.lsp else { return };
 
-    let key = LanguageServerKey::Language(ft.name().into());
+    let key = LanguageServerKey::Language(ft);
 
     let server = {
       let mut store = self.lsp.store.borrow_mut();

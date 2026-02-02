@@ -73,9 +73,11 @@ impl TextStore {
   fn update_metrics(&mut self) {
     const TEXT: &str = " ";
     let mut builder = self.layout.ranged_builder(&mut self.font, TEXT, 1.0, false);
-    builder.push_default(parley::StyleProperty::FontSize(self.config.borrow().font.size as f32));
+    builder.push_default(parley::StyleProperty::FontSize(
+      self.config.borrow().settings.font.size as f32,
+    ));
     builder.push_default(parley::StyleProperty::FontStack(parley::FontStack::Source(
-      self.config.borrow().font.family.as_str().into(),
+      self.config.borrow().settings.font.family.as_str().into(),
     )));
     let mut layout = builder.build(TEXT);
 
@@ -102,10 +104,10 @@ impl TextStore {
     let mut builder = self.layout.ranged_builder(&mut self.font, text, 1.0, false);
     builder.push_default(parley::StyleProperty::Brush(encode_color(color).into()));
     builder.push_default(parley::StyleProperty::FontSize(
-      (self.config.borrow().font.size * scale) as f32,
+      (self.config.borrow().settings.font.size * scale) as f32,
     ));
     builder.push_default(parley::StyleProperty::FontStack(
-      self.config.borrow().font.family.as_str().into(),
+      self.config.borrow().settings.font.family.as_str().into(),
     ));
     // NB: Disable ligatures with this:
     /*

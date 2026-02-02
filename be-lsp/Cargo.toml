@@ -7,6 +7,7 @@ edition = "2024"
 be-async = { path = "../be-async" }
 be-doc = { path = "../be-doc" }
 be-task = { path = "../be-task" }
+be-config = { path = "../be-config" }
 crossbeam-channel = "0.5.15"
 libc = "0.2.178"
 log = "0.4.29"

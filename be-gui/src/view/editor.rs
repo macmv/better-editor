@@ -85,7 +85,7 @@ impl EditorView {
 
     let line_height = render.store.text.font_metrics().line_height;
 
-    let scroll_offset = self.editor.config.borrow().editor.scroll_offset as usize;
+    let scroll_offset = self.editor.config.borrow().settings.editor.scroll_offset as usize;
 
     let min_fully_visible_row = (self.scroll.y / line_height).ceil() as usize + scroll_offset;
     let max_fully_visible_row =
@@ -164,8 +164,11 @@ impl EditorView {
     index = start;
     i = min_line.as_usize();
     let mut y = start_y;
-    let mut indent_guides =
-      IndentGuides::new(self.editor.config.borrow().editor.indent_width as usize, start_y, margin);
+    let mut indent_guides = IndentGuides::new(
+      self.editor.config.borrow().settings.editor.indent_width as usize,
+      start_y,
+      margin,
+    );
     while index < end {
       indent_guides
         .visit(self.editor.guess_indent(be_doc::Line(i), be_input::VerticalDirection::Up), render);
@@ -246,7 +249,10 @@ impl EditorView {
     }
 
     if let Some(ft) = self.editor.file_type() {
-      let layout = render.layout_text(&format!("{ft}"), render.theme().text);
+      let layout = render.layout_text(
+        &format!("{}", self.editor.config.borrow().languages[&ft].display_name),
+        render.theme().text,
+      );
       render.draw_text(&layout, (render.size().width - 50.0, render.size().height - line_height));
     }
 

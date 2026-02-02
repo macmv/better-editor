@@ -1,0 +1,8 @@
+display-name = "Rust"
+extensions = ["rs"]
+
+[tree-sitter]
+repo = "https://github.com/tree-sitter/tree-sitter-rust"
+
+[lsp]
+command = "rust-analyzer"

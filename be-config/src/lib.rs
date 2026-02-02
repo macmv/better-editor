@@ -1,8 +1,16 @@
-use std::{io, path::PathBuf};
+use std::{collections::HashMap, io, path::PathBuf, sync::LazyLock};
 
-mod config;
+mod lang;
+mod settings;
 
-pub use config::*;
+pub use lang::*;
+pub use settings::*;
+
+#[derive(Clone)]
+pub struct Config {
+  pub settings:  Settings,
+  pub languages: HashMap<LanguageName, Language>,
+}
 
 fn config_root() -> io::Result<PathBuf> {
   #[cfg(unix)]
@@ -20,4 +28,20 @@ pub fn cache_root() -> io::Result<PathBuf> {
   compile_error!("no cache path set for target platform");
 
   Ok(base.join("be"))
+}
+
+static DEFAULT_CONFIG: LazyLock<Config> = LazyLock::new(Config::load_default);
+
+impl Default for Config {
+  fn default() -> Self { Config::default_ref().clone() }
+}
+
+impl Config {
+  pub fn default_ref() -> &'static Config { &*DEFAULT_CONFIG }
+
+  pub fn load() -> Self { Config { settings: Settings::load(), languages: Language::builtin() } }
+
+  fn load_default() -> Config {
+    Config { settings: Settings::parse_default(), languages: Language::builtin() }
+  }
 }

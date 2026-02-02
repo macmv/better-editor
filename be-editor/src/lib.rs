@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashSet, ops::Range, rc::Rc};
 
-use be_config::Config;
+use be_config::{Config, LanguageName};
 use be_doc::{Change, Column, Cursor, Document, Edit, Line, crop::RopeSlice};
 use be_git::{LineDiffSimilarity, Repo};
 use be_input::{Action, Direction, Mode, Move, VerticalDirection};
@@ -41,7 +41,7 @@ pub struct EditorState {
   command:     Option<CommandState>,
   search_text: Option<String>,
 
-  filetype:   Option<filetype::FileType>,
+  filetype:   Option<LanguageName>,
   highligher: Option<treesitter::Highlighter>,
   damages:    HashSet<Line>,
   damage_all: bool,
@@ -96,7 +96,7 @@ impl EditorState {
   pub fn mode(&self) -> Mode { self.mode }
   pub fn command(&self) -> Option<&CommandState> { self.command.as_ref() }
   pub fn status(&self) -> Option<&Status> { self.status.as_ref() }
-  pub fn file_type(&self) -> Option<filetype::FileType> { self.filetype }
+  pub fn file_type(&self) -> Option<LanguageName> { self.filetype }
   pub fn take_damage_all(&mut self) -> bool { std::mem::take(&mut self.damage_all) }
   pub fn take_damages(&mut self) -> impl Iterator<Item = Line> { self.damages.drain() }
   pub fn progress(&self) -> Vec<String> { self.lsp.progress() }
@@ -436,7 +436,7 @@ impl EditorState {
 
     let line = self.cursor.line;
     let indent = self.guess_indent(line, direction);
-    let columns = indent.0 * self.config.borrow().editor.indent_width as usize;
+    let columns = indent.0 * self.config.borrow().settings.editor.indent_width as usize;
     let indent_str = " ".repeat(columns);
     self.change(Change::insert(self.doc.byte_of_line(line), &indent_str));
     self.move_col_rel(columns as i32);
@@ -456,7 +456,7 @@ impl EditorState {
     let mut indent = self.guess_indent(self.cursor.line, VerticalDirection::Up);
     indent.0 = indent.0.saturating_sub(1);
 
-    let columns = indent.0 * self.config.borrow().editor.indent_width as usize;
+    let columns = indent.0 * self.config.borrow().settings.editor.indent_width as usize;
     let indent_str = " ".repeat(columns);
     self.change(Change::replace(
       self.doc.byte_of_line(self.cursor.line)..self.doc.byte_of_line(self.cursor.line) + whitespace,
@@ -469,14 +469,14 @@ impl EditorState {
     {
       let line = self.doc.line(line);
       if !line.chars().all(|c| c.is_whitespace()) {
-        return IndentLevel::guess(&self.config.borrow().editor, line);
+        return IndentLevel::guess(&self.config.borrow().settings.editor, line);
       }
     }
 
     match direction {
       VerticalDirection::Up => {
         if let Some(prev) = self.prev_non_empty_line(line) {
-          let mut level = IndentLevel::guess(&self.config.borrow().editor, prev);
+          let mut level = IndentLevel::guess(&self.config.borrow().settings.editor, prev);
           for c in prev.chars().rev() {
             match c {
               '{' | '(' | '[' => level.0 += 1,
@@ -491,7 +491,7 @@ impl EditorState {
       }
       VerticalDirection::Down => {
         if let Some(next) = self.next_non_empty_line(line) {
-          let mut level = IndentLevel::guess(&self.config.borrow().editor, next);
+          let mut level = IndentLevel::guess(&self.config.borrow().settings.editor, next);
           for c in next.chars() {
             match c {
               '}' | ')' | ']' => level.0 += 1,

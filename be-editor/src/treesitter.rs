@@ -1,13 +1,13 @@
 use std::{ffi::CString, mem::ManuallyDrop, ops::Range, path::PathBuf};
 
-use be_config::Config;
+use be_config::{Config, LanguageName};
 use be_doc::Document;
 use be_macros::ResultExt;
 use tree_sitter::{
   Language, Node, Parser, Query, QueryCaptures, QueryCursor, StreamingIterator, TextProvider, Tree,
 };
 
-use crate::{Change, EditorState, filetype::FileType, highlight::Highlight};
+use crate::{Change, EditorState, highlight::Highlight};
 
 pub struct Highlighter {
   parser:           Parser,
@@ -34,15 +34,15 @@ struct LoadedLanguage {
   language: ManuallyDrop<Language>,
 }
 
-pub fn load_grammar(config: &Config, ft: &FileType) -> Option<Highlighter> {
-  let repo = &config.language.get(ft.name())?.tree_sitter;
+pub fn load_grammar(config: &Config, ft: LanguageName) -> Option<Highlighter> {
+  let settings = config.languages.get(&ft)?.tree_sitter.as_ref()?;
 
   #[cfg(target_os = "linux")]
   let so_name = "libtree-sitter.so";
   #[cfg(target_os = "macos")]
   let so_name = "libtree-sitter.dylib";
 
-  let grammar_path = install_grammar(ft, repo, so_name)?;
+  let grammar_path = install_grammar(ft, &settings.repo, so_name)?;
 
   let spec = std::fs::read_to_string(grammar_path.join("tree-sitter.json")).fatal()?;
   let spec = serde_json::from_str::<TreeSitterSpec>(&spec).fatal()?;
@@ -70,7 +70,7 @@ pub fn load_grammar(config: &Config, ft: &FileType) -> Option<Highlighter> {
 
 impl EditorState {
   pub(crate) fn on_open_file_highlight(&mut self) {
-    let Some(ft) = &self.filetype else { return };
+    let Some(ft) = self.filetype else { return };
 
     self.highligher = load_grammar(&self.config.borrow(), ft);
     if let Some(highligher) = &mut self.highligher {
@@ -185,7 +185,7 @@ impl<'a> Iterator for CapturesIter<'a> {
   }
 }
 
-fn install_grammar(ft: &FileType, repo: &str, so_name: &str) -> Option<PathBuf> {
+fn install_grammar(ft: LanguageName, repo: &str, so_name: &str) -> Option<PathBuf> {
   let language_path = PathBuf::new()
     .join(std::env::home_dir().unwrap())
     .join(".local")
@@ -292,7 +292,7 @@ mod tests {
 
   #[test]
   fn it_works() {
-    let mut highlighter = load_grammar(Config::default_ref(), &FileType::Rust).unwrap();
+    let mut highlighter = load_grammar(Settings::default_ref(), &FileType::Rust).unwrap();
 
     let doc = "fn main() {}".into();
     highlighter.reparse(&doc);

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::LazyLock};
+use std::collections::HashMap;
 
 trait Partial {
   type Partial;
@@ -84,11 +84,10 @@ macro_rules! config {
 config!(
   #[partial = ConfigDataPartial]
   #[derive(Clone)]
-  pub struct Config {
-    pub font:     FontSettings,
-    pub editor:   EditorSettings,
-    pub layout:   LayoutSettings,
-    pub language: HashMap<String, LanguageSettings>,
+  pub struct Settings {
+    pub font:   FontSettings,
+    pub editor: EditorSettings,
+    pub layout: LayoutSettings,
   }
 );
 
@@ -143,30 +142,9 @@ config!(
   }
 );
 
-#[derive(Clone, serde::Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct LanguageSettings {
-  pub tree_sitter: String,
-  pub lsp:         Option<LspSettings>,
-}
-
-#[derive(Clone, serde::Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct LspSettings {
-  pub command: String,
-}
-
-static DEFAULT_CONFIG: LazyLock<Config> = LazyLock::new(Config::parse_default);
-
-impl Default for Config {
-  fn default() -> Self { Config::default_ref().clone() }
-}
-
-impl Config {
-  pub fn default_ref() -> &'static Config { &*DEFAULT_CONFIG }
-
-  pub fn load() -> Config {
-    let mut config = Config::default();
+impl Settings {
+  pub fn load() -> Settings {
+    let mut config = crate::Config::default_ref().settings.clone();
 
     if let Ok(data) = std::fs::read_to_string(crate::config_root().unwrap().join("config.toml")) {
       match toml::from_str::<ConfigDataPartial>(&data) {
@@ -178,10 +156,10 @@ impl Config {
     config
   }
 
-  fn parse_default() -> Config { parse_default_config().unwrap() }
+  pub(crate) fn parse_default() -> Settings { parse_default_config().unwrap() }
 }
 
-fn parse_default_config() -> Result<Config, toml::de::Error> {
+fn parse_default_config() -> Result<Settings, toml::de::Error> {
   toml::from_str(include_str!("../default.toml"))
 }
 
