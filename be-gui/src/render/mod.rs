@@ -379,9 +379,13 @@ impl<'a> Render<'a> {
   }
 
   pub fn fill(&mut self, shape: &impl Shape, color: Color) {
+    self.fill_transform(shape, Affine::IDENTITY, color);
+  }
+
+  pub fn fill_transform(&mut self, shape: &impl Shape, transform: Affine, color: Color) {
     self.scene.fill(
       peniko::Fill::NonZero,
-      self.transform(),
+      self.transform() * transform,
       peniko::Brush::Solid(encode_color(color)),
       None,
       shape,

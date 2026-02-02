@@ -11,6 +11,7 @@ use view::View;
 
 use crate::view::{FileTree, ViewContent};
 
+mod icon;
 mod pane;
 mod theme;
 mod view;
