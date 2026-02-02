@@ -74,14 +74,15 @@ impl<'a> Layout<'a> {
   }
 
   pub fn layout_row(&mut self, widgets: &[WidgetId]) {
-    let mut size = self.size();
-    size.width /= widgets.len() as f64;
+    let size = self.size();
 
-    for (i, &id) in widgets.iter().enumerate() {
-      let rect = Rect::from_origin_size((i as f64 * size.width, 0.0), size);
+    let mut x = 0.0;
+    for &id in widgets.iter() {
+      let rect = Rect::from_origin_size((x, 0.0), Size::new(size.width - x, size.height));
 
       let mut widget = self.widgets.as_mut().unwrap().widgets.remove(&id).unwrap();
       self.clipped(rect, widget.name().clone(), |layout| widget.layout(layout));
+      x += widget.bounds.width();
       self.widgets.as_mut().unwrap().widgets.insert(id, widget);
     }
   }
