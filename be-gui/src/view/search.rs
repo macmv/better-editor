@@ -31,7 +31,7 @@ impl Search {
     search
   }
 
-  pub fn update(&mut self) { self.index.nucleo.tick(1); }
+  pub fn layout(&mut self) { self.index.nucleo.tick(1); }
 
   pub fn draw(&mut self, render: &mut Render) {
     let snap = self.index.nucleo.snapshot();

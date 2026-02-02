@@ -4,7 +4,7 @@ use kurbo::{Rect, Stroke};
 use parley::FontWeight;
 use peniko::color::AlphaColor;
 
-use crate::{Color, Render, TextLayout, Updater, oklch, theme::Theme};
+use crate::{Color, Layout, Render, TextLayout, oklch, theme::Theme};
 
 pub struct TerminalView {
   terminal:  Terminal,
@@ -50,9 +50,9 @@ impl TerminalView {
     }
   }
 
-  pub fn update(&mut self, updater: &mut Updater) {
+  pub fn layout(&mut self, layout: &mut Layout) {
     if self.terminal.update() {
-      updater.close_view();
+      layout.close_view();
     }
   }
 

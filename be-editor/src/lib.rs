@@ -101,7 +101,7 @@ impl EditorState {
   pub fn take_damages(&mut self) -> impl Iterator<Item = Line> { self.damages.drain() }
   pub fn progress(&self) -> Vec<String> { self.lsp.progress() }
 
-  pub fn update(&mut self) {
+  pub fn layout(&mut self) {
     if self.repo.is_none() {
       self.repo = Some(Repo::open(std::path::Path::new(".")));
     }

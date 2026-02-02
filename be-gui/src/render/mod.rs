@@ -48,8 +48,6 @@ pub struct Render<'a> {
   size:  Size,
 
   stack: Vec<Rect>,
-
-  pub to_close: Vec<ViewId>,
 }
 
 pub struct Layout<'a> {
@@ -59,6 +57,9 @@ pub struct Layout<'a> {
   size:  Size,
 
   stack: Vec<Rect>,
+
+  pub active:   Option<ViewId>,
+  pub to_close: Vec<ViewId>,
 }
 
 struct App {
@@ -190,6 +191,8 @@ impl App {
         surface.texture.height() as f64 / scale,
       ),
       stack: vec![],
+      active: None,
+      to_close: vec![],
     };
 
     {
@@ -208,13 +211,7 @@ impl App {
         surface.texture.height() as f64 / scale,
       ),
       stack: vec![],
-      to_close: vec![],
     };
-
-    {
-      puffin::profile_scope!("update");
-      self.state.update();
-    }
 
     {
       puffin::profile_scope!("draw");
@@ -463,6 +460,14 @@ impl<'a> Layout<'a> {
     f(self);
 
     self.stack.pop().expect("no clip layer to pop");
+  }
+
+  pub fn close_view(&mut self) {
+    if let Some(id) = self.active {
+      self.to_close.push(id);
+    } else {
+      panic!("no active view set");
+    }
   }
 }
 

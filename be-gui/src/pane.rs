@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use be_input::Direction;
 use kurbo::{Axis, Point, Rect};
 
-use crate::{Distance, Layout, Updater, ViewCollection, ViewId, view::View};
+use crate::{Distance, Layout, ViewCollection, ViewId, view::View};
 
 pub enum Pane {
   View(ViewId),
@@ -29,26 +29,15 @@ impl Pane {
     }
   }
 
-  pub fn update(&mut self, views: &mut HashMap<ViewId, View>, updater: &mut Updater) {
-    match self {
-      Pane::View(id) => {
-        updater.active = Some(*id);
-        views.get_mut(id).unwrap().update(updater);
-        updater.active = None;
-      }
-      Pane::Split(split) => {
-        for item in &mut split.items {
-          item.update(views, updater);
-        }
-      }
-    }
-  }
-
   pub fn layout(&self, views: &mut HashMap<ViewId, View>, layout: &mut Layout) {
     match self {
       Pane::View(id) => {
         let view = views.get_mut(id).unwrap();
         view.bounds = layout.current_bounds();
+
+        layout.active = Some(*id);
+        views.get_mut(id).unwrap().layout(layout);
+        layout.active = None;
       }
       Pane::Split(split) => split.layout(views, layout),
     }
