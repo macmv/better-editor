@@ -12,9 +12,12 @@ use view::View;
 use crate::view::{FileTree, ViewContent};
 
 mod icon;
+mod layout;
 mod pane;
 mod theme;
 mod view;
+
+pub use layout::Layout;
 
 struct State {
   keys:   Vec<KeyStroke>,

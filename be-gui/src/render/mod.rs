@@ -7,7 +7,7 @@ use peniko::{
   color::{AlphaColor, Oklab, Oklch, Srgb},
 };
 
-use crate::{ViewId, render::text::TextStore, theme::Theme};
+use crate::{Layout, render::text::TextStore, theme::Theme};
 
 mod blitter;
 mod text;
@@ -48,18 +48,6 @@ pub struct Render<'a> {
   size:  Size,
 
   stack: Vec<Rect>,
-}
-
-pub struct Layout<'a> {
-  pub store: &'a mut RenderStore,
-
-  scale: f64,
-  size:  Size,
-
-  stack: Vec<Rect>,
-
-  pub active:   Option<ViewId>,
-  pub to_close: Vec<ViewId>,
 }
 
 struct App {
@@ -183,17 +171,11 @@ impl App {
 
     self.store.text.set_scale(scale);
 
-    let mut layout = Layout {
-      store: &mut self.store,
+    let mut layout = Layout::new(
+      &mut self.store,
       scale,
-      size: Size::new(
-        surface.texture.width() as f64 / scale,
-        surface.texture.height() as f64 / scale,
-      ),
-      stack: vec![],
-      active: None,
-      to_close: vec![],
-    };
+      Size::new(surface.texture.width() as f64 / scale, surface.texture.height() as f64 / scale),
+    );
 
     {
       puffin::profile_scope!("layout");
@@ -397,77 +379,6 @@ impl<'a> Render<'a> {
       radius * self.scale,
       std_dev * self.scale,
     );
-  }
-}
-
-impl<'a> Layout<'a> {
-  pub fn size(&self) -> Size {
-    if let Some(top) = self.stack.last() { top.size() } else { self.size }
-  }
-
-  fn offset(&self) -> Vec2 {
-    if let Some(top) = self.stack.last() { top.origin().to_vec2() } else { Vec2::ZERO }
-  }
-
-  pub fn notifier(&self) -> Notify { Notify { proxy: self.store.proxy.clone() } }
-
-  pub fn current_bounds(&self) -> Rect {
-    Rect::from_origin_size(self.offset().to_point(), self.size())
-  }
-
-  pub fn split<S>(
-    &mut self,
-    state: &mut S,
-    axis: Axis,
-    distance: Distance,
-    left: impl FnOnce(&mut S, &mut Layout),
-    right: impl FnOnce(&mut S, &mut Layout),
-  ) {
-    let mut left_bounds = Rect::from_origin_size(Point::ZERO, self.size());
-    let mut right_bounds = Rect::from_origin_size(Point::ZERO, self.size());
-
-    match axis {
-      Axis::Vertical => {
-        let mut distance = distance.to_pixels_in(self.size().width);
-        if distance < 0.0 {
-          distance += self.size().width;
-        }
-
-        left_bounds.x1 = distance;
-        right_bounds.x0 = distance;
-      }
-      Axis::Horizontal => {
-        let mut distance = distance.to_pixels_in(self.size().height);
-        if distance < 0.0 {
-          distance += self.size().height;
-        }
-
-        left_bounds.y1 = distance;
-        right_bounds.y0 = distance;
-      }
-    }
-
-    self.clipped(left_bounds, |render| left(state, render));
-    self.clipped(right_bounds, |render| right(state, render));
-  }
-
-  pub fn clipped(&mut self, mut rect: Rect, f: impl FnOnce(&mut Layout)) {
-    rect = rect + self.offset();
-
-    let scaled_rect = rect.scale_from_origin(self.scale).round();
-    self.stack.push(scaled_rect.scale_from_origin(1.0 / self.scale));
-
-    f(self);
-
-    self.stack.pop().expect("no clip layer to pop");
-  }
-
-  pub fn close_view(&mut self) {
-    if let Some(id) = self.active {
-      self.to_close.push(id);
-    } else {
-      panic!("no active view set");
-    }
   }
 }
 
