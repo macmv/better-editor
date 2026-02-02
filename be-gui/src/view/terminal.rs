@@ -11,6 +11,9 @@ pub struct TerminalView {
   set_waker: bool,
   focused:   bool,
 
+  size:           be_terminal::Size,
+  character_size: kurbo::Size,
+
   cached_layouts: Vec<LineLayout>,
   cached_scale:   f64,
 }
@@ -26,6 +29,8 @@ impl TerminalView {
       terminal:       Terminal::new(be_terminal::Size { rows: 40, cols: 80 }),
       set_waker:      false,
       focused:        false,
+      size:           be_terminal::Size { rows: 40, cols: 80 },
+      character_size: kurbo::Size::ZERO,
       cached_layouts: vec![],
       cached_scale:   0.0,
     }
@@ -54,19 +59,15 @@ impl TerminalView {
     if self.terminal.update() {
       layout.close_view();
     }
-  }
 
-  pub fn draw(&mut self, render: &mut Render) {
-    puffin::profile_function!();
-
-    let line_height = render.store.text.font_metrics().line_height;
-    let character_width = render.store.text.font_metrics().character_width;
-    let height = (render.size().height / line_height).floor() as usize;
-    let width = (render.size().width / character_width).floor() as usize;
+    self.character_size.height = layout.store.text.font_metrics().line_height;
+    self.character_size.width = layout.store.text.font_metrics().character_width;
+    self.size.rows = (layout.size().height / self.character_size.height).floor() as usize;
+    self.size.cols = (layout.size().width / self.character_size.width).floor() as usize;
 
     if !self.set_waker {
       self.set_waker = true;
-      let waker = render.notifier();
+      let waker = layout.notifier();
       // SAFETY: This isn't safe. Need to join the thread on drop.
       let poller = unsafe { self.terminal.make_poller() };
       std::thread::spawn(move || {
@@ -80,9 +81,12 @@ impl TerminalView {
       });
     }
 
-    self.terminal.set_size(be_terminal::Size { rows: height, cols: width });
-
+    self.terminal.set_size(self.size);
     self.terminal.update();
+  }
+
+  pub fn draw(&mut self, render: &mut Render) {
+    puffin::profile_function!();
 
     if self.cached_scale != render.scale() {
       self.cached_layouts.clear();
@@ -105,26 +109,31 @@ impl TerminalView {
       render.theme().background,
     );
 
-    for line in 0..height {
+    let character_size = self.character_size;
+
+    for line in 0..self.size.rows {
       let Some(layout) = self.layout_line(render, line) else { break };
 
       for range in &layout.background {
         render.fill(
           &Rect::from_origin_size(
-            (range.0.round(), (line as f64 * line_height).round()),
-            ((range.1 - range.0).ceil(), line_height.ceil()),
+            (range.0.round(), (line as f64 * character_size.height).round()),
+            ((range.1 - range.0).ceil(), character_size.height.ceil()),
           ),
           range.2,
         );
       }
-      render.draw_text(&layout.layout, (0.0, line as f64 * line_height));
+      render.draw_text(&layout.layout, (0.0, line as f64 * character_size.height));
     }
 
     if self.terminal.state().cursor.visible {
       let cursor = self.terminal.state().cursor;
       let cursor = Rect::from_origin_size(
-        ((cursor.col as f64 * character_width).round(), (cursor.row as f64 * line_height).round()),
-        (character_width.ceil(), line_height.ceil()),
+        (
+          (cursor.col as f64 * self.character_size.width).round(),
+          (cursor.row as f64 * self.character_size.height).round(),
+        ),
+        (self.character_size.width.ceil(), self.character_size.height.ceil()),
       );
       if self.focused {
         render.fill(&cursor.ceil(), render.theme().text);
