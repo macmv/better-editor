@@ -107,6 +107,8 @@ impl State {
       self,
       Axis::Horizontal,
       Distance::Pixels(-20.0),
+      "main",
+      "tabs",
       |state, layout| {
         let tab = &mut state.tabs[state.active];
         if let Some(search) = &mut tab.search {

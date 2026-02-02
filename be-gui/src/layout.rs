@@ -1,4 +1,5 @@
 use kurbo::{Axis, Point, Rect, Size, Vec2};
+use smol_str::SmolStr;
 
 use crate::{Distance, Notify, RenderStore, ViewId};
 
@@ -9,6 +10,7 @@ pub struct Layout<'a> {
   size:  Size,
 
   stack: Vec<Rect>,
+  path:  Vec<SmolStr>,
 
   pub active:   Option<ViewId>,
   pub to_close: Vec<ViewId>,
@@ -16,7 +18,7 @@ pub struct Layout<'a> {
 
 impl<'a> Layout<'a> {
   pub fn new(store: &'a mut RenderStore, scale: f64, size: Size) -> Self {
-    Self { store, scale, size, stack: vec![], active: None, to_close: vec![] }
+    Self { store, scale, size, stack: vec![], path: vec![], active: None, to_close: vec![] }
   }
 }
 
@@ -40,6 +42,8 @@ impl<'a> Layout<'a> {
     state: &mut S,
     axis: Axis,
     distance: Distance,
+    left_name: impl Into<SmolStr>,
+    right_name: impl Into<SmolStr>,
     left: impl FnOnce(&mut S, &mut Layout),
     right: impl FnOnce(&mut S, &mut Layout),
   ) {
@@ -67,18 +71,20 @@ impl<'a> Layout<'a> {
       }
     }
 
-    self.clipped(left_bounds, |render| left(state, render));
-    self.clipped(right_bounds, |render| right(state, render));
+    self.clipped(left_bounds, left_name, |render| left(state, render));
+    self.clipped(right_bounds, right_name, |render| right(state, render));
   }
 
-  pub fn clipped(&mut self, mut rect: Rect, f: impl FnOnce(&mut Layout)) {
+  pub fn clipped(&mut self, mut rect: Rect, name: impl Into<SmolStr>, f: impl FnOnce(&mut Layout)) {
     rect = rect + self.offset();
 
     let scaled_rect = rect.scale_from_origin(self.scale).round();
     self.stack.push(scaled_rect.scale_from_origin(1.0 / self.scale));
+    self.path.push(name.into());
 
     f(self);
 
+    self.path.pop();
     self.stack.pop().expect("no clip layer to pop");
   }
 
