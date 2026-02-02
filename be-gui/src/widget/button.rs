@@ -8,6 +8,10 @@ pub struct Button {
   layout: Option<TextLayout>,
 }
 
+impl Button {
+  pub fn new(content: &str) -> Self { Button { content: content.into(), layout: None } }
+}
+
 impl Widget for Button {
   fn layout(&mut self, layout: &mut crate::Layout) { let _ = layout; }
   fn draw(&mut self, render: &mut crate::Render) {

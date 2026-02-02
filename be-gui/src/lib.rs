@@ -7,6 +7,7 @@ use kurbo::{Axis, Cap, Line, Point, Rect, Stroke};
 pub use render::*;
 
 use pane::Pane;
+use smol_str::SmolStr;
 use view::View;
 
 use crate::view::{FileTree, ViewContent};
@@ -39,6 +40,7 @@ struct ViewCollection {
 
 struct WidgetCollection {
   next_widget_id: WidgetId,
+  paths:          HashMap<WidgetPath, WidgetId>,
   widgets:        HashMap<WidgetId, WidgetStore>,
 }
 
@@ -53,6 +55,9 @@ pub struct ViewId(u64);
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct WidgetId(u64);
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct WidgetPath(Vec<SmolStr>);
 
 impl State {
   pub fn new(store: &RenderStore) -> Self {
@@ -122,6 +127,8 @@ impl State {
       "main",
       "tabs",
       |state, layout| {
+        layout.widgets = Some(std::mem::replace(&mut state.widgets, WidgetCollection::new()));
+
         let tab = &mut state.tabs[state.active];
         if let Some(search) = &mut tab.search {
           search.layout(layout);
@@ -135,8 +142,16 @@ impl State {
           // Re-run layout after removing closed views.
           tab.content.layout(&mut state.views.views, layout);
         }
+
+        state.widgets = layout.widgets.take().unwrap();
       },
-      |_, _| {},
+      |state, layout| {
+        layout.widgets = Some(std::mem::replace(&mut state.widgets, WidgetCollection::new()));
+
+        state.layout_tabs(layout);
+
+        state.widgets = layout.widgets.take().unwrap();
+      },
     );
   }
 
@@ -162,6 +177,10 @@ impl State {
       },
       |state, render| state.draw_tabs(render),
     );
+
+    for widget in self.widgets.visible_mut() {
+      widget.draw(render);
+    }
   }
 
   fn open(&mut self, path: &std::path::Path) {
@@ -288,6 +307,19 @@ impl State {
     }
   }
 
+  fn layout_tabs(&self, layout: &mut Layout) {
+    let mut x = 10.0;
+    for (i, tab) in self.tabs.iter().enumerate() {
+      layout.add_widget(
+        smol_str::format_smolstr!("tab-{}", i),
+        || crate::widget::Button::new(&tab.title),
+        Point::new(x, 0.0),
+      );
+
+      x += 100.0;
+    }
+  }
+
   fn draw_tabs(&self, render: &mut Render) {
     render
       .fill(&Rect::from_origin_size(Point::ZERO, render.size()), render.theme().background_lower);
@@ -395,15 +427,21 @@ impl ViewCollection {
 }
 
 impl WidgetCollection {
-  pub fn new() -> Self { WidgetCollection { next_widget_id: WidgetId(0), widgets: HashMap::new() } }
+  pub fn new() -> Self {
+    WidgetCollection {
+      next_widget_id: WidgetId(0),
+      paths:          HashMap::new(),
+      widgets:        HashMap::new(),
+    }
+  }
 
-  pub fn get(&self, id: WidgetId) -> Option<&WidgetStore> { self.widgets.get(&id) }
-  pub fn get_mut(&mut self, id: WidgetId) -> Option<&mut WidgetStore> { self.widgets.get_mut(&id) }
+  pub fn get_path(&self, path: &WidgetPath) -> Option<WidgetId> { self.paths.get(path).copied() }
 
-  pub fn new_view(&mut self, view: impl Widget + 'static) -> WidgetId {
+  pub fn create(&mut self, path: WidgetPath, store: WidgetStore) -> WidgetId {
     let id = self.next_widget_id;
     self.next_widget_id.0 += 1;
-    self.widgets.insert(id, WidgetStore::new(view));
+    self.widgets.insert(id, store);
+    self.paths.insert(path, id);
     id
   }
 

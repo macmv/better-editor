@@ -1,7 +1,10 @@
 use kurbo::{Axis, Point, Rect, Size, Vec2};
 use smol_str::SmolStr;
 
-use crate::{Distance, Notify, RenderStore, ViewId};
+use crate::{
+  Distance, Notify, RenderStore, ViewId, Widget, WidgetCollection, WidgetId, WidgetPath,
+  WidgetStore,
+};
 
 pub struct Layout<'a> {
   pub store: &'a mut RenderStore,
@@ -10,7 +13,9 @@ pub struct Layout<'a> {
   size:  Size,
 
   stack: Vec<Rect>,
-  path:  Vec<SmolStr>,
+  path:  WidgetPath,
+
+  pub(crate) widgets: Option<WidgetCollection>,
 
   pub active:   Option<ViewId>,
   pub to_close: Vec<ViewId>,
@@ -18,11 +23,18 @@ pub struct Layout<'a> {
 
 impl<'a> Layout<'a> {
   pub fn new(store: &'a mut RenderStore, scale: f64, size: Size) -> Self {
-    Self { store, scale, size, stack: vec![], path: vec![], active: None, to_close: vec![] }
+    Self {
+      store,
+      scale,
+      size,
+      stack: vec![],
+      path: WidgetPath(vec![]),
+      widgets: None,
+      active: None,
+      to_close: vec![],
+    }
   }
-}
 
-impl<'a> Layout<'a> {
   pub fn size(&self) -> Size {
     if let Some(top) = self.stack.last() { top.size() } else { self.size }
   }
@@ -35,6 +47,26 @@ impl<'a> Layout<'a> {
 
   pub fn current_bounds(&self) -> Rect {
     Rect::from_origin_size(self.offset().to_point(), self.size())
+  }
+
+  pub fn add_widget<W: Widget + 'static>(
+    &mut self,
+    name: impl Into<SmolStr>,
+    widget: impl FnOnce() -> W,
+    pos: Point,
+  ) -> WidgetId {
+    let mut path = self.path.clone();
+    path.0.push(name.into());
+
+    let widgets = self.widgets.as_mut().expect("widgets not setup");
+
+    if let Some(id) = widgets.get_path(&path) {
+      return id;
+    } else {
+      let mut store = WidgetStore::new(widget());
+      store.bounds = Rect::from_origin_size(pos, Size::new(20.0, 100.0));
+      widgets.create(path, store)
+    }
   }
 
   pub fn split<S>(
@@ -80,11 +112,11 @@ impl<'a> Layout<'a> {
 
     let scaled_rect = rect.scale_from_origin(self.scale).round();
     self.stack.push(scaled_rect.scale_from_origin(1.0 / self.scale));
-    self.path.push(name.into());
+    self.path.0.push(name.into());
 
     f(self);
 
-    self.path.pop();
+    self.path.0.pop();
     self.stack.pop().expect("no clip layer to pop");
   }
 

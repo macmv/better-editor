@@ -32,6 +32,6 @@ impl WidgetStore {
       return;
     }
 
-    self.content.draw(render);
+    render.clipped(self.bounds, |render| self.content.draw(render));
   }
 }
