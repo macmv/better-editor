@@ -4,8 +4,8 @@ use kurbo::{Axis, Point, Rect, Size, Vec2};
 use smol_str::SmolStr;
 
 use crate::{
-  Distance, Notify, RenderStore, ViewId, Widget, WidgetCollection, WidgetId, WidgetPath,
-  WidgetStore,
+  Color, Distance, Notify, RenderStore, TextLayout, ViewId, Widget, WidgetCollection, WidgetId,
+  WidgetPath, WidgetStore, theme::Theme,
 };
 
 pub struct Layout<'a> {
@@ -48,6 +48,7 @@ impl<'a> Layout<'a> {
   }
 
   pub fn notifier(&self) -> Notify { self.store.notifier() }
+  pub fn theme(&self) -> &Theme { &self.store.theme }
 
   pub fn current_bounds(&self) -> Rect {
     Rect::from_origin_size(self.offset().to_point(), self.size())
@@ -69,6 +70,12 @@ impl<'a> Layout<'a> {
       widgets.create(WidgetStore::new(path, widget()))
     };
     self.seen.insert(id);
+
+    let mut widget = widgets.widgets.remove(&id).unwrap();
+    widget.layout(self);
+    let widgets = self.widgets.as_mut().unwrap();
+    widgets.widgets.insert(id, widget);
+
     id
   }
 
@@ -129,5 +136,30 @@ impl<'a> Layout<'a> {
     } else {
       panic!("no active view set");
     }
+  }
+
+  pub fn build_layout(
+    &mut self,
+    mut layout: parley::Layout<peniko::Brush>,
+    backgrounds: Vec<(usize, Option<peniko::Brush>)>,
+  ) -> TextLayout {
+    layout.break_all_lines(None);
+    layout.align(None, parley::Alignment::Start, parley::AlignmentOptions::default());
+
+    TextLayout {
+      metrics: self.store.text.font_metrics().clone(),
+      layout,
+      backgrounds,
+      scale: self.scale,
+    }
+  }
+
+  pub fn layout_text(&mut self, text: &str, color: Color) -> TextLayout {
+    puffin::profile_function!();
+
+    let builder = self.store.text.layout_builder(text, color, self.scale);
+
+    let (built, backgrounds) = builder.build(text);
+    self.build_layout(built, backgrounds)
   }
 }

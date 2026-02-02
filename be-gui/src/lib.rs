@@ -159,9 +159,9 @@ impl State {
       }
     });
 
-    for widget in self.widgets.visible_mut() {
-      widget.layout(layout);
-    }
+    // for widget in self.widgets.values_mut() {
+    //   widget.layout(layout);
+    // }
   }
 
   fn animated(&self) -> bool { self.tabs[self.active].content.animated(&self.views.views) }
@@ -187,7 +187,7 @@ impl State {
       |state, render| state.draw_tabs(render),
     );
 
-    for widget in self.widgets.visible_mut() {
+    for widget in self.widgets.values_mut() {
       widget.draw(render);
     }
   }
@@ -449,7 +449,7 @@ impl WidgetCollection {
     id
   }
 
-  pub fn visible_mut(&mut self) -> impl Iterator<Item = &mut WidgetStore> {
-    self.widgets.values_mut().filter(|v| v.visible())
+  pub fn values_mut(&mut self) -> impl Iterator<Item = &mut WidgetStore> {
+    self.widgets.values_mut()
   }
 }

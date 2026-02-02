@@ -13,11 +13,15 @@ impl Button {
 }
 
 impl Widget for Button {
-  fn draw(&mut self, render: &mut crate::Render) {
+  fn layout(&mut self, layout: &mut crate::Layout) -> Option<kurbo::Size> {
     if self.layout.is_none() {
-      self.layout = Some(render.layout_text(&self.content, render.theme().text));
+      self.layout = Some(layout.layout_text(&self.content, layout.theme().text));
     }
 
+    Some(self.layout.as_ref().unwrap().size())
+  }
+
+  fn draw(&mut self, render: &mut crate::Render) {
     if let Some(layout) = &mut self.layout {
       render.draw_text(layout, Point::ZERO);
     }

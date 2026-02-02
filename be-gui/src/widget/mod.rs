@@ -26,24 +26,18 @@ impl WidgetStore {
     WidgetStore { content: Box::new(content), bounds: Rect::ZERO, path }
   }
 
-  pub fn visible(&self) -> bool { !self.bounds.is_zero_area() }
-
   pub fn animated(&self) -> bool { false }
 
   pub fn layout(&mut self, layout: &mut Layout) {
-    if let Some(bounds) = self.content.layout(layout) {
+    if let Some(size) = self.content.layout(layout) {
       let current = layout.current_bounds();
-      self.bounds = current.with_origin(current.origin() + bounds.to_vec2());
+      self.bounds = current.with_size(size);
     } else {
       self.bounds = layout.current_bounds();
     }
   }
 
   pub fn draw(&mut self, render: &mut Render) {
-    if !self.visible() {
-      return;
-    }
-
     render.clipped(self.bounds, |render| self.content.draw(render));
   }
 }
