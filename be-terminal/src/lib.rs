@@ -234,7 +234,11 @@ impl Terminal {
       let mut buf = [0u8; 1024];
 
       match self.pty.read(&mut buf) {
-        Ok(0) => break,
+        // Ok(0) -> pty closed on macos
+        Ok(0) => return true,
+        // EIO error -> pty closed on linux
+        Err(e) if e.raw_os_error() == Some(rustix::io::Errno::IO.raw_os_error()) => return true,
+
         Ok(n) => {
           for &b in &buf[..n] {
             self.parser.advance(&mut self.state, b);
@@ -246,8 +250,6 @@ impl Terminal {
           }
         }
         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
-        // EIO error -> pty closed
-        Err(e) if e.raw_os_error() == Some(rustix::io::Errno::IO.raw_os_error()) => return true,
 
         Err(e) => {
           println!("{}", e);
