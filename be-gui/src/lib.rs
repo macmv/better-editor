@@ -110,8 +110,13 @@ impl State {
           search.layout(layout);
         }
         tab.content.layout(&mut state.views.views, layout);
-        for to_close in layout.to_close.drain(..) {
-          tab.content.close(to_close);
+        if !layout.to_close.is_empty() {
+          for to_close in layout.to_close.drain(..) {
+            tab.content.close(to_close);
+          }
+
+          // Re-run layout after removing closed views.
+          tab.content.layout(&mut state.views.views, layout);
         }
       },
       |_, _| {},
