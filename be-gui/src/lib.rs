@@ -158,10 +158,6 @@ impl State {
         true
       }
     });
-
-    // for widget in self.widgets.values_mut() {
-    //   widget.layout(layout);
-    // }
   }
 
   fn animated(&self) -> bool { self.tabs[self.active].content.animated(&self.views.views) }
@@ -317,11 +313,15 @@ impl State {
   }
 
   fn layout_tabs(&self, layout: &mut Layout) {
+    let mut row = vec![];
+
     for (i, tab) in self.tabs.iter().enumerate() {
-      layout.add_widget(smol_str::format_smolstr!("tab-{}", i), || {
+      row.push(layout.add_widget(smol_str::format_smolstr!("tab-{}", i), || {
         crate::widget::Button::new(&tab.title)
-      });
+      }));
     }
+
+    layout.layout_row(&row);
   }
 
   fn draw_tabs(&self, render: &mut Render) {

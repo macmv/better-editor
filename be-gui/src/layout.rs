@@ -70,13 +70,20 @@ impl<'a> Layout<'a> {
       widgets.create(WidgetStore::new(path, widget()))
     };
     self.seen.insert(id);
-
-    let mut widget = widgets.widgets.remove(&id).unwrap();
-    widget.layout(self);
-    let widgets = self.widgets.as_mut().unwrap();
-    widgets.widgets.insert(id, widget);
-
     id
+  }
+
+  pub fn layout_row(&mut self, widgets: &[WidgetId]) {
+    let mut size = self.size();
+    size.width /= widgets.len() as f64;
+
+    for (i, &id) in widgets.iter().enumerate() {
+      let rect = Rect::from_origin_size((i as f64 * size.width, 0.0), size);
+
+      let mut widget = self.widgets.as_mut().unwrap().widgets.remove(&id).unwrap();
+      self.clipped(rect, widget.name().clone(), |layout| widget.layout(layout));
+      self.widgets.as_mut().unwrap().widgets.insert(id, widget);
+    }
   }
 
   pub fn split<S>(

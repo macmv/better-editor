@@ -3,6 +3,7 @@ use kurbo::{Rect, Size};
 mod button;
 
 pub use button::Button;
+use smol_str::SmolStr;
 
 use crate::{Layout, Render, WidgetPath};
 
@@ -40,4 +41,6 @@ impl WidgetStore {
   pub fn draw(&mut self, render: &mut Render) {
     render.clipped(self.bounds, |render| self.content.draw(render));
   }
+
+  pub(crate) fn name(&self) -> &SmolStr { self.path.0.last().unwrap() }
 }
