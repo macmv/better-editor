@@ -1,8 +1,11 @@
 use kurbo::{Rect, Size};
 
+mod border;
 mod button;
 
+pub use border::Border;
 pub use button::Button;
+
 use smol_str::SmolStr;
 
 use crate::{Layout, Render, WidgetPath};

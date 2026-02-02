@@ -316,9 +316,15 @@ impl State {
     let mut row = vec![];
 
     for (i, tab) in self.tabs.iter().enumerate() {
-      row.push(layout.add_widget(smol_str::format_smolstr!("tab-{}", i), || {
-        crate::widget::Button::new(&tab.title)
-      }));
+      if i == 0 {
+        row.push(layout.add_widget(smol_str::format_smolstr!("tab-{}", i), || {
+          crate::widget::Button::new(&tab.title)
+        }));
+      } else {
+        row.push(layout.add_widget(smol_str::format_smolstr!("tab-{}", i), || {
+          crate::widget::Border::new(2.0, 0.0, 0.0, 0.0, crate::widget::Button::new(&tab.title))
+        }));
+      }
     }
 
     layout.layout_row(&row);
@@ -328,6 +334,7 @@ impl State {
     render
       .fill(&Rect::from_origin_size(Point::ZERO, render.size()), render.theme().background_lower);
 
+    /*
     let mut x = 10.0;
     for (i, tab) in self.tabs.iter().enumerate() {
       let layout = render.layout_text(&tab.title, render.theme().text);
@@ -355,6 +362,7 @@ impl State {
       );
       x += 6.0;
     }
+    */
   }
 
   fn active_editor(&mut self) -> Option<&mut be_editor::EditorState> {
