@@ -161,6 +161,8 @@ impl<'a> Layout<'a> {
     }
   }
 
+  pub fn is_stale(&self, layout: &TextLayout) -> bool { layout.scale != self.scale }
+
   pub fn layout_text(&mut self, text: &str, color: Color) -> TextLayout {
     puffin::profile_function!();
 

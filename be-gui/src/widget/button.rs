@@ -14,7 +14,7 @@ impl Button {
 
 impl Widget for Button {
   fn layout(&mut self, layout: &mut crate::Layout) -> Option<kurbo::Size> {
-    if self.layout.is_none() {
+    if self.layout.as_ref().is_none_or(|l| layout.is_stale(l)) {
       self.layout = Some(layout.layout_text(&self.content, layout.theme().text));
     }
 
