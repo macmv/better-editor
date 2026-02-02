@@ -356,12 +356,22 @@ impl<'a> Render<'a> {
 
   fn transform(&self) -> Affine { Affine::scale(self.scale) * Affine::translate(self.offset()) }
 
-  pub fn stroke(&mut self, shape: &impl Shape, color: Color, mut stroke: Stroke) {
+  pub fn stroke(&mut self, shape: &impl Shape, color: Color, stroke: Stroke) {
+    self.stroke_transform(shape, Affine::IDENTITY, color, stroke);
+  }
+
+  pub fn stroke_transform(
+    &mut self,
+    shape: &impl Shape,
+    transform: Affine,
+    color: Color,
+    mut stroke: Stroke,
+  ) {
     stroke.width *= self.scale;
 
     self.scene.stroke(
       &stroke,
-      self.transform(),
+      self.transform() * transform,
       peniko::Brush::Solid(encode_color(color)),
       None,
       shape,

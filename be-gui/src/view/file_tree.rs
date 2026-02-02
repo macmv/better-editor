@@ -1,10 +1,11 @@
 use std::{
   borrow::Cow,
   path::{Path, PathBuf},
+  sync::LazyLock,
 };
 
 use be_input::{Action, Direction, Mode, Move};
-use kurbo::{Point, Rect, Vec2};
+use kurbo::{Affine, BezPath, Point, Rect, Stroke, Vec2};
 
 use crate::{Notify, Render};
 
@@ -253,7 +254,7 @@ impl FileTree {
     TreeDraw {
       line:         0,
       indent:       0,
-      indent_width: 20.0,
+      indent_width: 12.0,
       line_height:  render.store.text.font_metrics().line_height,
       active:       if self.focused { Some(self.active) } else { None },
     }
@@ -280,6 +281,21 @@ impl Item {
   }
 }
 
+const CHEVRON_DOWN: LazyLock<BezPath> = LazyLock::new(|| {
+  let mut path = BezPath::new();
+  path.move_to((0.0, 2.0));
+  path.line_to((4.0, 6.0));
+  path.line_to((8.0, 2.0));
+  path
+});
+const CHEVRON_RIGHT: LazyLock<BezPath> = LazyLock::new(|| {
+  let mut path = BezPath::new();
+  path.move_to((2.0, 0.0));
+  path.line_to((6.0, 4.0));
+  path.line_to((2.0, 8.0));
+  path
+});
+
 impl TreeDraw {
   fn pos(&self) -> Point {
     Point::new(self.indent as f64 * self.indent_width, self.line as f64 * self.line_height)
@@ -301,6 +317,18 @@ impl TreeDraw {
 
   fn draw_directory(&mut self, dir: &Directory, render: &mut Render) {
     let text = render.layout_text(&format!(" {}", dir.name()), render.theme().text);
+
+    let path = if dir.expanded { &*CHEVRON_DOWN } else { &*CHEVRON_RIGHT };
+    render.stroke_transform(
+      path,
+      // Icon is 8x8, so center it vertically, and give it 8 pixels of margin.
+      Affine::translate(
+        self.pos().to_vec2() + Vec2::new(self.indent_width - 16.0, text.size().height / 2.0 - 4.0),
+      ),
+      render.theme().background_raised_outline,
+      Stroke::new(1.0),
+    );
+
     render.draw_text(&text, self.pos() + Vec2::new(self.indent_width, 0.0));
 
     if dir.expanded
