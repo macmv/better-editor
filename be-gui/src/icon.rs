@@ -26,12 +26,24 @@ macro_rules! build_icon {
       path.line_to((Point::from($points).to_vec2() / 12.0).to_point());
     )*
     Icon::Stroke(path)
-  }}
+  }};
+
+  (fill [$start_point:expr, $($points:expr),* $(,)?]) => {{
+    let mut path = BezPath::new();
+    path.move_to((Point::from($start_point).to_vec2() / 12.0).to_point());
+    $(
+      path.line_to((Point::from($points).to_vec2() / 12.0).to_point());
+    )*
+    path.close_path();
+    Icon::Fill(path)
+  }};
 }
 
 icon! {
   CHEVRON_DOWN => stroke [(0.0, 3.0), (6.0, 9.0), (12.0, 3.0)];
   CHEVRON_RIGHT => stroke [(3.0, 0.0), (9.0, 6.0), (3.0, 12.0)];
+
+  FOLDER => fill [(0.0, 1.0), (5.0, 1.0), (7.0, 3.0), (12.0, 3.0), (12.0, 11.0), (0.0, 11.0)];
 }
 
 impl Icon {

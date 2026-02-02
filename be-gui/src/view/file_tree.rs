@@ -300,7 +300,7 @@ impl TreeDraw {
   }
 
   fn draw_directory(&mut self, dir: &Directory, render: &mut Render) {
-    let text = render.layout_text(&format!(" {}", dir.name()), render.theme().text);
+    let text = render.layout_text(&format!("{}", dir.name()), render.theme().text);
 
     let icon = if dir.expanded { &*icon::CHEVRON_DOWN } else { &*icon::CHEVRON_RIGHT };
     icon.draw(
@@ -310,7 +310,14 @@ impl TreeDraw {
       render,
     );
 
-    render.draw_text(&text, self.pos() + Vec2::new(self.indent_width, 0.0));
+    icon::FOLDER.draw(
+      self.pos() + Vec2::new(self.indent_width, text.size().height / 2.0 - 6.0),
+      12.0,
+      crate::oklch(0.7, 0.14, 240.0),
+      render,
+    );
+
+    render.draw_text(&text, self.pos() + Vec2::new(self.indent_width + 16.0, 0.0));
 
     if dir.expanded
       && let Some(items) = &dir.items
