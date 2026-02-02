@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use be_input::Direction;
 use kurbo::{Axis, Point, Rect};
 
-use crate::{Distance, Layout, Render, Updater, ViewCollection, ViewId, view::View};
+use crate::{Distance, Layout, Updater, ViewCollection, ViewId, view::View};
 
 pub enum Pane {
   View(ViewId),
@@ -41,13 +41,6 @@ impl Pane {
           item.update(views, updater);
         }
       }
-    }
-  }
-
-  pub fn draw(&self, views: &mut HashMap<ViewId, View>, render: &mut Render) {
-    match self {
-      Pane::View(id) => views.get_mut(id).unwrap().draw(render),
-      Pane::Split(split) => split.draw(views, render),
     }
   }
 
@@ -143,42 +136,6 @@ impl Pane {
 }
 
 impl Split {
-  fn draw(&self, views: &mut HashMap<ViewId, View>, render: &mut Render) {
-    let mut bounds = Rect::from_origin_size(Point::ZERO, render.size());
-
-    match self.axis {
-      Axis::Vertical => {
-        for (i, item) in self.items.iter().enumerate() {
-          let percent =
-            self.percent.get(i).copied().unwrap_or_else(|| 1.0 - self.percent.iter().sum::<f64>());
-          let mut distance = Distance::Percent(percent).to_pixels_in(render.size().width);
-          if distance < 0.0 {
-            distance += render.size().width;
-          }
-
-          bounds.x1 = bounds.x0 + distance;
-          render.clipped(bounds, |render| item.draw(views, render));
-          bounds.x0 += distance;
-        }
-      }
-
-      Axis::Horizontal => {
-        for (i, item) in self.items.iter().enumerate() {
-          let percent =
-            self.percent.get(i).copied().unwrap_or_else(|| 1.0 - self.percent.iter().sum::<f64>());
-          let mut distance = Distance::Percent(percent).to_pixels_in(render.size().height);
-          if distance < 0.0 {
-            distance += render.size().height;
-          }
-
-          bounds.y1 = bounds.y0 + distance;
-          render.clipped(bounds, |render| item.draw(views, render));
-          bounds.y0 += distance;
-        }
-      }
-    }
-  }
-
   fn layout(&self, views: &mut HashMap<ViewId, View>, layout: &mut Layout) {
     let mut bounds = Rect::from_origin_size(Point::ZERO, layout.size());
 

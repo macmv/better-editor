@@ -135,7 +135,10 @@ impl State {
       Distance::Pixels(-20.0),
       |state, render| {
         let tab = &mut state.tabs[state.active];
-        tab.content.draw(&mut state.views.views, render);
+        for view in tab.content.views() {
+          let view = state.views.get_mut(view).unwrap();
+          render.clipped(view.bounds, |render| view.draw(render));
+        }
         if let Some(search) = &mut tab.search {
           render.clipped(
             Rect::new(100.0, 50.0, render.size().width - 100.0, render.size().height - 50.0),
