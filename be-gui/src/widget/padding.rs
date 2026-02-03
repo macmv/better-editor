@@ -1,20 +1,15 @@
 use kurbo::{Rect, Size};
 
-use crate::{Widget, WidgetId};
+use crate::{Widget, WidgetId, widget::Borders};
 
 pub struct Padding {
-  left:   f64,
-  top:    f64,
-  right:  f64,
-  bottom: f64,
+  borders: Borders,
 
   inner: WidgetId,
 }
 
 impl Padding {
-  pub fn new(left: f64, top: f64, right: f64, bottom: f64, inner: WidgetId) -> Self {
-    Padding { left, top, right, bottom, inner }
-  }
+  pub fn new(borders: Borders, inner: WidgetId) -> Self { Padding { borders, inner } }
 }
 
 impl Widget for Padding {
@@ -22,10 +17,18 @@ impl Widget for Padding {
     let size = layout.layout(self.inner);
     layout.set_bounds(
       self.inner,
-      Rect::new(self.left, self.top, self.left + size.width, self.top + size.height),
+      Rect::new(
+        self.borders.left,
+        self.borders.top,
+        self.borders.left + size.width,
+        self.borders.top + size.height,
+      ),
     );
 
-    Some(Size::new(self.left + size.width + self.right, self.top + size.height + self.bottom))
+    Some(Size::new(
+      self.borders.left + size.width + self.borders.right,
+      self.borders.top + size.height + self.borders.bottom,
+    ))
   }
 
   fn children(&self) -> &[crate::WidgetId] { std::slice::from_ref(&self.inner) }

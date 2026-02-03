@@ -129,11 +129,11 @@ impl<'a, 'b, W: Widget> WidgetBuilder<'a, 'b, W> {
 
   op!(border_radius(b: impl Into<Borders>, radius: impl Into<Corners>) -> Border::new_with_radius(b.into(), radius.into()));
 
-  op!(padding(p: f64) -> Padding::new(p, p, p, p));
-  op!(padding_left(left: f64) -> Padding::new(left, 0.0, 0.0, 0.0));
-  op!(padding_top(top: f64) -> Padding::new(0.0, top, 0.0, 0.0));
-  op!(padding_right(right: f64) -> Padding::new(0.0, 0.0, right, 0.0));
-  op!(padding_bottom(bottom: f64) -> Padding::new(0.0, 0.0, 0.0, bottom));
-  op!(padding_left_right(p: f64) -> Padding::new(p, 0.0, p, 0.0));
-  op!(padding_top_bottom(p: f64) -> Padding::new(0.0, p, 0.0, p));
+  op!(padding(p: impl Into<Borders>) -> Padding::new(p.into()));
+  op!(padding_left(left: f64) -> Padding::new(Borders::left(left)));
+  op!(padding_top(top: f64) -> Padding::new(Borders::top(top)));
+  op!(padding_right(right: f64) -> Padding::new(Borders::right(right)));
+  op!(padding_bottom(bottom: f64) -> Padding::new(Borders::bottom(bottom)));
+  op!(padding_left_right(p: f64) -> Padding::new(Borders::left_right(p)));
+  op!(padding_top_bottom(p: f64) -> Padding::new(Borders::top_bottom(p)));
 }
