@@ -128,7 +128,7 @@ impl State {
     layout.split(
       self,
       Axis::Horizontal,
-      Distance::Pixels(-20.0),
+      Distance::Pixels(-25.0),
       "main",
       "tabs",
       |state, layout| {
@@ -169,7 +169,7 @@ impl State {
     render.split(
       self,
       Axis::Horizontal,
-      Distance::Pixels(-20.0),
+      Distance::Pixels(-25.0),
       |state, render| {
         let tab = &mut state.tabs[state.active];
         for view in tab.content.views() {
@@ -325,7 +325,7 @@ impl State {
     }
 
     let root = layout.add_widget("tabs", || {
-      crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Start, row)
+      crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, row)
         .gap(5.0)
         .padding_left_right(10.0)
     });
