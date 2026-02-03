@@ -2,9 +2,11 @@ use kurbo::{Rect, Size};
 
 mod border;
 mod button;
+mod padding;
 
 pub use border::Border;
 pub use button::Button;
+pub use padding::Padding;
 
 use smol_str::SmolStr;
 
@@ -47,6 +49,16 @@ pub trait Widget {
   op!(border_top(top: f64) -> Border::new(0.0, top, 0.0, 0.0));
   op!(border_right(right: f64) -> Border::new(0.0, 0.0, right, 0.0));
   op!(border_bottom(bottom: f64) -> Border::new(0.0, 0.0, 0.0, bottom));
+  op!(border_left_right(b: f64) -> Border::new(b, 0.0, b, 0.0));
+  op!(border_top_bottom(b: f64) -> Border::new(0.0, b, 0.0, b));
+
+  op!(padding(p: f64) -> Padding::new(p, p, p, p));
+  op!(padding_left(left: f64) -> Padding::new(left, 0.0, 0.0, 0.0));
+  op!(padding_top(top: f64) -> Padding::new(0.0, top, 0.0, 0.0));
+  op!(padding_right(right: f64) -> Padding::new(0.0, 0.0, right, 0.0));
+  op!(padding_bottom(bottom: f64) -> Padding::new(0.0, 0.0, 0.0, bottom));
+  op!(padding_left_right(p: f64) -> Padding::new(p, 0.0, p, 0.0));
+  op!(padding_top_bottom(p: f64) -> Padding::new(0.0, p, 0.0, p));
 }
 
 impl Widget for Box<dyn Widget> {
