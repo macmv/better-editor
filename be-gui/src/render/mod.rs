@@ -10,9 +10,11 @@ use peniko::{
 use crate::{Layout, render::text::TextStore, theme::Theme};
 
 mod blitter;
+mod cursor;
 mod text;
 mod window;
 
+pub use cursor::CursorKind;
 pub use text::TextLayout;
 
 #[derive(Debug)]

@@ -227,6 +227,7 @@ dependencies = [
  "kurbo",
  "log",
  "nucleo",
+ "objc2 0.6.3",
  "parley",
  "peniko",
  "png",
