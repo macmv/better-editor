@@ -18,6 +18,20 @@ pub struct WidgetStore {
   pub path:    WidgetPath,
 }
 
+pub struct Borders {
+  pub left:   f64,
+  pub top:    f64,
+  pub right:  f64,
+  pub bottom: f64,
+}
+
+pub struct Corners {
+  pub top_left:     f64,
+  pub top_right:    f64,
+  pub bottom_left:  f64,
+  pub bottom_right: f64,
+}
+
 macro_rules! op {
   ($name:ident($($arg_name:ident: $arg_ty:ty),*) -> $ty:ident::new($($arg_expr:expr),*)) => {
     fn $name(self, $($arg_name: $arg_ty),*) -> $ty
@@ -44,13 +58,13 @@ pub trait Widget {
     if cond { Box::new(f(self)) } else { Box::new(self) }
   }
 
-  op!(border(b: f64) -> Border::new(b, b, b, b));
-  op!(border_left(left: f64) -> Border::new(left, 0.0, 0.0, 0.0));
-  op!(border_top(top: f64) -> Border::new(0.0, top, 0.0, 0.0));
-  op!(border_right(right: f64) -> Border::new(0.0, 0.0, right, 0.0));
-  op!(border_bottom(bottom: f64) -> Border::new(0.0, 0.0, 0.0, bottom));
-  op!(border_left_right(b: f64) -> Border::new(b, 0.0, b, 0.0));
-  op!(border_top_bottom(b: f64) -> Border::new(0.0, b, 0.0, b));
+  op!(border(b: f64) -> Border::new(Borders::all(b)));
+  op!(border_left(left: f64) -> Border::new(Borders::left(left)));
+  op!(border_top(top: f64) -> Border::new(Borders::top(top)));
+  op!(border_right(right: f64) -> Border::new(Borders::right(right)));
+  op!(border_bottom(bottom: f64) -> Border::new(Borders::bottom(bottom)));
+  op!(border_left_right(b: f64) -> Border::new(Borders::left_right(b)));
+  op!(border_top_bottom(b: f64) -> Border::new(Borders::top_bottom(b)));
 
   op!(padding(p: f64) -> Padding::new(p, p, p, p));
   op!(padding_left(left: f64) -> Padding::new(left, 0.0, 0.0, 0.0));
@@ -86,4 +100,16 @@ impl WidgetStore {
   pub fn draw(&mut self, render: &mut Render) {
     render.clipped(self.bounds, |render| self.content.draw(render));
   }
+}
+
+impl Borders {
+  pub const fn all(b: f64) -> Self { Borders { left: b, top: b, right: b, bottom: b } }
+
+  pub const fn left(left: f64) -> Self { Borders { left, right: 0.0, top: 0.0, bottom: 0.0 } }
+  pub const fn right(right: f64) -> Self { Borders { left: 0.0, right, top: 0.0, bottom: 0.0 } }
+  pub const fn top(top: f64) -> Self { Borders { left: 0.0, right: 0.0, top, bottom: 0.0 } }
+  pub const fn bottom(bottom: f64) -> Self { Borders { left: 0.0, right: 0.0, top: 0.0, bottom } }
+
+  pub const fn left_right(b: f64) -> Self { Borders { left: b, right: b, top: 0.0, bottom: 0.0 } }
+  pub const fn top_bottom(b: f64) -> Self { Borders { left: 0.0, right: 0.0, top: b, bottom: b } }
 }

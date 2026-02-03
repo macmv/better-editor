@@ -1,27 +1,24 @@
 use kurbo::Rect;
 
-use crate::Widget;
+use crate::{Widget, widget::Borders};
 
 pub struct Border {
-  left:   f64,
-  top:    f64,
-  right:  f64,
-  bottom: f64,
+  borders: Borders,
 
   inner: Box<dyn Widget>,
 }
 
 impl Border {
-  pub fn new(left: f64, top: f64, right: f64, bottom: f64, inner: impl Widget + 'static) -> Self {
-    Border { left, top, right, bottom, inner: Box::new(inner) }
+  pub fn new(borders: Borders, inner: impl Widget + 'static) -> Self {
+    Border { borders, inner: Box::new(inner) }
   }
 }
 
 impl Widget for Border {
   fn layout(&mut self, layout: &mut crate::Layout) -> Option<kurbo::Size> {
     let mut size = self.inner.layout(layout)?;
-    size.width += self.left + self.right;
-    size.height += self.top + self.bottom;
+    size.width += self.borders.left + self.borders.right;
+    size.height += self.borders.top + self.borders.bottom;
 
     Some(size)
   }
@@ -29,21 +26,22 @@ impl Widget for Border {
   fn draw(&mut self, render: &mut crate::Render) {
     render.clipped(
       Rect::new(
-        self.left,
-        self.top,
-        render.size().width - self.right,
-        render.size().height - self.bottom,
+        self.borders.left,
+        self.borders.top,
+        render.size().width - self.borders.right,
+        render.size().height - self.borders.bottom,
       ),
       |render| self.inner.draw(render),
     );
 
-    if self.left > 0.0 {
-      render.fill(&Rect::new(0.0, 0.0, self.left, render.size().height), render.theme().text);
+    if self.borders.left > 0.0 {
+      render
+        .fill(&Rect::new(0.0, 0.0, self.borders.left, render.size().height), render.theme().text);
     }
-    if self.right > 0.0 {
+    if self.borders.right > 0.0 {
       render.fill(
         &Rect::new(
-          render.size().width - self.right,
+          render.size().width - self.borders.right,
           0.0,
           render.size().width,
           render.size().height,
