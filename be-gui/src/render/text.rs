@@ -37,11 +37,11 @@ pub struct FontMetrics {
 }
 
 pub struct TextLayout {
-  metrics: FontMetrics,
+  pub metrics: FontMetrics,
 
-  layout:      parley::Layout<peniko::Brush>,
-  scale:       f64,
-  backgrounds: Vec<(usize, Option<peniko::Brush>)>,
+  pub layout:      parley::Layout<peniko::Brush>,
+  pub scale:       f64,
+  pub backgrounds: Vec<(usize, Option<peniko::Brush>)>,
 }
 
 pub struct LayoutBuilder<'a> {

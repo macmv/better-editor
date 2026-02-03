@@ -3,28 +3,35 @@ mod render;
 use std::{collections::HashMap, hash::Hash};
 
 use be_input::{Action, KeyStroke, Navigation};
-use kurbo::{Axis, Cap, Line, Point, Rect, Stroke};
+use kurbo::{Axis, Point, Rect};
 pub use render::*;
 
 use pane::Pane;
+use smol_str::SmolStr;
 use view::View;
 
-use crate::view::{FileTree, ViewContent};
+use crate::{
+  view::{FileTree, ViewContent},
+  widget::{Align, Justify},
+};
 
 mod icon;
 mod layout;
 mod pane;
 mod theme;
 mod view;
+mod widget;
 
 pub use layout::Layout;
+pub use widget::{Widget, WidgetStore};
 
 struct State {
   keys:   Vec<KeyStroke>,
   active: usize,
   tabs:   Vec<Tab>,
 
-  views: ViewCollection,
+  views:   ViewCollection,
+  widgets: WidgetCollection,
 
   notify: Notify,
 }
@@ -32,6 +39,12 @@ struct State {
 struct ViewCollection {
   next_view_id: ViewId,
   views:        HashMap<ViewId, View>,
+}
+
+struct WidgetCollection {
+  next_widget_id: WidgetId,
+  paths:          HashMap<WidgetPath, WidgetId>,
+  widgets:        HashMap<WidgetId, WidgetStore>,
 }
 
 struct Tab {
@@ -43,14 +56,21 @@ struct Tab {
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct ViewId(u64);
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct WidgetId(u64);
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct WidgetPath(Vec<SmolStr>);
+
 impl State {
   pub fn new(store: &RenderStore) -> Self {
     let mut state = State {
-      keys:   vec![],
-      active: 1,
-      tabs:   vec![],
-      views:  ViewCollection::new(),
-      notify: store.notifier(),
+      keys:    vec![],
+      active:  1,
+      tabs:    vec![],
+      views:   ViewCollection::new(),
+      widgets: WidgetCollection::new(),
+      notify:  store.notifier(),
     };
 
     let layout = store.config.borrow().settings.layout.clone();
@@ -103,10 +123,14 @@ impl State {
   }
 
   fn layout(&mut self, layout: &mut Layout) {
+    layout.widgets = Some(std::mem::replace(&mut self.widgets, WidgetCollection::new()));
+
     layout.split(
       self,
       Axis::Horizontal,
-      Distance::Pixels(-20.0),
+      Distance::Pixels(-25.0),
+      "main",
+      "tabs",
       |state, layout| {
         let tab = &mut state.tabs[state.active];
         if let Some(search) = &mut tab.search {
@@ -122,8 +146,21 @@ impl State {
           tab.content.layout(&mut state.views.views, layout);
         }
       },
-      |_, _| {},
+      |state, layout| {
+        state.layout_tabs(layout);
+      },
     );
+
+    self.widgets = layout.widgets.take().unwrap();
+
+    self.widgets.widgets.retain(|id, widget| {
+      if !layout.seen.contains(id) {
+        self.widgets.paths.remove(&widget.path);
+        false
+      } else {
+        true
+      }
+    });
   }
 
   fn animated(&self) -> bool { self.tabs[self.active].content.animated(&self.views.views) }
@@ -132,7 +169,7 @@ impl State {
     render.split(
       self,
       Axis::Horizontal,
-      Distance::Pixels(-20.0),
+      Distance::Pixels(-25.0),
       |state, render| {
         let tab = &mut state.tabs[state.active];
         for view in tab.content.views() {
@@ -148,6 +185,10 @@ impl State {
       },
       |state, render| state.draw_tabs(render),
     );
+
+    for widget in self.widgets.values_mut() {
+      widget.draw(render);
+    }
   }
 
   fn open(&mut self, path: &std::path::Path) {
@@ -274,10 +315,29 @@ impl State {
     }
   }
 
+  fn layout_tabs(&self, layout: &mut Layout) {
+    let mut row = vec![];
+
+    for (i, tab) in self.tabs.iter().enumerate() {
+      row.push(layout.add_widget(smol_str::format_smolstr!("tab-{}", i), || {
+        crate::widget::Button::new(&tab.title).padding_left_right(5.0).border(0.5).radius(5.0)
+      }));
+    }
+
+    let root = layout.add_widget("tabs", || {
+      crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, row)
+        .gap(5.0)
+        .padding_left_right(10.0)
+    });
+
+    layout.layout(root);
+  }
+
   fn draw_tabs(&self, render: &mut Render) {
     render
       .fill(&Rect::from_origin_size(Point::ZERO, render.size()), render.theme().background_lower);
 
+    /*
     let mut x = 10.0;
     for (i, tab) in self.tabs.iter().enumerate() {
       let layout = render.layout_text(&tab.title, render.theme().text);
@@ -305,6 +365,7 @@ impl State {
       );
       x += 6.0;
     }
+    */
   }
 
   fn active_editor(&mut self) -> Option<&mut be_editor::EditorState> {
@@ -363,7 +424,7 @@ impl State {
 }
 
 impl ViewCollection {
-  pub fn new() -> Self { Self { next_view_id: ViewId(0), views: HashMap::new() } }
+  pub fn new() -> Self { ViewCollection { next_view_id: ViewId(0), views: HashMap::new() } }
 
   pub fn get(&self, id: ViewId) -> Option<&View> { self.views.get(&id) }
   pub fn get_mut(&mut self, id: ViewId) -> Option<&mut View> { self.views.get_mut(&id) }
@@ -377,5 +438,29 @@ impl ViewCollection {
 
   pub fn visible_mut(&mut self) -> impl Iterator<Item = &mut View> {
     self.views.values_mut().filter(|v| v.visible())
+  }
+}
+
+impl WidgetCollection {
+  pub fn new() -> Self {
+    WidgetCollection {
+      next_widget_id: WidgetId(0),
+      paths:          HashMap::new(),
+      widgets:        HashMap::new(),
+    }
+  }
+
+  pub fn get_path(&self, path: &WidgetPath) -> Option<WidgetId> { self.paths.get(path).copied() }
+
+  pub fn create(&mut self, store: WidgetStore) -> WidgetId {
+    let id = self.next_widget_id;
+    self.next_widget_id.0 += 1;
+    self.paths.insert(store.path.clone(), id);
+    self.widgets.insert(id, store);
+    id
+  }
+
+  pub fn values_mut(&mut self) -> impl Iterator<Item = &mut WidgetStore> {
+    self.widgets.values_mut()
   }
 }
