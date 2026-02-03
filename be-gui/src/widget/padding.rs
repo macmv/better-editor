@@ -1,6 +1,6 @@
-use kurbo::Rect;
+use kurbo::{Rect, Size};
 
-use crate::Widget;
+use crate::{Widget, WidgetId};
 
 pub struct Padding {
   left:   f64,
@@ -8,41 +8,25 @@ pub struct Padding {
   right:  f64,
   bottom: f64,
 
-  inner: Box<dyn Widget>,
+  inner: WidgetId,
 }
 
 impl Padding {
-  pub fn new(left: f64, top: f64, right: f64, bottom: f64, inner: impl Widget + 'static) -> Self {
-    Padding { left, top, right, bottom, inner: Box::new(inner) }
+  pub fn new(left: f64, top: f64, right: f64, bottom: f64, inner: WidgetId) -> Self {
+    Padding { left, top, right, bottom, inner }
   }
 }
 
 impl Widget for Padding {
   fn layout(&mut self, layout: &mut crate::Layout) -> Option<kurbo::Size> {
-    let mut size = layout.clipped(
-      Rect::new(
-        self.left,
-        self.top,
-        layout.size().width - self.right,
-        layout.size().height - self.bottom,
-      ),
-      |layout| self.inner.layout(layout),
-    )?;
-    size.width += self.left + self.right;
-    size.height += self.top + self.bottom;
-
-    Some(size)
-  }
-
-  fn draw(&mut self, render: &mut crate::Render) {
-    render.clipped(
-      Rect::new(
-        self.left,
-        self.top,
-        render.size().width - self.right,
-        render.size().height - self.bottom,
-      ),
-      |render| self.inner.draw(render),
+    let size = layout.layout(self.inner);
+    layout.set_bounds(
+      self.inner,
+      Rect::new(self.left, self.top, self.left + size.width, self.top + size.height),
     );
+
+    Some(Size::new(self.left + size.width + self.right, self.top + size.height + self.bottom))
   }
+
+  fn children(&self) -> &[crate::WidgetId] { std::slice::from_ref(&self.inner) }
 }
