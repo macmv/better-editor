@@ -3,7 +3,7 @@ mod render;
 use std::{collections::HashMap, hash::Hash};
 
 use be_input::{Action, KeyStroke, Navigation};
-use kurbo::{Axis, Point, Rect};
+use kurbo::{Axis, Point, Rect, Size};
 pub use render::*;
 
 use pane::Pane;
@@ -51,6 +51,21 @@ struct Tab {
   title:   String,
   content: Pane,
   search:  Option<View>,
+}
+
+#[derive(Debug)]
+pub enum MouseEvent {
+  Move { pos: Point },
+  Left,
+  Button { pos: Point, pressed: bool, button: MouseButton },
+  Scroll { pos: Point, axis: kurbo::Axis, delta: f64 },
+}
+
+#[derive(Debug)]
+pub enum MouseButton {
+  Left,
+  Middle,
+  Right,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -160,6 +175,11 @@ impl State {
         true
       }
     });
+  }
+
+  fn on_mouse(&self, pos: MouseEvent, size: Size, scale: f64) -> CursorKind {
+    let _ = (pos, size, scale);
+    CursorKind::Default
   }
 
   fn animated(&self) -> bool { self.tabs[self.active].content.animated(&self.views.views) }

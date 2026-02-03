@@ -1,11 +1,12 @@
 use be_input::{Key, KeyStroke};
+use kurbo::Point;
 use winit::{
   event::WindowEvent,
   event_loop::{self, ActiveEventLoop},
   keyboard::NamedKey,
 };
 
-use crate::Event;
+use crate::{Event, MouseEvent, render::cursor::CursorKind};
 
 type AppBuilder =
   fn(&wgpu::Device, &wgpu::SurfaceConfiguration, event_loop::EventLoopProxy<Event>) -> super::App;
@@ -19,6 +20,9 @@ struct App {
 struct Init {
   app:  super::App,
   keys: KeyState,
+
+  cursor:      Option<Point>,
+  cursor_kind: CursorKind,
 
   surface: wgpu::Surface<'static>,
   device:  wgpu::Device,
@@ -83,6 +87,8 @@ impl winit::application::ApplicationHandler<Event> for App {
     self.init = Some(Init {
       app: (self.builder)(&device, &config, self.proxy.clone()),
       keys: Default::default(),
+      cursor: None,
+      cursor_kind: CursorKind::Default,
       surface,
       device,
       queue,
@@ -152,6 +158,65 @@ impl winit::application::ApplicationHandler<Event> for App {
           && let Some(key) = init.keys.parse_key(key)
         {
           init.app.state.on_key(key);
+          init.window.request_redraw();
+        }
+      }
+
+      WindowEvent::CursorMoved { position, .. } => {
+        if let Some(init) = &mut self.init {
+          let pos = Point::new(position.x / init.scale, position.y / init.scale);
+          init.cursor = Some(pos);
+          let size = kurbo::Size::new(
+            init.app.texture.width() as f64 / init.scale,
+            init.app.texture.height() as f64 / init.scale,
+          );
+
+          let new_cursor = init.app.state.on_mouse(MouseEvent::Move { pos }, size, init.scale);
+          if new_cursor != init.cursor_kind {
+            super::cursor::set_cursor(&init.window, new_cursor);
+            init.cursor_kind = new_cursor;
+          }
+        }
+      }
+
+      WindowEvent::CursorLeft { .. } => {
+        if let Some(init) = &mut self.init {
+          init.cursor = None;
+          let size = kurbo::Size::new(
+            init.app.texture.width() as f64 / init.scale,
+            init.app.texture.height() as f64 / init.scale,
+          );
+          init.app.state.on_mouse(MouseEvent::Left, size, init.scale);
+        }
+      }
+
+      WindowEvent::MouseInput { state, button, .. } => {
+        if let Some(init) = &mut self.init
+          && let Some(cursor) = init.cursor
+          && let Some(button) = match button {
+            winit::event::MouseButton::Left => Some(crate::MouseButton::Left),
+            winit::event::MouseButton::Right => Some(crate::MouseButton::Right),
+            winit::event::MouseButton::Middle => Some(crate::MouseButton::Middle),
+            _ => None,
+          }
+        {
+          let size = kurbo::Size::new(
+            init.app.texture.width() as f64 / init.scale,
+            init.app.texture.height() as f64 / init.scale,
+          );
+
+          init.app.state.on_mouse(
+            MouseEvent::Button {
+              pos: cursor,
+              pressed: match state {
+                winit::event::ElementState::Pressed => true,
+                winit::event::ElementState::Released => false,
+              },
+              button,
+            },
+            size,
+            init.scale,
+          );
           init.window.request_redraw();
         }
       }
