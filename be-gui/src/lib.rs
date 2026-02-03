@@ -320,14 +320,14 @@ impl State {
 
     for (i, tab) in self.tabs.iter().enumerate() {
       row.push(layout.add_widget(smol_str::format_smolstr!("tab-{}", i), || {
-        crate::widget::Button::new(&tab.title)
-          .padding_left_right(5.0)
-          .apply_if(i != 0, |b| b.border_left(2.0))
+        crate::widget::Button::new(&tab.title).padding_left_right(5.0).border(0.5).radius(5.0)
       }));
     }
 
     let root = layout.add_widget("tabs", || {
       crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Start, row)
+        .gap(5.0)
+        .padding_left_right(10.0)
     });
 
     layout.layout(root);
