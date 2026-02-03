@@ -186,7 +186,7 @@ impl winit::application::ApplicationHandler<Event> for App {
             init.app.texture.width() as f64 / init.scale,
             init.app.texture.height() as f64 / init.scale,
           );
-          init.app.state.on_mouse(MouseEvent::Left, size, init.scale);
+          init.app.state.on_mouse(MouseEvent::Leave, size, init.scale);
         }
       }
 

@@ -56,7 +56,7 @@ struct Tab {
 #[derive(Debug)]
 pub enum MouseEvent {
   Move { pos: Point },
-  Left,
+  Leave,
   Button { pos: Point, pressed: bool, button: MouseButton },
   Scroll { pos: Point, axis: kurbo::Axis, delta: f64 },
 }
