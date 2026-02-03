@@ -14,6 +14,7 @@ use crate::{Layout, Render, WidgetId, WidgetPath};
 
 pub struct WidgetStore {
   pub content: Box<dyn Widget>,
+  /// Bounds of this widget, relative to the parent.
   pub bounds:  Rect,
   pub path:    WidgetPath,
 }
