@@ -192,7 +192,7 @@ impl State {
         let widget = self.widgets.widgets.get_mut(&widget).unwrap();
         let bounds = widget.bounds + outer_bounds.origin().to_vec2();
         render.clipped(bounds, |render| widget.content.draw(render));
-        stack.extend(widget.children().iter().map(|&c| (c, bounds)));
+        stack.extend(widget.children().iter().rev().map(|&c| (c, bounds)));
       }
     }
   }
