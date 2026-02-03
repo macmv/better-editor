@@ -24,6 +24,12 @@ pub struct Layout<'a> {
   pub to_close: Vec<ViewId>,
 }
 
+pub struct WidgetBuilder<'a: 'b, 'b, W: Widget> {
+  layout:   &'b mut Layout<'a>,
+  id:       WidgetId,
+  _phantom: std::marker::PhantomData<W>,
+}
+
 impl<'a> Layout<'a> {
   pub fn new(store: &'a mut RenderStore, scale: f64, size: Size) -> Self {
     Self {
@@ -55,7 +61,10 @@ impl<'a> Layout<'a> {
     Rect::from_origin_size(self.offset().to_point(), self.size())
   }
 
-  pub fn add_widget<W: Widget + 'static>(&mut self, widget: impl FnOnce() -> W) -> WidgetId {
+  pub fn add_widget<'b, W: Widget + 'static>(
+    &'b mut self,
+    widget: impl FnOnce() -> W,
+  ) -> WidgetBuilder<'a, 'b, W> {
     let path = self.next_path();
 
     let widgets = self.widgets.as_mut().expect("widgets not setup");
@@ -68,7 +77,7 @@ impl<'a> Layout<'a> {
     if !self.seen.insert(id) {
       eprintln!("duplicate widget at path {:?}", widgets.widgets[&id].path);
     }
-    id
+    WidgetBuilder { layout: self, id, _phantom: std::marker::PhantomData }
   }
 
   pub fn layout(&mut self, root: WidgetId) -> Size {
@@ -175,4 +184,18 @@ impl<'a> Layout<'a> {
     let (built, backgrounds) = builder.build(text);
     self.build_layout(built, backgrounds)
   }
+}
+
+impl<'a, 'b, W: Widget> WidgetBuilder<'a, 'b, W> {
+  pub fn border_radius(self, b: f64, radius: f64) -> WidgetBuilder<'a, 'b, crate::widget::Border> {
+    self.layout.add_widget(|| {
+      crate::widget::Border::new(crate::widget::Borders::all(b), self.id).radius(radius)
+    })
+  }
+
+  pub fn padding_left_right(self, p: f64) -> WidgetBuilder<'a, 'b, crate::widget::Padding> {
+    self.layout.add_widget(|| crate::widget::Padding::new(p, 0.0, p, 0.0, self.id))
+  }
+
+  pub fn build(self) -> WidgetId { self.id }
 }
