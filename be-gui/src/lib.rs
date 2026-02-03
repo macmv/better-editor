@@ -417,7 +417,7 @@ impl State {
         layout
           .add_widget(|| crate::widget::Button::new(&tab.title))
           .padding_left_right(5.0)
-          .border_radius(0.5, 5.0)
+          .border_radius(1.0, 5.0)
           .build(),
       );
     }

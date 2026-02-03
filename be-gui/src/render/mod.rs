@@ -346,10 +346,8 @@ impl<'a> Render<'a> {
     shape: &impl Shape,
     transform: Affine,
     color: Color,
-    mut stroke: Stroke,
+    stroke: Stroke,
   ) {
-    stroke.width *= self.scale;
-
     self.scene.stroke(
       &stroke,
       self.transform() * transform,
