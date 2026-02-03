@@ -31,6 +31,7 @@ struct State {
 
   views:   ViewCollection,
   widgets: WidgetCollection,
+  root:    Option<WidgetId>,
 
   notify: Notify,
 }
@@ -69,6 +70,7 @@ impl State {
       tabs:    vec![],
       views:   ViewCollection::new(),
       widgets: WidgetCollection::new(),
+      root:    None,
       notify:  store.notifier(),
     };
 
@@ -183,8 +185,15 @@ impl State {
       |state, render| state.draw_tabs(render),
     );
 
-    for widget in self.widgets.values_mut() {
-      widget.draw(render);
+    if let Some(root) = self.root {
+      let mut stack = vec![(root, Rect::from_origin_size(Point::ZERO, render.size()))];
+
+      while let Some((widget, outer_bounds)) = stack.pop() {
+        let widget = self.widgets.widgets.get_mut(&widget).unwrap();
+        let bounds = widget.bounds + outer_bounds.origin().to_vec2();
+        render.clipped(bounds, |render| widget.content.draw(render));
+        stack.extend(widget.children().iter().map(|&c| (c, bounds)));
+      }
     }
   }
 
@@ -312,22 +321,26 @@ impl State {
     }
   }
 
-  fn layout_tabs(&self, layout: &mut Layout) {
+  fn layout_tabs(&mut self, layout: &mut Layout) {
     let mut row = vec![];
 
     for tab in self.tabs.iter() {
-      row.push(layout.add_widget(|| {
-        crate::widget::Button::new(&tab.title).padding_left_right(5.0).border(0.5).radius(5.0)
-      }));
+      let button = layout.add_widget(|| crate::widget::Button::new(&tab.title));
+      let button = layout.add_widget(|| crate::widget::Padding::new(5.0, 0.0, 5.0, 0.0, button));
+      let button = layout.add_widget(|| {
+        crate::widget::Border::new(crate::widget::Borders::all(0.5), button).radius(5.0)
+      });
+
+      row.push(button)
     }
 
     let root = layout.add_widget(|| {
-      crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, row)
-        .gap(5.0)
-        .padding_left_right(10.0)
+      crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, row).gap(5.0)
+      // .padding_left_right(10.0)
     });
 
     layout.layout(root);
+    self.root = Some(root);
   }
 
   fn draw_tabs(&self, render: &mut Render) {

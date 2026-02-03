@@ -61,6 +61,7 @@ pub trait Widget {
     if cond { Box::new(f(self)) } else { Box::new(self) }
   }
 
+  /*
   op!(border(b: f64) -> Border::new(Borders::all(b)));
   op!(border_left(left: f64) -> Border::new(Borders::left(left)));
   op!(border_top(top: f64) -> Border::new(Borders::top(top)));
@@ -76,6 +77,7 @@ pub trait Widget {
   op!(padding_bottom(bottom: f64) -> Padding::new(0.0, 0.0, 0.0, bottom));
   op!(padding_left_right(p: f64) -> Padding::new(p, 0.0, p, 0.0));
   op!(padding_top_bottom(p: f64) -> Padding::new(0.0, p, 0.0, p));
+  */
 }
 
 impl Widget for Box<dyn Widget> {
@@ -101,10 +103,6 @@ impl WidgetStore {
       self.bounds = layout.current_bounds();
     }
     self.bounds.size()
-  }
-
-  pub fn draw(&mut self, render: &mut Render) {
-    render.clipped(self.bounds, |render| self.content.draw(render));
   }
 }
 

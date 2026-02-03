@@ -79,8 +79,7 @@ impl<'a> Layout<'a> {
   }
 
   pub fn set_bounds(&mut self, child: WidgetId, bounds: Rect) {
-    let absolute = bounds + self.offset();
-    self.widgets.as_mut().unwrap().widgets.get_mut(&child).unwrap().bounds = absolute;
+    self.widgets.as_mut().unwrap().widgets.get_mut(&child).unwrap().bounds = bounds;
   }
 
   fn next_path(&mut self) -> WidgetPath {
