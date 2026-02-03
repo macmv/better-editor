@@ -123,17 +123,24 @@ impl<'a> Layout<'a> {
     self.clipped(right_bounds, right_name, |render| right(state, render));
   }
 
-  pub fn clipped(&mut self, mut rect: Rect, name: impl Into<SmolStr>, f: impl FnOnce(&mut Layout)) {
+  pub fn clipped<R>(
+    &mut self,
+    mut rect: Rect,
+    name: impl Into<SmolStr>,
+    f: impl FnOnce(&mut Layout) -> R,
+  ) -> R {
     rect = rect + self.offset();
 
     let scaled_rect = rect.scale_from_origin(self.scale).round();
     self.stack.push(scaled_rect.scale_from_origin(1.0 / self.scale));
     self.path.0.push(name.into());
 
-    f(self);
+    let ret = f(self);
 
     self.path.0.pop();
     self.stack.pop().expect("no clip layer to pop");
+
+    ret
   }
 
   pub fn close_view(&mut self) {
