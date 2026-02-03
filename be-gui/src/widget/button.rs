@@ -1,4 +1,4 @@
-use kurbo::Point;
+use kurbo::{Point, Rect};
 
 use crate::{TextLayout, Widget};
 
@@ -25,6 +25,13 @@ impl Widget for Button {
   }
 
   fn draw(&mut self, render: &mut crate::Render) {
+    if self.hover {
+      render.fill(
+        &Rect::from_origin_size(Point::ZERO, render.size()),
+        render.theme().background_raised_outline,
+      );
+    }
+
     if let Some(layout) = &mut self.layout {
       render.draw_text(layout, Point::ZERO);
     }
@@ -37,7 +44,5 @@ impl Widget for Button {
 
       _ => {}
     }
-
-    dbg!(&self.hover);
   }
 }

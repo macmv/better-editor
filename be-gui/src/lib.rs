@@ -33,6 +33,8 @@ struct State {
   widgets: WidgetCollection,
   root:    Option<WidgetId>,
 
+  hover_path: Vec<WidgetId>,
+
   notify: Notify,
 }
 
@@ -81,13 +83,14 @@ pub struct WidgetPath(Vec<u32>);
 impl State {
   pub fn new(store: &RenderStore) -> Self {
     let mut state = State {
-      keys:    vec![],
-      active:  1,
-      tabs:    vec![],
-      views:   ViewCollection::new(),
-      widgets: WidgetCollection::new(),
-      root:    None,
-      notify:  store.notifier(),
+      keys:       vec![],
+      active:     1,
+      tabs:       vec![],
+      views:      ViewCollection::new(),
+      widgets:    WidgetCollection::new(),
+      hover_path: vec![],
+      root:       None,
+      notify:     store.notifier(),
     };
 
     let layout = store.config.borrow().settings.layout.clone();
@@ -178,27 +181,73 @@ impl State {
     });
   }
 
-  fn on_mouse(&mut self, ev: MouseEvent, size: Size, scale: f64) -> CursorKind {
-    let pos = match ev {
-      MouseEvent::Move { pos } => pos,
-      MouseEvent::Button { pos, .. } => pos,
-      MouseEvent::Scroll { pos, .. } => pos,
-      _ => return CursorKind::Default,
-    };
+  fn on_mouse(&mut self, ev: MouseEvent, size: Size, _scale: f64) -> CursorKind {
+    match ev {
+      MouseEvent::Move { pos } => {
+        let new_path = self.hit_widgets(pos, size);
+
+        self.hover_path(new_path);
+
+        for w in self.hover_path.iter().rev() {
+          self.widgets.widgets.get_mut(w).unwrap().content.on_mouse(&ev);
+        }
+
+        CursorKind::Default
+      }
+      MouseEvent::Enter => unreachable!(),
+      MouseEvent::Leave => {
+        self.hover_path(vec![]);
+
+        CursorKind::Default
+      }
+      MouseEvent::Button { pos, .. } | MouseEvent::Scroll { pos, .. } => {
+        for w in self.hit_widgets(pos, size).iter().rev() {
+          self.widgets.widgets.get_mut(w).unwrap().content.on_mouse(&ev);
+        }
+
+        CursorKind::Default
+      }
+    }
+  }
+
+  fn hover_path(&mut self, path: Vec<WidgetId>) {
+    if path != self.hover_path {
+      let diverge_idx = path
+        .iter()
+        .zip(self.hover_path.iter())
+        .position(|(a, b)| a != b)
+        .unwrap_or(path.len().min(self.hover_path.len()));
+
+      for w in self.hover_path[diverge_idx..].iter().rev() {
+        self.widgets.widgets.get_mut(w).unwrap().content.on_mouse(&MouseEvent::Leave);
+      }
+      for w in path[diverge_idx..].iter().rev() {
+        self.widgets.widgets.get_mut(w).unwrap().content.on_mouse(&MouseEvent::Enter);
+      }
+
+      self.hover_path = path;
+    }
+  }
+
+  /// Returns a list of all widgets hit by the given point. Parents are returned
+  /// first.
+  fn hit_widgets(&self, pos: Point, size: Size) -> Vec<WidgetId> {
+    let mut path = vec![];
 
     if let Some(root) = self.root {
-      let mut stack = vec![root];
+      let mut stack = vec![(root, Rect::from_origin_size(Point::ZERO, size))];
 
-      while let Some(widget) = stack.pop() {
-        let widget = self.widgets.widgets.get_mut(&widget).unwrap();
-        if widget.bounds.contains(pos) {
-          widget.content.on_mouse(&ev);
-          stack.extend(widget.children().iter().rev());
+      while let Some((id, outer_bounds)) = stack.pop() {
+        let widget = self.widgets.widgets.get(&id).unwrap();
+        let bounds = widget.bounds + outer_bounds.origin().to_vec2();
+        if bounds.contains(pos) {
+          path.push(id);
+          stack.extend(widget.children().iter().map(|&c| (c, bounds)));
         }
       }
     }
 
-    CursorKind::Default
+    path
   }
 
   fn animated(&self) -> bool { self.tabs[self.active].content.animated(&self.views.views) }

@@ -176,6 +176,7 @@ impl winit::application::ApplicationHandler<Event> for App {
             super::cursor::set_cursor(&init.window, new_cursor);
             init.cursor_kind = new_cursor;
           }
+          init.window.request_redraw();
         }
       }
 
@@ -187,6 +188,7 @@ impl winit::application::ApplicationHandler<Event> for App {
             init.app.texture.height() as f64 / init.scale,
           );
           init.app.state.on_mouse(MouseEvent::Leave, size, init.scale);
+          init.window.request_redraw();
         }
       }
 
