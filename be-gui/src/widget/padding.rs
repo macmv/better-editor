@@ -19,7 +19,16 @@ impl Padding {
 
 impl Widget for Padding {
   fn layout(&mut self, layout: &mut crate::Layout) -> Option<kurbo::Size> {
-    let mut size = self.inner.layout(layout)?;
+    let mut size = layout.clipped(
+      Rect::new(
+        self.left,
+        self.top,
+        layout.size().width - self.right,
+        layout.size().height - self.bottom,
+      ),
+      "padding",
+      |layout| self.inner.layout(layout),
+    )?;
     size.width += self.left + self.right;
     size.height += self.top + self.bottom;
 
