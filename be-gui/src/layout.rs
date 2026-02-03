@@ -25,9 +25,9 @@ pub struct Layout<'a> {
 }
 
 pub struct WidgetBuilder<'a: 'b, 'b, W: Widget> {
-  layout:   &'b mut Layout<'a>,
-  id:       WidgetId,
-  _phantom: std::marker::PhantomData<W>,
+  pub(crate) layout: &'b mut Layout<'a>,
+  id:                WidgetId,
+  _phantom:          std::marker::PhantomData<W>,
 }
 
 impl<'a> Layout<'a> {
@@ -187,14 +187,11 @@ impl<'a> Layout<'a> {
 }
 
 impl<'a, 'b, W: Widget> WidgetBuilder<'a, 'b, W> {
-  pub fn border_radius(self, b: f64, radius: f64) -> WidgetBuilder<'a, 'b, crate::widget::Border> {
-    self.layout.add_widget(|| {
-      crate::widget::Border::new(crate::widget::Borders::all(b), self.id).radius(radius)
-    })
-  }
-
-  pub fn padding_left_right(self, p: f64) -> WidgetBuilder<'a, 'b, crate::widget::Padding> {
-    self.layout.add_widget(|| crate::widget::Padding::new(p, 0.0, p, 0.0, self.id))
+  pub fn wrap<U: Widget + 'static>(
+    self,
+    f: impl FnOnce(WidgetId) -> U,
+  ) -> WidgetBuilder<'a, 'b, U> {
+    self.layout.add_widget(|| f(self.id))
   }
 
   pub fn build(self) -> WidgetId { self.id }

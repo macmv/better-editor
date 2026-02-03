@@ -14,7 +14,11 @@ pub struct Border {
 
 impl Border {
   pub fn new(borders: Borders, inner: WidgetId) -> Self {
-    Border { borders, radius: Corners::all(0.0), inner }
+    Border::new_with_radius(borders, Corners::all(0.0), inner)
+  }
+
+  pub fn new_with_radius(borders: Borders, radius: Corners, inner: WidgetId) -> Self {
+    Border { borders, radius, inner }
   }
 
   pub fn radius(mut self, radius: f64) -> Self {

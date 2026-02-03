@@ -10,7 +10,7 @@ pub use button::Button;
 pub use padding::Padding;
 pub use stack::{Align, Justify, Stack};
 
-use crate::{Layout, Render, WidgetId, WidgetPath};
+use crate::{Layout, Render, WidgetId, WidgetPath, layout::WidgetBuilder};
 
 pub struct WidgetStore {
   pub content: Box<dyn Widget>,
@@ -35,12 +35,9 @@ pub struct Corners {
 }
 
 macro_rules! op {
-  ($name:ident($($arg_name:ident: $arg_ty:ty),*) -> $ty:ident::new($($arg_expr:expr),*)) => {
-    fn $name(self, $($arg_name: $arg_ty),*) -> $ty
-    where
-      Self: Sized + 'static,
-    {
-      $ty::new($($arg_expr),*, self)
+  ($name:ident($($arg_name:ident: $arg_ty:ty),*) -> $ty:ident::$new:ident($($arg_expr:expr),*)) => {
+    pub fn $name(self, $($arg_name: $arg_ty),*) -> WidgetBuilder<'a, 'b, $ty> {
+      self.wrap(|id| crate::widget::$ty::$new($($arg_expr),*, id))
     }
   }
 }
@@ -63,22 +60,7 @@ pub trait Widget {
   }
 
   /*
-  op!(border(b: f64) -> Border::new(Borders::all(b)));
-  op!(border_left(left: f64) -> Border::new(Borders::left(left)));
-  op!(border_top(top: f64) -> Border::new(Borders::top(top)));
-  op!(border_right(right: f64) -> Border::new(Borders::right(right)));
-  op!(border_bottom(bottom: f64) -> Border::new(Borders::bottom(bottom)));
-  op!(border_left_right(b: f64) -> Border::new(Borders::left_right(b)));
-  op!(border_top_bottom(b: f64) -> Border::new(Borders::top_bottom(b)));
-
-  op!(padding(p: f64) -> Padding::new(p, p, p, p));
-  op!(padding_left(left: f64) -> Padding::new(left, 0.0, 0.0, 0.0));
-  op!(padding_top(top: f64) -> Padding::new(0.0, top, 0.0, 0.0));
-  op!(padding_right(right: f64) -> Padding::new(0.0, 0.0, right, 0.0));
-  op!(padding_bottom(bottom: f64) -> Padding::new(0.0, 0.0, 0.0, bottom));
-  op!(padding_left_right(p: f64) -> Padding::new(p, 0.0, p, 0.0));
-  op!(padding_top_bottom(p: f64) -> Padding::new(0.0, p, 0.0, p));
-  */
+   */
 }
 
 impl Widget for Box<dyn Widget> {
@@ -119,8 +101,36 @@ impl Borders {
   pub const fn top_bottom(b: f64) -> Self { Borders { left: 0.0, right: 0.0, top: b, bottom: b } }
 }
 
+impl From<f64> for Borders {
+  fn from(b: f64) -> Self { Borders::all(b) }
+}
+
 impl Corners {
   pub const fn all(c: f64) -> Self {
     Corners { top_left: c, top_right: c, bottom_left: c, bottom_right: c }
   }
+}
+
+impl From<f64> for Corners {
+  fn from(c: f64) -> Self { Corners::all(c) }
+}
+
+impl<'a, 'b, W: Widget> WidgetBuilder<'a, 'b, W> {
+  op!(border(b: impl Into<Borders>) -> Border::new(b.into()));
+  op!(border_left(left: f64) -> Border::new(Borders::left(left)));
+  op!(border_top(top: f64) -> Border::new(Borders::top(top)));
+  op!(border_right(right: f64) -> Border::new(Borders::right(right)));
+  op!(border_bottom(bottom: f64) -> Border::new(Borders::bottom(bottom)));
+  op!(border_left_right(b: f64) -> Border::new(Borders::left_right(b)));
+  op!(border_top_bottom(b: f64) -> Border::new(Borders::top_bottom(b)));
+
+  op!(border_radius(b: impl Into<Borders>, radius: impl Into<Corners>) -> Border::new_with_radius(b.into(), radius.into()));
+
+  op!(padding(p: f64) -> Padding::new(p, p, p, p));
+  op!(padding_left(left: f64) -> Padding::new(left, 0.0, 0.0, 0.0));
+  op!(padding_top(top: f64) -> Padding::new(0.0, top, 0.0, 0.0));
+  op!(padding_right(right: f64) -> Padding::new(0.0, 0.0, right, 0.0));
+  op!(padding_bottom(bottom: f64) -> Padding::new(0.0, 0.0, 0.0, bottom));
+  op!(padding_left_right(p: f64) -> Padding::new(p, 0.0, p, 0.0));
+  op!(padding_top_bottom(p: f64) -> Padding::new(0.0, p, 0.0, p));
 }
