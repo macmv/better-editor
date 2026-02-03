@@ -471,8 +471,4 @@ impl WidgetCollection {
     self.widgets.insert(id, store);
     id
   }
-
-  pub fn values_mut(&mut self) -> impl Iterator<Item = &mut WidgetStore> {
-    self.widgets.values_mut()
-  }
 }
