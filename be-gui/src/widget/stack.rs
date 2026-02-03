@@ -6,6 +6,7 @@ pub struct Stack {
   axis:    Axis,
   align:   Align,
   justify: Justify,
+  gap:     f64,
 
   children: Vec<WidgetId>,
   sizes:    Vec<Rect>,
@@ -27,7 +28,12 @@ pub enum Justify {
 
 impl Stack {
   pub fn new(axis: Axis, align: Align, justify: Justify, children: Vec<WidgetId>) -> Self {
-    Stack { axis, align, justify, children, sizes: vec![] }
+    Stack { axis, align, justify, children, gap: 0.0, sizes: vec![] }
+  }
+
+  pub fn gap(mut self, gap: f64) -> Self {
+    self.gap = gap;
+    self
   }
 }
 
@@ -40,12 +46,12 @@ impl Widget for Stack {
       match self.axis {
         Axis::Horizontal => {
           self.sizes.push(Rect::from_origin_size((size.width, 0.0), child_size));
-          size.width += child_size.width;
+          size.width += child_size.width + self.gap;
           size.height = child_size.height.max(size.height);
         }
         Axis::Vertical => {
           self.sizes.push(Rect::from_origin_size((0.0, size.height), child_size));
-          size.height += child_size.height;
+          size.height += child_size.height + self.gap;
           size.width = child_size.width.max(size.width);
         }
       }
@@ -71,7 +77,7 @@ impl Widget for Stack {
             Justify::End => layout.current_bounds().height() - size.height,
           };
           bounds.y1 = bounds.y0 + cross_width;
-          main += main_width;
+          main += main_width + self.gap;
         }
         Axis::Vertical => {
           let main_width = bounds.height();
@@ -84,7 +90,7 @@ impl Widget for Stack {
             Justify::End => layout.current_bounds().width() - size.width,
           };
           bounds.x1 = bounds.x0 + cross_width;
-          main += main_width;
+          main += main_width + self.gap;
         }
       };
 
