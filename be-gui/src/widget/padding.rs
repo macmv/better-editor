@@ -26,7 +26,6 @@ impl Widget for Padding {
         layout.size().width - self.right,
         layout.size().height - self.bottom,
       ),
-      "padding",
       |layout| self.inner.layout(layout),
     )?;
     size.width += self.left + self.right;

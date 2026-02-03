@@ -147,8 +147,7 @@ impl Split {
           }
 
           bounds.x1 = bounds.x0 + distance;
-          layout
-            .clipped(bounds, smol_str::format_smolstr!("{i}"), |layout| item.layout(views, layout));
+          layout.clipped(bounds, |layout| item.layout(views, layout));
           bounds.x0 += distance;
         }
       }
@@ -163,8 +162,7 @@ impl Split {
           }
 
           bounds.y1 = bounds.y0 + distance;
-          layout
-            .clipped(bounds, smol_str::format_smolstr!("{i}"), |layout| item.layout(views, layout));
+          layout.clipped(bounds, |layout| item.layout(views, layout));
           bounds.y0 += distance;
         }
       }

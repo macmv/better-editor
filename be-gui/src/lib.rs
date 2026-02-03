@@ -7,7 +7,6 @@ use kurbo::{Axis, Point, Rect};
 pub use render::*;
 
 use pane::Pane;
-use smol_str::SmolStr;
 use view::View;
 
 use crate::{
@@ -60,7 +59,7 @@ pub struct ViewId(u64);
 pub struct WidgetId(u64);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct WidgetPath(Vec<SmolStr>);
+pub struct WidgetPath(Vec<u32>);
 
 impl State {
   pub fn new(store: &RenderStore) -> Self {
@@ -129,8 +128,6 @@ impl State {
       self,
       Axis::Horizontal,
       Distance::Pixels(-25.0),
-      "main",
-      "tabs",
       |state, layout| {
         let tab = &mut state.tabs[state.active];
         if let Some(search) = &mut tab.search {
@@ -318,13 +315,13 @@ impl State {
   fn layout_tabs(&self, layout: &mut Layout) {
     let mut row = vec![];
 
-    for (i, tab) in self.tabs.iter().enumerate() {
-      row.push(layout.add_widget(smol_str::format_smolstr!("tab-{}", i), || {
+    for tab in self.tabs.iter() {
+      row.push(layout.add_widget(|| {
         crate::widget::Button::new(&tab.title).padding_left_right(5.0).border(0.5).radius(5.0)
       }));
     }
 
-    let root = layout.add_widget("tabs", || {
+    let root = layout.add_widget(|| {
       crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, row)
         .gap(5.0)
         .padding_left_right(10.0)

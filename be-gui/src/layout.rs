@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 
 use kurbo::{Axis, Point, Rect, Size, Vec2};
-use smol_str::SmolStr;
 
 use crate::{
   Color, Distance, Notify, RenderStore, TextLayout, ViewId, Widget, WidgetCollection, WidgetId,
@@ -14,8 +13,9 @@ pub struct Layout<'a> {
   scale: f64,
   size:  Size,
 
-  stack: Vec<Rect>,
-  path:  WidgetPath,
+  stack:   Vec<Rect>,
+  path:    WidgetPath,
+  next_id: u32,
 
   pub(crate) widgets: Option<WidgetCollection>,
   pub(crate) seen:    HashSet<WidgetId>,
@@ -32,6 +32,7 @@ impl<'a> Layout<'a> {
       size,
       stack: vec![],
       path: WidgetPath(vec![]),
+      next_id: 0,
       seen: HashSet::new(),
       widgets: None,
       active: None,
@@ -54,13 +55,8 @@ impl<'a> Layout<'a> {
     Rect::from_origin_size(self.offset().to_point(), self.size())
   }
 
-  pub fn add_widget<W: Widget + 'static>(
-    &mut self,
-    name: impl Into<SmolStr>,
-    widget: impl FnOnce() -> W,
-  ) -> WidgetId {
-    let mut path = self.path.clone();
-    path.0.push(name.into());
+  pub fn add_widget<W: Widget + 'static>(&mut self, widget: impl FnOnce() -> W) -> WidgetId {
+    let path = self.next_path();
 
     let widgets = self.widgets.as_mut().expect("widgets not setup");
 
@@ -87,13 +83,18 @@ impl<'a> Layout<'a> {
     self.widgets.as_mut().unwrap().widgets.get_mut(&child).unwrap().bounds = absolute;
   }
 
+  fn next_path(&mut self) -> WidgetPath {
+    let mut path = self.path.clone();
+    path.0.push(self.next_id);
+    self.next_id += 1;
+    path
+  }
+
   pub fn split<S>(
     &mut self,
     state: &mut S,
     axis: Axis,
     distance: Distance,
-    left_name: impl Into<SmolStr>,
-    right_name: impl Into<SmolStr>,
     left: impl FnOnce(&mut S, &mut Layout),
     right: impl FnOnce(&mut S, &mut Layout),
   ) {
@@ -121,26 +122,22 @@ impl<'a> Layout<'a> {
       }
     }
 
-    self.clipped(left_bounds, left_name, |render| left(state, render));
-    self.clipped(right_bounds, right_name, |render| right(state, render));
+    self.clipped(left_bounds, |render| left(state, render));
+    self.clipped(right_bounds, |render| right(state, render));
   }
 
-  pub fn clipped<R>(
-    &mut self,
-    mut rect: Rect,
-    name: impl Into<SmolStr>,
-    f: impl FnOnce(&mut Layout) -> R,
-  ) -> R {
+  pub fn clipped<R>(&mut self, mut rect: Rect, f: impl FnOnce(&mut Layout) -> R) -> R {
     rect = rect + self.offset();
 
     let scaled_rect = rect.scale_from_origin(self.scale).round();
     self.stack.push(scaled_rect.scale_from_origin(1.0 / self.scale));
-    self.path.0.push(name.into());
+    self.path.0.push(self.next_id);
+    self.next_id = 0;
 
     let ret = f(self);
 
-    self.path.0.pop();
-    self.stack.pop().expect("no clip layer to pop");
+    self.next_id = self.path.0.pop().expect("no clip layer to pop");
+    self.stack.pop();
 
     ret
   }
