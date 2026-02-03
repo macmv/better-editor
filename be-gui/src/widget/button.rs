@@ -4,12 +4,15 @@ use crate::{TextLayout, Widget};
 
 pub struct Button {
   content: String,
+  hover:   bool,
 
   layout: Option<TextLayout>,
 }
 
 impl Button {
-  pub fn new(content: &str) -> Self { Button { content: content.into(), layout: None } }
+  pub fn new(content: &str) -> Self {
+    Button { content: content.into(), hover: false, layout: None }
+  }
 }
 
 impl Widget for Button {
@@ -25,5 +28,16 @@ impl Widget for Button {
     if let Some(layout) = &mut self.layout {
       render.draw_text(layout, Point::ZERO);
     }
+  }
+
+  fn on_mouse(&mut self, mouse: &crate::MouseEvent) {
+    match mouse {
+      crate::MouseEvent::Move { .. } => self.hover = true,
+      crate::MouseEvent::Left { .. } => self.hover = false,
+
+      _ => (),
+    }
+
+    dbg!(&self.hover);
   }
 }

@@ -177,8 +177,26 @@ impl State {
     });
   }
 
-  fn on_mouse(&self, pos: MouseEvent, size: Size, scale: f64) -> CursorKind {
-    let _ = (pos, size, scale);
+  fn on_mouse(&mut self, ev: MouseEvent, size: Size, scale: f64) -> CursorKind {
+    let pos = match ev {
+      MouseEvent::Move { pos } => pos,
+      MouseEvent::Button { pos, .. } => pos,
+      MouseEvent::Scroll { pos, .. } => pos,
+      _ => return CursorKind::Default,
+    };
+
+    if let Some(root) = self.root {
+      let mut stack = vec![root];
+
+      while let Some(widget) = stack.pop() {
+        let widget = self.widgets.widgets.get_mut(&widget).unwrap();
+        if widget.bounds.contains(pos) {
+          widget.content.on_mouse(&ev);
+          stack.extend(widget.children().iter().rev());
+        }
+      }
+    }
+
     CursorKind::Default
   }
 

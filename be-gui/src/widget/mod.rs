@@ -10,7 +10,7 @@ pub use button::Button;
 pub use padding::Padding;
 pub use stack::{Align, Justify, Stack};
 
-use crate::{Layout, Render, WidgetId, WidgetPath, layout::WidgetBuilder};
+use crate::{Layout, MouseEvent, Render, WidgetId, WidgetPath, layout::WidgetBuilder};
 
 pub struct WidgetStore {
   pub content: Box<dyn Widget>,
@@ -52,6 +52,8 @@ pub trait Widget {
 
   fn draw(&mut self, render: &mut Render) { let _ = render; }
 
+  fn on_mouse(&mut self, mouse: &MouseEvent) { let _ = mouse; }
+
   fn apply_if<U: Widget + 'static>(self, cond: bool, f: impl FnOnce(Self) -> U) -> Box<dyn Widget>
   where
     Self: Sized + 'static,
@@ -67,6 +69,7 @@ impl Widget for Box<dyn Widget> {
   fn layout(&mut self, layout: &mut Layout) -> Option<Size> { (**self).layout(layout) }
   fn children(&self) -> &[WidgetId] { (**self).children() }
   fn draw(&mut self, render: &mut Render) { (**self).draw(render) }
+  fn on_mouse(&mut self, mouse: &MouseEvent) { (**self).on_mouse(mouse); }
 }
 
 impl WidgetStore {
