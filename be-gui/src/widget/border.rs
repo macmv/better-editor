@@ -20,11 +20,6 @@ impl Border {
   pub fn new_with_radius(borders: Borders, radius: Corners, inner: WidgetId) -> Self {
     Border { borders, radius, inner }
   }
-
-  pub fn radius(mut self, radius: f64) -> Self {
-    self.radius = Corners::all(radius);
-    self
-  }
 }
 
 impl Widget for Border {
