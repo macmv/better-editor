@@ -73,18 +73,16 @@ impl<'a> Layout<'a> {
     id
   }
 
-  pub fn layout_row(&mut self, widgets: &[WidgetId]) {
-    let size = self.size();
+  pub fn layout(&mut self, root: WidgetId) -> Size {
+    let mut widget = self.widgets.as_mut().unwrap().widgets.remove(&root).unwrap();
+    let size = widget.layout(self);
+    self.widgets.as_mut().unwrap().widgets.insert(root, widget);
+    size
+  }
 
-    let mut x = 0.0;
-    for &id in widgets.iter() {
-      let rect = Rect::from_origin_size((x, 0.0), Size::new(size.width - x, size.height));
-
-      let mut widget = self.widgets.as_mut().unwrap().widgets.remove(&id).unwrap();
-      self.clipped(rect, widget.name().clone(), |layout| widget.layout(layout));
-      x += widget.bounds.width();
-      self.widgets.as_mut().unwrap().widgets.insert(id, widget);
-    }
+  pub fn set_bounds(&mut self, child: WidgetId, bounds: Rect) {
+    let absolute = bounds + self.offset();
+    self.widgets.as_mut().unwrap().widgets.get_mut(&child).unwrap().bounds = absolute;
   }
 
   pub fn split<S>(

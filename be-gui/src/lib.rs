@@ -10,7 +10,10 @@ use pane::Pane;
 use smol_str::SmolStr;
 use view::View;
 
-use crate::view::{FileTree, ViewContent};
+use crate::{
+  view::{FileTree, ViewContent},
+  widget::{Align, Justify},
+};
 
 mod icon;
 mod layout;
@@ -323,7 +326,11 @@ impl State {
       }));
     }
 
-    layout.layout_row(&row);
+    let root = layout.add_widget("tabs", || {
+      crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Start, row)
+    });
+
+    layout.layout(root);
   }
 
   fn draw_tabs(&self, render: &mut Render) {

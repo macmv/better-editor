@@ -3,12 +3,12 @@ use kurbo::{Rect, Size};
 mod border;
 mod button;
 mod padding;
+mod stack;
 
 pub use border::Border;
 pub use button::Button;
 pub use padding::Padding;
-
-use smol_str::SmolStr;
+pub use stack::{Align, Justify, Stack};
 
 use crate::{Layout, Render, WidgetPath};
 
@@ -35,7 +35,7 @@ pub trait Widget {
     None
   }
 
-  fn draw(&mut self, render: &mut Render);
+  fn draw(&mut self, render: &mut Render) { let _ = render; }
 
   fn apply_if<U: Widget + 'static>(self, cond: bool, f: impl FnOnce(Self) -> U) -> Box<dyn Widget>
   where
@@ -73,18 +73,17 @@ impl WidgetStore {
 
   pub fn animated(&self) -> bool { false }
 
-  pub fn layout(&mut self, layout: &mut Layout) {
+  pub fn layout(&mut self, layout: &mut Layout) -> Size {
     if let Some(size) = self.content.layout(layout) {
       let current = layout.current_bounds();
       self.bounds = current.with_size(size);
     } else {
       self.bounds = layout.current_bounds();
     }
+    self.bounds.size()
   }
 
   pub fn draw(&mut self, render: &mut Render) {
     render.clipped(self.bounds, |render| self.content.draw(render));
   }
-
-  pub(crate) fn name(&self) -> &SmolStr { self.path.0.last().unwrap() }
 }
