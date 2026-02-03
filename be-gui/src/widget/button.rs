@@ -32,10 +32,10 @@ impl Widget for Button {
 
   fn on_mouse(&mut self, mouse: &crate::MouseEvent) {
     match mouse {
-      crate::MouseEvent::Move { .. } => self.hover = true,
-      crate::MouseEvent::Leave { .. } => self.hover = false,
+      crate::MouseEvent::Enter => self.hover = true,
+      crate::MouseEvent::Leave => self.hover = false,
 
-      _ => (),
+      _ => {}
     }
 
     dbg!(&self.hover);
