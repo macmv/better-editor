@@ -3,7 +3,7 @@ mod render;
 use std::{collections::HashMap, hash::Hash};
 
 use be_input::{Action, KeyStroke, Navigation};
-use kurbo::{Axis, Cap, Line, Point, Rect, Stroke};
+use kurbo::{Axis, Point, Rect};
 pub use render::*;
 
 use pane::Pane;
@@ -316,15 +316,9 @@ impl State {
     let mut row = vec![];
 
     for (i, tab) in self.tabs.iter().enumerate() {
-      if i == 0 {
-        row.push(layout.add_widget(smol_str::format_smolstr!("tab-{}", i), || {
-          crate::widget::Button::new(&tab.title)
-        }));
-      } else {
-        row.push(layout.add_widget(smol_str::format_smolstr!("tab-{}", i), || {
-          crate::widget::Border::new(2.0, 0.0, 0.0, 0.0, crate::widget::Button::new(&tab.title))
-        }));
-      }
+      row.push(layout.add_widget(smol_str::format_smolstr!("tab-{}", i), || {
+        crate::widget::Button::new(&tab.title).apply_if(i != 0, |b| b.border_left(2.0))
+      }));
     }
 
     layout.layout_row(&row);

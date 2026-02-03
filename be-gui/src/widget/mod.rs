@@ -16,6 +16,17 @@ pub struct WidgetStore {
   pub path:    WidgetPath,
 }
 
+macro_rules! op {
+  ($name:ident($($arg_name:ident: $arg_ty:ty),*) -> $ty:ident::new($($arg_expr:expr),*)) => {
+    fn $name(self, $($arg_name: $arg_ty),*) -> $ty
+    where
+      Self: Sized + 'static,
+    {
+      $ty::new($($arg_expr),*, self)
+    }
+  }
+}
+
 pub trait Widget {
   fn layout(&mut self, layout: &mut Layout) -> Option<Size> {
     let _ = layout;
@@ -23,6 +34,24 @@ pub trait Widget {
   }
 
   fn draw(&mut self, render: &mut Render);
+
+  fn apply_if<U: Widget + 'static>(self, cond: bool, f: impl FnOnce(Self) -> U) -> Box<dyn Widget>
+  where
+    Self: Sized + 'static,
+  {
+    if cond { Box::new(f(self)) } else { Box::new(self) }
+  }
+
+  op!(border(b: f64) -> Border::new(b, b, b, b));
+  op!(border_left(left: f64) -> Border::new(left, 0.0, 0.0, 0.0));
+  op!(border_top(top: f64) -> Border::new(0.0, top, 0.0, 0.0));
+  op!(border_right(right: f64) -> Border::new(0.0, 0.0, right, 0.0));
+  op!(border_bottom(bottom: f64) -> Border::new(0.0, 0.0, 0.0, bottom));
+}
+
+impl Widget for Box<dyn Widget> {
+  fn layout(&mut self, layout: &mut Layout) -> Option<Size> { (**self).layout(layout) }
+  fn draw(&mut self, render: &mut Render) { (**self).draw(render) }
 }
 
 impl WidgetStore {
