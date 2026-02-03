@@ -69,7 +69,9 @@ impl<'a> Layout<'a> {
     } else {
       widgets.create(WidgetStore::new(path, widget()))
     };
-    self.seen.insert(id);
+    if !self.seen.insert(id) {
+      eprintln!("duplicate widget at path {:?}", widgets.widgets[&id].path);
+    }
     id
   }
 
