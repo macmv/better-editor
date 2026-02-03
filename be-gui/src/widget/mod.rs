@@ -19,6 +19,7 @@ pub struct WidgetStore {
   pub path:    WidgetPath,
 }
 
+#[derive(Clone, Copy, PartialEq)]
 pub struct Borders {
   pub left:   f64,
   pub top:    f64,
@@ -26,7 +27,7 @@ pub struct Borders {
   pub bottom: f64,
 }
 
-#[allow(dead_code)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Corners {
   pub top_left:     f64,
   pub top_right:    f64,
