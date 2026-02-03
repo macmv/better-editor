@@ -25,6 +25,7 @@ pub struct Borders {
   pub bottom: f64,
 }
 
+#[allow(dead_code)]
 pub struct Corners {
   pub top_left:     f64,
   pub top_right:    f64,

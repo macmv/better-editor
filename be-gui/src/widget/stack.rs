@@ -13,6 +13,7 @@ pub struct Stack {
 }
 
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 pub enum Align {
   Start,
   Center,
@@ -20,6 +21,7 @@ pub enum Align {
 }
 
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 pub enum Justify {
   Start,
   Center,
