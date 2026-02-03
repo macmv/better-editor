@@ -101,4 +101,6 @@ impl Widget for Stack {
 
     Some(size)
   }
+
+  fn children(&self) -> &[WidgetId] { &self.children }
 }

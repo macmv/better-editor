@@ -10,7 +10,7 @@ pub use button::Button;
 pub use padding::Padding;
 pub use stack::{Align, Justify, Stack};
 
-use crate::{Layout, Render, WidgetPath};
+use crate::{Layout, Render, WidgetId, WidgetPath};
 
 pub struct WidgetStore {
   pub content: Box<dyn Widget>,
@@ -50,6 +50,8 @@ pub trait Widget {
     None
   }
 
+  fn children(&self) -> &[WidgetId] { &[] }
+
   fn draw(&mut self, render: &mut Render) { let _ = render; }
 
   fn apply_if<U: Widget + 'static>(self, cond: bool, f: impl FnOnce(Self) -> U) -> Box<dyn Widget>
@@ -78,6 +80,7 @@ pub trait Widget {
 
 impl Widget for Box<dyn Widget> {
   fn layout(&mut self, layout: &mut Layout) -> Option<Size> { (**self).layout(layout) }
+  fn children(&self) -> &[WidgetId] { (**self).children() }
   fn draw(&mut self, render: &mut Render) { (**self).draw(render) }
 }
 
@@ -85,6 +88,8 @@ impl WidgetStore {
   pub fn new(path: WidgetPath, content: impl Widget + 'static) -> Self {
     WidgetStore { content: Box::new(content), bounds: Rect::ZERO, path }
   }
+
+  pub fn children(&self) -> &[WidgetId] { self.content.children() }
 
   pub fn animated(&self) -> bool { false }
 
