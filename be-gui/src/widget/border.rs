@@ -1,16 +1,25 @@
-use kurbo::Rect;
+use kurbo::{Rect, RoundedRect, Stroke};
 
-use crate::{Widget, widget::Borders};
+use crate::{
+  Widget,
+  widget::{Borders, Corners},
+};
 
 pub struct Border {
   borders: Borders,
+  radius:  Corners,
 
   inner: Box<dyn Widget>,
 }
 
 impl Border {
   pub fn new(borders: Borders, inner: impl Widget + 'static) -> Self {
-    Border { borders, inner: Box::new(inner) }
+    Border { borders, radius: Corners::all(0.0), inner: Box::new(inner) }
+  }
+
+  pub fn radius(mut self, radius: f64) -> Self {
+    self.radius = Corners::all(radius);
+    self
   }
 }
 
@@ -33,6 +42,18 @@ impl Widget for Border {
       ),
       |render| self.inner.draw(render),
     );
+
+    if self.radius.top_left > 0.0 {
+      render.stroke(
+        &RoundedRect::from_rect(
+          Rect::from_origin_size((0.0, 0.0), render.size()).inset(-self.borders.left),
+          self.radius.top_left,
+        ),
+        render.theme().text,
+        Stroke::new(self.borders.left),
+      );
+      return;
+    }
 
     if self.borders.left > 0.0 {
       render

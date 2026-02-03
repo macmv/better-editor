@@ -113,3 +113,9 @@ impl Borders {
   pub const fn left_right(b: f64) -> Self { Borders { left: b, right: b, top: 0.0, bottom: 0.0 } }
   pub const fn top_bottom(b: f64) -> Self { Borders { left: 0.0, right: 0.0, top: b, bottom: b } }
 }
+
+impl Corners {
+  pub const fn all(c: f64) -> Self {
+    Corners { top_left: c, top_right: c, bottom_left: c, bottom_right: c }
+  }
+}
