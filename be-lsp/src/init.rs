@@ -9,6 +9,7 @@ pub fn client_capabilities() -> lsp::ClientCapabilities {
     }),
     text_document: Some(lsp::TextDocumentClientCapabilities {
       completion: Some(lsp::CompletionClientCapabilities { ..Default::default() }),
+      definition: Some(lsp::DefinitionClientCapabilities { ..Default::default() }),
       formatting: Some(lsp::DocumentFormattingClientCapabilities { ..Default::default() }),
       publish_diagnostics: Some(lsp::PublishDiagnosticsClientCapabilities { ..Default::default() }),
       synchronization: Some(lsp::TextDocumentSyncClientCapabilities {

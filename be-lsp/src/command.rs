@@ -282,6 +282,38 @@ impl LspCommand for Completion {
   }
 }
 
+pub struct GotoDefinition {
+  pub path:   PathBuf,
+  pub cursor: Cursor,
+}
+
+impl LspCommand for GotoDefinition {
+  type Result = Option<types::Or2<types::Definition, Vec<types::LocationLink>>>;
+
+  fn is_capable(&self, caps: &types::ServerCapabilities) -> bool {
+    caps.definition_provider.is_some()
+  }
+
+  fn send(
+    &self,
+    client: &mut LspClient,
+  ) -> Option<Task<Option<types::Or2<types::Definition, Vec<types::LocationLink>>>>> {
+    let position = {
+      let state = client.state.lock();
+      let file = state.file(&self.path)?;
+      state.encode_cursor(&file.doc, self.cursor)
+    };
+
+    Some(client.request::<types::request::TextDocumentDefinition>(types::DefinitionParams {
+      text_document_position_params: types::TextDocumentPositionParams {
+        text_document: doc_id(&self.path),
+        position,
+      },
+      ..Default::default()
+    }))
+  }
+}
+
 pub struct DocumentFormat {
   pub path: PathBuf,
 }
