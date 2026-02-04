@@ -115,13 +115,13 @@ impl EditorState {
                   defs[0].range.start.clone(),
                 );
 
+                let cursor = self.doc.offset_to_cursor(pos);
                 if file.path() == def_path {
-                  let cursor = self.doc.offset_to_cursor(pos);
                   self.move_to_line(cursor.line);
                   self.move_to_col(cursor.column);
                 } else {
                   if let Some(send) = &self.send {
-                    send(crate::EditorEvent::OpenFile(def_path));
+                    send(crate::EditorEvent::OpenFile(def_path, Some(cursor)));
                   }
                 }
               }

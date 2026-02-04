@@ -136,7 +136,7 @@ pub fn run() {
     };
 
     if let Some(path) = std::env::args().nth(1) {
-      app.state.open(std::path::Path::new(&path));
+      app.state.open(std::path::Path::new(&path), None);
     }
 
     app
@@ -386,7 +386,7 @@ impl Notify {
   pub fn wake(&self) { self.proxy.send_event(Event::Refresh).unwrap(); }
 
   pub fn open_file(&self, path: PathBuf) {
-    self.proxy.send_event(Event::Editor(EditorEvent::OpenFile(path))).unwrap();
+    self.proxy.send_event(Event::Editor(EditorEvent::OpenFile(path, None))).unwrap();
   }
 
   pub fn exit(&self) { self.proxy.send_event(Event::Exit).unwrap(); }

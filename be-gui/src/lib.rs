@@ -2,6 +2,7 @@ mod render;
 
 use std::{collections::HashMap, hash::Hash};
 
+use be_doc::Cursor;
 use be_input::{Action, KeyStroke, Navigation};
 use kurbo::{Axis, Point, Rect, Size};
 pub use render::*;
@@ -295,9 +296,15 @@ impl State {
     }
   }
 
-  fn open(&mut self, path: &std::path::Path) {
+  fn open(&mut self, path: &std::path::Path, cursor: Option<Cursor>) {
     if let ViewContent::Editor(e) = &mut self.active_view_mut().content {
-      let _ = e.editor.open(path);
+      let res = e.editor.open(path);
+      if let Some(cursor) = cursor
+        && res.is_ok()
+      {
+        e.editor.move_to(cursor);
+      }
+
       if let Some(tree) = self.current_file_tree_mut() {
         tree.open(path);
       }
@@ -307,7 +314,12 @@ impl State {
         _ => None,
       })
     {
-      let _ = e.editor.open(path);
+      let res = e.editor.open(path);
+      if let Some(cursor) = cursor
+        && res.is_ok()
+      {
+        e.editor.move_to(cursor);
+      }
 
       let prev_focus = self.active_tab().content.active();
       // FIXME: Need some way of focusing a particular view id.
@@ -491,9 +503,9 @@ impl State {
   fn on_event(&mut self, event: Event, store: &RenderStore) -> bool {
     match event {
       Event::Refresh => {}
-      Event::Editor(be_editor::EditorEvent::OpenFile(path)) => {
+      Event::Editor(be_editor::EditorEvent::OpenFile(path, cursor)) => {
         self.tabs[self.active].popup = None;
-        self.open(&path);
+        self.open(&path, cursor);
       }
       Event::Editor(be_editor::EditorEvent::RunCommand(cmd)) => {
         let (cmd, args) = cmd.split_once(' ').unwrap_or((&cmd, ""));

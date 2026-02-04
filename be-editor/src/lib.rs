@@ -62,7 +62,7 @@ pub struct EditorState {
 #[derive(Debug)]
 pub enum EditorEvent {
   RunCommand(String),
-  OpenFile(PathBuf),
+  OpenFile(PathBuf, Option<Cursor>),
 }
 
 #[derive(Default)]
@@ -174,6 +174,11 @@ impl EditorState {
     }
 
     self.cursor.column.0 = target_column as usize;
+  }
+
+  pub fn move_to(&mut self, cursor: Cursor) {
+    self.move_to_line(cursor.line);
+    self.move_to_col(cursor.column);
   }
 
   fn move_to_line(&mut self, line: Line) {
