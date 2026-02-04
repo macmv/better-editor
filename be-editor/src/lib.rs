@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashSet, ops::Range, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, ops::Range, path::PathBuf, rc::Rc};
 
 use be_config::{Config, LanguageName};
 use be_doc::{Change, Column, Cursor, Document, Edit, Line, crop::RopeSlice};
@@ -62,6 +62,7 @@ pub struct EditorState {
 #[derive(Debug)]
 pub enum EditorEvent {
   RunCommand(String),
+  OpenFile(PathBuf),
 }
 
 #[derive(Default)]

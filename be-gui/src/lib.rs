@@ -491,7 +491,7 @@ impl State {
   fn on_event(&mut self, event: Event, store: &RenderStore) -> bool {
     match event {
       Event::Refresh => {}
-      Event::OpenFile(path) => {
+      Event::Editor(be_editor::EditorEvent::OpenFile(path)) => {
         self.tabs[self.active].popup = None;
         self.open(&path);
       }

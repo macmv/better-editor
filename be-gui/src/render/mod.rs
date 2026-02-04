@@ -21,7 +21,6 @@ pub use text::TextLayout;
 #[derive(Debug)]
 pub enum Event {
   Refresh,
-  OpenFile(PathBuf),
   Exit,
   Editor(EditorEvent),
 }
@@ -386,7 +385,9 @@ impl<'a> Render<'a> {
 impl Notify {
   pub fn wake(&self) { self.proxy.send_event(Event::Refresh).unwrap(); }
 
-  pub fn open_file(&self, path: PathBuf) { self.proxy.send_event(Event::OpenFile(path)).unwrap(); }
+  pub fn open_file(&self, path: PathBuf) {
+    self.proxy.send_event(Event::Editor(EditorEvent::OpenFile(path))).unwrap();
+  }
 
   pub fn exit(&self) { self.proxy.send_event(Event::Exit).unwrap(); }
 
