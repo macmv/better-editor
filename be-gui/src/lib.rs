@@ -277,10 +277,7 @@ impl State {
           render.clipped(view.bounds, |render| view.draw(render));
         }
         if let Some(popup) = &mut tab.popup {
-          render.clipped(
-            Rect::new(100.0, 50.0, render.size().width - 100.0, render.size().height - 50.0),
-            |render| popup.draw(render),
-          );
+          render.clipped(popup.bounds(render.size()), |render| popup.draw(render));
         }
       },
       |state, render| state.draw_tabs(render),

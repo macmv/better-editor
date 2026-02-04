@@ -1,5 +1,5 @@
 use be_input::{Action, Mode};
-use kurbo::Rect;
+use kurbo::{Rect, Size};
 
 use crate::{Layout, Render};
 
@@ -112,6 +112,15 @@ impl View {
 }
 
 impl Popup {
+  pub fn bounds(&self, size: Size) -> Rect {
+    match self {
+      Popup::Search(_) => Rect::new(100.0, 50.0, size.width - 100.0, size.height - 50.0),
+      Popup::Command(_) => {
+        Rect::new(100.0, size.height - 110.0, size.width - 100.0, size.height - 50.0)
+      }
+    }
+  }
+
   pub fn layout(&mut self, _layout: &mut Layout) {
     match self {
       Popup::Search(search) => search.layout(),
