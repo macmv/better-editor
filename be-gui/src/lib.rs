@@ -506,7 +506,10 @@ impl State {
               editor.begin_save();
             }
           }
-          "q" => return true,
+          "q" => {
+            let tab = &mut self.tabs[self.active];
+            tab.content.close(tab.content.active(), &mut self.views.views);
+          }
           "e" => {
             if let Some(editor) = self.active_editor() {
               let _ = editor.open(std::path::Path::new(args));
