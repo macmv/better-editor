@@ -61,9 +61,6 @@ pub trait Widget {
   {
     if cond { Box::new(f(self)) } else { Box::new(self) }
   }
-
-  /*
-   */
 }
 
 impl Widget for Box<dyn Widget> {
