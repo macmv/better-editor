@@ -41,6 +41,7 @@ pub enum Move {
   Diagnostic(ChangeDirection),
 
   GotoDefinition,
+  BackDefinition,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -224,6 +225,7 @@ fn parse_move(
       Key::Char('g') => Diagnostic(ChangeDirection::Next),
       _ => return Err(ActionError::Unrecognized),
     },
+    Key::Char('t') if key.control => BackDefinition,
 
     _ => return Err(ActionError::Unrecognized),
   })

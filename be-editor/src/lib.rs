@@ -50,6 +50,8 @@ pub struct EditorState {
   history_position: usize,
   history:          Vec<Edit>,
 
+  definition_history: Vec<(Cursor, PathBuf)>,
+
   pub config: Rc<RefCell<Config>>,
   pub lsp:    lsp::LspState,
   pub send:   Option<Box<dyn Fn(EditorEvent)>>,
