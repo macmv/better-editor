@@ -211,6 +211,12 @@ impl EditorState {
         }
       }
 
+      Move::GotoDefinition => {
+        if self.lsp.goto_definition.is_none() {
+          self.lsp_request_goto_definition();
+        }
+      }
+
       _ => {}
     }
   }

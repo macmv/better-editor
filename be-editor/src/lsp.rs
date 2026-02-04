@@ -13,6 +13,8 @@ pub struct LspState {
 
   document_version:       u32,
   pub completions:        CompletionsState,
+  pub goto_definition:
+    Option<Task<Option<types::Or2<types::Definition, Vec<types::LocationLink>>>>>,
   pub(crate) diagnostics: Vec<Diagnostic>,
 
   // FIXME: ew.
@@ -96,6 +98,38 @@ impl EditorState {
     self.lsp.diagnostics.sort_by_key(|d| d.range.start);
   }
 
+  pub(crate) fn lsp_update_goto_definition(&mut self) {
+    if let Some(task) = &self.lsp.goto_definition {
+      if let Some(Some(res)) = task.completed() {
+        match res {
+          types::Or2::A(def) => match def {
+            types::Definition::Many(defs) => {
+              if defs.len() == 1 {
+                let pos = crate::lsp::command::decode_position(
+                  be_lsp::command::PositionEncoding::Utf8,
+                  &self.doc,
+                  defs[0].range.start.clone(),
+                );
+
+                let cursor = self.doc.offset_to_cursor(pos);
+                self.move_to_line(cursor.line);
+                self.move_to_col(cursor.column);
+              }
+            }
+            types::Definition::Location(loc) => {
+              warn!("unhandled definintion: {loc:?}");
+            }
+          },
+          types::Or2::B(locs) => {
+            warn!("unhandled definition: {locs:?}");
+          }
+        }
+
+        self.lsp.goto_definition = None;
+      }
+    }
+  }
+
   pub(crate) fn lsp_notify_change(&mut self, change: &crate::Change) {
     let Some(file) = &self.file else { return };
 
@@ -170,6 +204,15 @@ impl EditorState {
     });
     self.lsp.completions.clear_on_message = true;
     self.lsp.completions.tasks = tasks;
+  }
+
+  pub(crate) fn lsp_request_goto_definition(&mut self) {
+    let task = self.lsp.client.send_first_capable(&command::GotoDefinition {
+      path:   self.file.as_ref().unwrap().path().to_path_buf(),
+      cursor: self.cursor,
+    });
+
+    self.lsp.goto_definition = task;
   }
 
   pub fn completions(&mut self) -> Option<Vec<String>> {
