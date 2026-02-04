@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use be_input::Direction;
 use kurbo::{Axis, Point, Rect};
 
-use crate::{Distance, Layout, ViewCollection, ViewId, view::View};
+use crate::{Distance, Layout, RenderStore, ViewCollection, ViewId, view::View};
 
 pub enum Pane {
   View(ViewId),
@@ -95,10 +95,10 @@ impl Pane {
     }
   }
 
-  pub fn split(&mut self, axis: Axis, views: &mut ViewCollection) {
+  pub fn split(&mut self, axis: Axis, views: &mut ViewCollection, store: &RenderStore) {
     match self {
       Pane::View(v) => {
-        let v2 = views.new_view(crate::view::TerminalView::new());
+        let v2 = views.new_view(crate::view::EditorView::new(store));
 
         views.views.get_mut(v).unwrap().on_focus(false);
         views.views.get_mut(&v2).unwrap().on_focus(true);
@@ -111,12 +111,12 @@ impl Pane {
       }
 
       Pane::Split(s) => match &mut s.items[s.active] {
-        active @ Pane::Split(_) => active.split(axis, views),
-        active @ Pane::View(_) if s.axis != axis => active.split(axis, views),
+        active @ Pane::Split(_) => active.split(axis, views, store),
+        active @ Pane::View(_) if s.axis != axis => active.split(axis, views, store),
         _ => {
           let fract = s.items.len() as f64 / (s.items.len() + 1) as f64;
           s.items
-            .insert(s.active + 1, Pane::View(views.new_view(crate::view::TerminalView::new())));
+            .insert(s.active + 1, Pane::View(views.new_view(crate::view::EditorView::new(store))));
           views.views.get_mut(&s.items[s.active].active()).unwrap().on_focus(false);
           s.active += 1;
           views.views.get_mut(&s.items[s.active].active()).unwrap().on_focus(true);

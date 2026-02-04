@@ -100,7 +100,7 @@ impl winit::application::ApplicationHandler<Event> for App {
 
   fn user_event(&mut self, event_loop: &ActiveEventLoop, event: Event) {
     if let Some(init) = &mut self.init {
-      if init.app.state.on_event(event) {
+      if init.app.state.on_event(event, &init.app.store) {
         event_loop.exit();
       }
       init.window.request_redraw();

@@ -477,7 +477,7 @@ impl State {
   }
 
   /// Handles an event. Returns `true` if the app should close.
-  fn on_event(&mut self, event: Event) -> bool {
+  fn on_event(&mut self, event: Event, store: &RenderStore) -> bool {
     match event {
       Event::Refresh => {}
       Event::OpenFile(path) => {
@@ -508,8 +508,8 @@ impl State {
               editor.clear_search();
             }
           }
-          "vs" => self.tabs[self.active].content.split(Axis::Vertical, &mut self.views),
-          "hs" => self.tabs[self.active].content.split(Axis::Horizontal, &mut self.views),
+          "vs" => self.tabs[self.active].content.split(Axis::Vertical, &mut self.views, store),
+          "hs" => self.tabs[self.active].content.split(Axis::Horizontal, &mut self.views, store),
 
           _ => {
             println!("unknown command: {}", cmd);
