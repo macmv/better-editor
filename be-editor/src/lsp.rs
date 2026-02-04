@@ -13,8 +13,7 @@ pub struct LspState {
 
   document_version:       u32,
   pub completions:        CompletionsState,
-  pub goto_definition:
-    Option<Task<Option<types::Or2<types::Definition, Vec<types::LocationLink>>>>>,
+  pub goto_definition:    Option<Task<Option<Vec<(types::Uri, Range<usize>)>>>>,
   pub(crate) diagnostics: Vec<Diagnostic>,
 
   // FIXME: ew.
@@ -100,27 +99,11 @@ impl EditorState {
 
   pub(crate) fn lsp_update_goto_definition(&mut self) {
     if let Some(task) = &self.lsp.goto_definition {
-      if let Some(Some(res)) = task.completed() {
-        match res {
-          types::Or2::A(def) => match def {
-            types::Definition::Many(defs) => {
-              if defs.len() == 1 {
-                self.lsp_goto_location(&defs[0].uri, defs[0].range.start.clone());
-              } else {
-                warn!("unhandled multiple definitions: {defs:?}");
-              }
-            }
-            types::Definition::Location(loc) => {
-              self.lsp_goto_location(&loc.uri, loc.range.start.clone());
-            }
-          },
-          types::Or2::B(locs) => {
-            if locs.len() == 1 {
-              self.lsp_goto_location(&locs[0].target_uri, locs[0].target_range.start.clone());
-            } else {
-              warn!("unhandled multiple definitions: {locs:?}");
-            }
-          }
+      if let Some(Some(defs)) = task.completed() {
+        if defs.len() == 1 {
+          self.lsp_goto_location(&defs[0].0, defs[0].1.start);
+        } else {
+          warn!("unhandled multiple definitions: {defs:?}");
         }
 
         self.lsp.goto_definition = None;
@@ -128,11 +111,8 @@ impl EditorState {
     }
   }
 
-  fn lsp_goto_location(&mut self, uri: &types::Uri, pos: types::Position) {
+  fn lsp_goto_location(&mut self, uri: &types::Uri, pos: usize) {
     let Some(def_path) = uri.to_file_path() else { return };
-
-    let pos =
-      crate::lsp::command::decode_position(be_lsp::command::PositionEncoding::Utf8, &self.doc, pos);
 
     let cursor = self.doc.offset_to_cursor(pos);
     if let Some(file) = &self.file

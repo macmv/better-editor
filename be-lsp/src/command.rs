@@ -288,29 +288,46 @@ pub struct GotoDefinition {
 }
 
 impl LspCommand for GotoDefinition {
-  type Result = Option<types::Or2<types::Definition, Vec<types::LocationLink>>>;
+  type Result = Option<Vec<(types::Uri, Range<usize>)>>;
 
   fn is_capable(&self, caps: &types::ServerCapabilities) -> bool {
     caps.definition_provider.is_some()
   }
 
-  fn send(
-    &self,
-    client: &mut LspClient,
-  ) -> Option<Task<Option<types::Or2<types::Definition, Vec<types::LocationLink>>>>> {
-    let position = {
+  fn send(&self, client: &mut LspClient) -> Option<Task<Option<Vec<(types::Uri, Range<usize>)>>>> {
+    let (position, encoding, doc) = {
       let state = client.state.lock();
       let file = state.file(&self.path)?;
-      state.encode_cursor(&file.doc, self.cursor)
+      (state.encode_cursor(&file.doc, self.cursor), state.position_encoding(), file.doc.clone())
     };
 
-    Some(client.request::<types::request::TextDocumentDefinition>(types::DefinitionParams {
-      text_document_position_params: types::TextDocumentPositionParams {
-        text_document: doc_id(&self.path),
-        position,
-      },
-      ..Default::default()
-    }))
+    Some(
+      client
+        .request::<types::request::TextDocumentDefinition>(types::DefinitionParams {
+          text_document_position_params: types::TextDocumentPositionParams {
+            text_document: doc_id(&self.path),
+            position,
+          },
+          ..Default::default()
+        })
+        .map(move |defs| {
+          defs.map(|defs| match defs {
+            types::Or2::A(def) => match def {
+              types::Definition::Many(defs) => defs
+                .into_iter()
+                .map(|loc| (loc.uri, decode_range(encoding, &doc, loc.range)))
+                .collect::<Vec<_>>(),
+              types::Definition::Location(loc) => {
+                vec![(loc.uri, decode_range(encoding, &doc, loc.range))]
+              }
+            },
+            types::Or2::B(locs) => locs
+              .into_iter()
+              .map(|loc| (loc.target_uri, decode_range(encoding, &doc, loc.target_range)))
+              .collect::<Vec<_>>(),
+          })
+        }),
+    )
   }
 }
 
