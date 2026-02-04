@@ -292,7 +292,9 @@ mod tests {
 
   #[test]
   fn it_works() {
-    let mut highlighter = load_grammar(Settings::default_ref(), &FileType::Rust).unwrap();
+    let config = Config::default_ref();
+    let name = config.languages.keys().find(|k| k.name() == "rust").unwrap();
+    let mut highlighter = load_grammar(config, *name).unwrap();
 
     let doc = "fn main() {}".into();
     highlighter.reparse(&doc);
