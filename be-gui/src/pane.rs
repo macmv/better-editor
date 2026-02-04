@@ -11,10 +11,9 @@ pub enum Pane {
 }
 
 pub struct Split {
-  pub axis:    Axis,
-  pub percent: Vec<f64>,
-  pub active:  usize,
-  pub items:   Vec<Pane>,
+  pub axis:   Axis,
+  pub active: usize,
+  pub items:  Vec<(f64, Pane)>,
 }
 
 pub struct ViewsIter<'a> {
@@ -25,7 +24,7 @@ impl Pane {
   pub fn animated(&self, views: &HashMap<ViewId, View>) -> bool {
     match self {
       Pane::View(id) => views[id].animated(),
-      Pane::Split(split) => split.items.iter().any(|item| item.animated(views)),
+      Pane::Split(split) => split.items.iter().any(|item| item.1.animated(views)),
     }
   }
 
@@ -46,7 +45,7 @@ impl Pane {
   pub fn active(&self) -> ViewId {
     match self {
       Pane::View(id) => *id,
-      Pane::Split(split) => split.items[split.active].active(),
+      Pane::Split(split) => split.items[split.active].1.active(),
     }
   }
 
@@ -67,28 +66,23 @@ impl Pane {
 
       Pane::Split(split) => {
         if let Some(idx) =
-          split.items.iter().position(|item| matches!(item, Pane::View(v) if *v == view))
+          split.items.iter().position(|(_, item)| matches!(item, Pane::View(v) if *v == view))
         {
           if split.items.len() == 2 {
             split.items.remove(idx);
-            *self = split.items.pop().unwrap();
+            *self = split.items.pop().unwrap().1;
 
             views.get_mut(&self.active()).unwrap().on_focus(true);
           } else {
             // TODO: Even out the percentages.
-            if idx == split.items.len() - 1 {
-              split.percent.pop();
-            } else {
-              split.percent.remove(idx);
-            }
             split.active = split.active.saturating_sub(1);
 
             split.items.remove(idx);
-            views.get_mut(&split.items[split.active].active()).unwrap().on_focus(true);
+            views.get_mut(&split.items[split.active].1.active()).unwrap().on_focus(true);
           }
         } else {
           for item in &mut split.items {
-            item.close(view, views);
+            item.1.close(view, views);
           }
         }
       }
@@ -104,26 +98,26 @@ impl Pane {
         views.views.get_mut(&v2).unwrap().on_focus(true);
         *self = Pane::Split(Split {
           axis,
-          percent: vec![0.5],
           active: 1,
-          items: vec![Pane::View(*v), Pane::View(v2)],
+          items: vec![(0.5, Pane::View(*v)), (0.5, Pane::View(v2))],
         });
       }
 
-      Pane::Split(s) => match &mut s.items[s.active] {
+      Pane::Split(s) => match &mut s.items[s.active].1 {
         active @ Pane::Split(_) => active.split(axis, views, store),
         active @ Pane::View(_) if s.axis != axis => active.split(axis, views, store),
         _ => {
           let fract = s.items.len() as f64 / (s.items.len() + 1) as f64;
-          s.items
-            .insert(s.active + 1, Pane::View(views.new_view(crate::view::EditorView::new(store))));
-          views.views.get_mut(&s.items[s.active].active()).unwrap().on_focus(false);
-          s.active += 1;
-          views.views.get_mut(&s.items[s.active].active()).unwrap().on_focus(true);
-          for p in &mut s.percent {
-            *p *= fract;
+          for p in &mut s.items {
+            p.0 *= fract;
           }
-          s.percent.push(1.0 - fract);
+          s.items.insert(
+            s.active + 1,
+            (1.0 - fract, Pane::View(views.new_view(crate::view::EditorView::new(store)))),
+          );
+          views.views.get_mut(&s.items[s.active].1.active()).unwrap().on_focus(false);
+          s.active += 1;
+          views.views.get_mut(&s.items[s.active].1.active()).unwrap().on_focus(true);
         }
       },
     }
@@ -138,10 +132,8 @@ impl Split {
 
     match self.axis {
       Axis::Vertical => {
-        for (i, item) in self.items.iter().enumerate() {
-          let percent =
-            self.percent.get(i).copied().unwrap_or_else(|| 1.0 - self.percent.iter().sum::<f64>());
-          let mut distance = Distance::Percent(percent).to_pixels_in(layout.size().width);
+        for (percent, item) in self.items.iter() {
+          let mut distance = Distance::Percent(*percent).to_pixels_in(layout.size().width);
           if distance < 0.0 {
             distance += layout.size().width;
           }
@@ -153,10 +145,8 @@ impl Split {
       }
 
       Axis::Horizontal => {
-        for (i, item) in self.items.iter().enumerate() {
-          let percent =
-            self.percent.get(i).copied().unwrap_or_else(|| 1.0 - self.percent.iter().sum::<f64>());
-          let mut distance = Distance::Percent(percent).to_pixels_in(layout.size().height);
+        for (percent, item) in self.items.iter() {
+          let mut distance = Distance::Percent(*percent).to_pixels_in(layout.size().height);
           if distance < 0.0 {
             distance += layout.size().height;
           }
@@ -173,7 +163,7 @@ impl Split {
   fn focus(&mut self, direction: Direction) -> Option<ViewId> {
     let focused = &mut self.items[self.active];
 
-    if let Some(view) = focused.focus(direction) {
+    if let Some(view) = focused.1.focus(direction) {
       Some(view)
     } else {
       match (self.axis, direction) {
@@ -189,7 +179,7 @@ impl Split {
         _ => return None,
       }
 
-      Some(self.items[self.active].active())
+      Some(self.items[self.active].1.active())
     }
   }
 }
@@ -202,7 +192,7 @@ impl Iterator for ViewsIter<'_> {
       match self.stack.pop()? {
         Pane::View(id) => break Some(*id),
         Pane::Split(split) => {
-          self.stack.extend(split.items.iter().rev());
+          self.stack.extend(split.items.iter().map(|(_, item)| item).rev());
         }
       }
     }
@@ -216,26 +206,26 @@ mod tests {
   #[test]
   fn views_iter() {
     let pane = Pane::Split(Split {
-      axis:    Axis::Vertical,
-      percent: vec![0.2],
-      active:  1,
-      items:   vec![Pane::View(ViewId(0)), Pane::View(ViewId(1))],
+      axis:   Axis::Vertical,
+      active: 1,
+      items:  vec![(0.2, Pane::View(ViewId(0))), (0.8, Pane::View(ViewId(1)))],
     });
 
     assert_eq!(pane.views().collect::<Vec<ViewId>>(), vec![ViewId(0), ViewId(1)]);
 
     let pane = Pane::Split(Split {
-      axis:    Axis::Vertical,
-      percent: vec![0.2],
-      active:  1,
-      items:   vec![
-        Pane::Split(Split {
-          axis:    Axis::Horizontal,
-          percent: vec![0.5],
-          active:  1,
-          items:   vec![Pane::View(ViewId(0)), Pane::View(ViewId(1))],
-        }),
-        Pane::View(ViewId(2)),
+      axis:   Axis::Vertical,
+      active: 1,
+      items:  vec![
+        (
+          0.2,
+          Pane::Split(Split {
+            axis:   Axis::Horizontal,
+            active: 1,
+            items:  vec![(0.5, Pane::View(ViewId(0))), (0.5, Pane::View(ViewId(1)))],
+          }),
+        ),
+        (0.8, Pane::View(ViewId(2))),
       ],
     });
 

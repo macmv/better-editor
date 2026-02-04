@@ -97,15 +97,28 @@ impl State {
 
     fn build_view(state: &mut State, store: &RenderStore, tab: be_config::TabSettings) -> Pane {
       match tab {
-        be_config::TabSettings::Split(split) => Pane::Split(pane::Split {
-          axis:    match split.axis {
-            be_config::Axis::Vertical => Axis::Vertical,
-            be_config::Axis::Horizontal => Axis::Horizontal,
-          },
-          percent: split.percent,
-          active:  split.active,
-          items:   split.children.into_iter().map(|c| build_view(state, store, c)).collect(),
-        }),
+        be_config::TabSettings::Split(split) => {
+          if split.percent.len() != split.children.len().saturating_sub(1) {
+            eprintln!("invalid split percentages"); // TODO: Real errors!
+            return Pane::View(state.views.new_view(view::EditorView::new(store)));
+          }
+
+          Pane::Split(pane::Split {
+            axis:   match split.axis {
+              be_config::Axis::Vertical => Axis::Vertical,
+              be_config::Axis::Horizontal => Axis::Horizontal,
+            },
+            active: split.active,
+            items:  (split
+              .percent
+              .iter()
+              .copied()
+              .chain(std::iter::once(1.0 - split.percent.iter().sum::<f64>()))
+              .zip(split.children.into_iter()))
+            .map(|(percent, c)| (percent, build_view(state, store, c)))
+            .collect(),
+          })
+        }
         be_config::TabSettings::Terminal => {
           Pane::View(state.views.new_view(view::TerminalView::new()))
         }
