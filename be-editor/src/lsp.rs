@@ -99,21 +99,31 @@ impl EditorState {
   }
 
   pub(crate) fn lsp_update_goto_definition(&mut self) {
+    let Some(file) = &self.file else { return };
+
     if let Some(task) = &self.lsp.goto_definition {
       if let Some(Some(res)) = task.completed() {
         match res {
           types::Or2::A(def) => match def {
             types::Definition::Many(defs) => {
               if defs.len() == 1 {
+                let Some(def_path) = defs[0].uri.to_file_path() else { return };
+
                 let pos = crate::lsp::command::decode_position(
                   be_lsp::command::PositionEncoding::Utf8,
                   &self.doc,
                   defs[0].range.start.clone(),
                 );
 
-                let cursor = self.doc.offset_to_cursor(pos);
-                self.move_to_line(cursor.line);
-                self.move_to_col(cursor.column);
+                if file.path() == def_path {
+                  let cursor = self.doc.offset_to_cursor(pos);
+                  self.move_to_line(cursor.line);
+                  self.move_to_col(cursor.column);
+                } else {
+                  if let Some(send) = &self.send {
+                    send(crate::EditorEvent::OpenFile(def_path));
+                  }
+                }
               }
             }
             types::Definition::Location(loc) => {
