@@ -39,6 +39,8 @@ pub enum Move {
   Result(ChangeDirection),
   Change(ChangeDirection),
   Diagnostic(ChangeDirection),
+
+  GotoDefinition,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -200,6 +202,7 @@ fn parse_move(
     Key::Char('N') => Result(ChangeDirection::Prev),
     Key::Char('g') => match iter.next().ok_or(ActionError::Incomplete)?.key {
       Key::Char('g') => FileStart,
+      Key::Char('d') => GotoDefinition,
       _ => return Err(ActionError::Unrecognized),
     },
     Key::Char('G') => FileEnd,
