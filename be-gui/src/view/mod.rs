@@ -3,11 +3,13 @@ use kurbo::Rect;
 
 use crate::{Layout, Render};
 
+mod command;
 mod editor;
 mod file_tree;
 mod search;
 mod terminal;
 
+pub use command::CommandView;
 pub use editor::EditorView;
 pub use file_tree::FileTree;
 pub use search::Search;
@@ -40,6 +42,7 @@ pub enum ViewContent {
 
 pub enum Popup {
   Search(Search),
+  Command(CommandView),
 }
 
 impl View {
@@ -112,18 +115,21 @@ impl Popup {
   pub fn layout(&mut self, _layout: &mut Layout) {
     match self {
       Popup::Search(search) => search.layout(),
+      Popup::Command(command) => command.layout(),
     }
   }
 
   pub fn draw(&mut self, render: &mut Render) {
     match self {
       Popup::Search(search) => search.draw(render),
+      Popup::Command(command) => command.draw(render),
     }
   }
 
   pub fn perform_action(&mut self, action: Action) {
     match self {
       Popup::Search(search) => search.perform_action(action),
+      Popup::Command(command) => command.perform_action(action),
     }
   }
 }

@@ -406,6 +406,10 @@ impl State {
         self.active_tab_mut().popup =
           Some(view::Popup::Search(view::Search::new(self.notify.clone())));
       }
+      Action::SetMode { mode: be_input::Mode::Command, .. } => {
+        self.active_tab_mut().popup =
+          Some(view::Popup::Command(view::CommandView::new(self.notify.clone())));
+      }
       Action::SetMode { mode: be_input::Mode::Normal, .. } if self.active_tab().popup.is_some() => {
         self.active_tab_mut().popup = None;
       }
@@ -528,6 +532,8 @@ impl State {
             println!("unknown command: {}", cmd);
           }
         }
+
+        self.tabs[self.active].popup = None;
       }
       Event::Exit => return true,
     }
