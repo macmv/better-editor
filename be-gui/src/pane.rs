@@ -74,10 +74,15 @@ impl Pane {
 
             views.get_mut(&self.active()).unwrap().on_focus(true);
           } else {
-            // TODO: Even out the percentages.
             split.active = split.active.saturating_sub(1);
 
             split.items.remove(idx);
+
+            let total = split.items.iter().map(|(p, _)| p).sum::<f64>();
+            for (p, _) in &mut split.items {
+              *p /= total;
+            }
+
             views.get_mut(&split.items[split.active].1.active()).unwrap().on_focus(true);
           }
         } else {
