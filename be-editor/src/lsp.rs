@@ -99,43 +99,50 @@ impl EditorState {
   }
 
   pub(crate) fn lsp_update_goto_definition(&mut self) {
-    let Some(file) = &self.file else { return };
-
     if let Some(task) = &self.lsp.goto_definition {
       if let Some(Some(res)) = task.completed() {
         match res {
           types::Or2::A(def) => match def {
             types::Definition::Many(defs) => {
               if defs.len() == 1 {
-                let Some(def_path) = defs[0].uri.to_file_path() else { return };
-
-                let pos = crate::lsp::command::decode_position(
-                  be_lsp::command::PositionEncoding::Utf8,
-                  &self.doc,
-                  defs[0].range.start.clone(),
-                );
-
-                let cursor = self.doc.offset_to_cursor(pos);
-                if file.path() == def_path {
-                  self.move_to_line(cursor.line);
-                  self.move_to_col(cursor.column);
-                } else {
-                  if let Some(send) = &self.send {
-                    send(crate::EditorEvent::OpenFile(def_path, Some(cursor)));
-                  }
-                }
+                self.lsp_goto_location(&defs[0].uri, defs[0].range.start.clone());
+              } else {
+                warn!("unhandled multiple definitions: {defs:?}");
               }
             }
             types::Definition::Location(loc) => {
-              warn!("unhandled definintion: {loc:?}");
+              self.lsp_goto_location(&loc.uri, loc.range.start.clone());
             }
           },
           types::Or2::B(locs) => {
-            warn!("unhandled definition: {locs:?}");
+            if locs.len() == 1 {
+              self.lsp_goto_location(&locs[0].target_uri, locs[0].target_range.start.clone());
+            } else {
+              warn!("unhandled multiple definitions: {locs:?}");
+            }
           }
         }
 
         self.lsp.goto_definition = None;
+      }
+    }
+  }
+
+  fn lsp_goto_location(&mut self, uri: &types::Uri, pos: types::Position) {
+    let Some(def_path) = uri.to_file_path() else { return };
+
+    let pos =
+      crate::lsp::command::decode_position(be_lsp::command::PositionEncoding::Utf8, &self.doc, pos);
+
+    let cursor = self.doc.offset_to_cursor(pos);
+    if let Some(file) = &self.file
+      && file.path() == def_path
+    {
+      self.move_to_line(cursor.line);
+      self.move_to_col(cursor.column);
+    } else {
+      if let Some(send) = &self.send {
+        send(crate::EditorEvent::OpenFile(def_path, Some(cursor)));
       }
     }
   }
