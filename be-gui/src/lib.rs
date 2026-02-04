@@ -495,7 +495,7 @@ impl State {
         self.tabs[self.active].popup = None;
         self.open(&path);
       }
-      Event::RunCommand(cmd) => {
+      Event::Editor(be_editor::EditorEvent::RunCommand(cmd)) => {
         let (cmd, args) = cmd.split_once(' ').unwrap_or((&cmd, ""));
 
         match cmd {

@@ -51,7 +51,7 @@ impl CommandView {
       Action::Move { m: Move::Single(Direction::Right), .. } => self.move_cursor(1),
 
       Action::Edit { e: Edit::Insert('\n'), .. } => {
-        self.notify.run_cmd(self.command.clone());
+        self.notify.editor_event(be_editor::EditorEvent::RunCommand(self.command.clone()));
       }
       Action::Edit { e: Edit::Insert(c), .. } => {
         self.command.insert(self.cursor, c);

@@ -50,13 +50,18 @@ pub struct EditorState {
   history_position: usize,
   history:          Vec<Edit>,
 
-  pub config:  Rc<RefCell<Config>>,
-  pub lsp:     lsp::LspState,
-  pub run_cmd: Option<Box<dyn Fn(&str)>>,
+  pub config: Rc<RefCell<Config>>,
+  pub lsp:    lsp::LspState,
+  pub send:   Option<Box<dyn Fn(EditorEvent)>>,
 
   // TODO: Share this
   repo:        Option<Repo>,
   pub changes: Option<LineDiffSimilarity>,
+}
+
+#[derive(Debug)]
+pub enum EditorEvent {
+  RunCommand(String),
 }
 
 #[derive(Default)]
@@ -385,8 +390,8 @@ impl EditorState {
         self.status = None;
       }
       CommandMode::Command => {
-        if let Some(cmd) = &self.run_cmd {
-          cmd(&command.text);
+        if let Some(send) = &self.send {
+          send(EditorEvent::RunCommand(command.text.clone()));
         }
 
         /*

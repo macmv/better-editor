@@ -1,6 +1,7 @@
 use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Instant};
 
 use be_config::Config;
+use be_editor::EditorEvent;
 use kurbo::{Affine, Axis, Point, Rect, Shape, Size, Stroke, Vec2};
 use peniko::{
   Gradient,
@@ -22,7 +23,7 @@ pub enum Event {
   Refresh,
   OpenFile(PathBuf),
   Exit,
-  RunCommand(String),
+  Editor(EditorEvent),
 }
 
 pub struct RenderStore {
@@ -389,7 +390,7 @@ impl Notify {
 
   pub fn exit(&self) { self.proxy.send_event(Event::Exit).unwrap(); }
 
-  pub fn run_cmd(&self, cmd: String) { self.proxy.send_event(Event::RunCommand(cmd)).unwrap(); }
+  pub fn editor_event(&self, ev: EditorEvent) { self.proxy.send_event(Event::Editor(ev)).unwrap(); }
 }
 
 #[derive(Debug, Copy, Clone)]
