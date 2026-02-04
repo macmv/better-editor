@@ -68,11 +68,8 @@ impl Pane {
         if let Some(idx) =
           split.items.iter().position(|(_, item)| matches!(item, Pane::View(v) if *v == view))
         {
-          if split.items.len() == 2 {
-            split.items.remove(idx);
-            *self = split.items.pop().unwrap().1;
-
-            views.get_mut(&self.active()).unwrap().on_focus(true);
+          if split.items.len() == 1 {
+            // You can't close the last pane. TODO: Maybe quit the app?
           } else {
             split.active = split.active.saturating_sub(1);
 
