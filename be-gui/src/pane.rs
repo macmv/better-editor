@@ -57,7 +57,7 @@ impl Pane {
     }
   }
 
-  pub fn close(&mut self, view: ViewId) {
+  pub fn close(&mut self, view: ViewId, views: &mut HashMap<ViewId, View>) {
     match self {
       Pane::View(v) => {
         if view == *v {
@@ -72,6 +72,8 @@ impl Pane {
           if split.items.len() == 2 {
             split.items.remove(idx);
             *self = split.items.pop().unwrap();
+
+            views.get_mut(&self.active()).unwrap().on_focus(true);
           } else {
             // TODO: Even out the percentages.
             if idx == split.items.len() - 1 {
@@ -79,12 +81,14 @@ impl Pane {
             } else {
               split.percent.remove(idx);
             }
+            split.active = split.active.saturating_sub(1);
 
             split.items.remove(idx);
+            views.get_mut(&split.items[split.active].active()).unwrap().on_focus(true);
           }
         } else {
           for item in &mut split.items {
-            item.close(view);
+            item.close(view, views);
           }
         }
       }
@@ -96,10 +100,12 @@ impl Pane {
       Pane::View(v) => {
         let v2 = views.new_view(crate::view::TerminalView::new());
 
+        views.views.get_mut(v).unwrap().on_focus(false);
+        views.views.get_mut(&v2).unwrap().on_focus(true);
         *self = Pane::Split(Split {
           axis,
           percent: vec![0.5],
-          active: 0,
+          active: 1,
           items: vec![Pane::View(*v), Pane::View(v2)],
         });
       }
@@ -111,7 +117,9 @@ impl Pane {
           let fract = s.items.len() as f64 / (s.items.len() + 1) as f64;
           s.items
             .insert(s.active + 1, Pane::View(views.new_view(crate::view::TerminalView::new())));
+          views.views.get_mut(&s.items[s.active].active()).unwrap().on_focus(false);
           s.active += 1;
+          views.views.get_mut(&s.items[s.active].active()).unwrap().on_focus(true);
           for p in &mut s.percent {
             *p *= fract;
           }

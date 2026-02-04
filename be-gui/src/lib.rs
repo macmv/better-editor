@@ -139,7 +139,7 @@ impl State {
         tab.content.layout(&mut state.views.views, layout);
         if !layout.to_close.is_empty() {
           for to_close in layout.to_close.drain(..) {
-            tab.content.close(to_close);
+            tab.content.close(to_close, &mut state.views.views);
           }
 
           // Re-run layout after removing closed views.
