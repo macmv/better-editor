@@ -52,7 +52,7 @@ struct WidgetCollection {
 struct Tab {
   title:   String,
   content: Pane,
-  search:  Option<crate::view::Search>,
+  popup:   Option<view::Popup>,
 }
 
 #[derive(Debug)]
@@ -143,7 +143,7 @@ impl State {
     for tab in layout.tab {
       let title = tab_title(&tab);
       let view = build_view(&mut state, store, tab);
-      state.tabs.push(Tab { title: title.unwrap_or_default(), content: view, search: None });
+      state.tabs.push(Tab { title: title.unwrap_or_default(), content: view, popup: None });
     }
 
     for view in state.tabs[state.active].content.views() {
@@ -164,8 +164,8 @@ impl State {
       Distance::Pixels(-25.0),
       |state, layout| {
         let tab = &mut state.tabs[state.active];
-        if let Some(search) = &mut tab.search {
-          search.layout();
+        if let Some(popup) = &mut tab.popup {
+          popup.layout(layout);
         }
         tab.content.layout(&mut state.views.views, layout);
         if !layout.to_close.is_empty() {
@@ -276,10 +276,10 @@ impl State {
           let view = state.views.get_mut(view).unwrap();
           render.clipped(view.bounds, |render| view.draw(render));
         }
-        if let Some(search) = &mut tab.search {
+        if let Some(popup) = &mut tab.popup {
           render.clipped(
             Rect::new(100.0, 50.0, render.size().width - 100.0, render.size().height - 50.0),
-            |render| search.draw(render),
+            |render| popup.draw(render),
           );
         }
       },
@@ -338,7 +338,7 @@ impl State {
   }
 
   fn mode(&self) -> be_input::Mode {
-    if self.tabs[self.active].search.is_some() {
+    if self.tabs[self.active].popup.is_some() {
       be_input::Mode::Insert
     } else {
       self.views.get(self.tabs[self.active].content.active()).unwrap().mode()
@@ -403,16 +403,15 @@ impl State {
         }
       }
       Action::Navigate { nav: Navigation::OpenSearch } => {
-        self.active_tab_mut().search = Some(view::Search::new(self.notify.clone()));
+        self.active_tab_mut().popup =
+          Some(view::Popup::Search(view::Search::new(self.notify.clone())));
       }
-      Action::SetMode { mode: be_input::Mode::Normal, .. }
-        if self.active_tab().search.is_some() =>
-      {
-        self.active_tab_mut().search = None;
+      Action::SetMode { mode: be_input::Mode::Normal, .. } if self.active_tab().popup.is_some() => {
+        self.active_tab_mut().popup = None;
       }
       _ => {
-        if let Some(search) = &mut self.active_tab_mut().search {
-          search.perform_action(action)
+        if let Some(popup) = &mut self.active_tab_mut().popup {
+          popup.perform_action(action)
         } else {
           self.active_view_mut().perform_action(action)
         }
@@ -492,7 +491,7 @@ impl State {
     match event {
       Event::Refresh => {}
       Event::OpenFile(path) => {
-        self.tabs[self.active].search = None;
+        self.tabs[self.active].popup = None;
         self.open(&path);
       }
       Event::RunCommand(cmd) => {

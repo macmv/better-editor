@@ -38,6 +38,10 @@ pub enum ViewContent {
   Terminal(TerminalView),
 }
 
+pub enum Popup {
+  Search(Search),
+}
+
 impl View {
   pub fn new(content: impl Into<ViewContent>) -> Self {
     View { content: content.into(), bounds: Rect::ZERO }
@@ -100,6 +104,26 @@ impl View {
       ViewContent::Editor(editor) => editor.on_focus(focus),
       ViewContent::FileTree(file_tree) => file_tree.on_focus(focus),
       ViewContent::Terminal(terminal) => terminal.on_focus(focus),
+    }
+  }
+}
+
+impl Popup {
+  pub fn layout(&mut self, _layout: &mut Layout) {
+    match self {
+      Popup::Search(search) => search.layout(),
+    }
+  }
+
+  pub fn draw(&mut self, render: &mut Render) {
+    match self {
+      Popup::Search(search) => search.draw(render),
+    }
+  }
+
+  pub fn perform_action(&mut self, action: Action) {
+    match self {
+      Popup::Search(search) => search.perform_action(action),
     }
   }
 }
