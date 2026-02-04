@@ -52,7 +52,7 @@ struct WidgetCollection {
 struct Tab {
   title:   String,
   content: Pane,
-  search:  Option<View>,
+  search:  Option<crate::view::Search>,
 }
 
 #[derive(Debug)]
@@ -165,7 +165,7 @@ impl State {
       |state, layout| {
         let tab = &mut state.tabs[state.active];
         if let Some(search) = &mut tab.search {
-          search.layout(layout);
+          search.layout();
         }
         tab.content.layout(&mut state.views.views, layout);
         if !layout.to_close.is_empty() {
@@ -337,19 +337,15 @@ impl State {
     })
   }
 
-  fn active_view(&self) -> &View {
-    if let Some(search) = &self.tabs[self.active].search {
-      search
+  fn mode(&self) -> be_input::Mode {
+    if self.tabs[self.active].search.is_some() {
+      be_input::Mode::Insert
     } else {
-      self.views.get(self.tabs[self.active].content.active()).unwrap()
+      self.views.get(self.tabs[self.active].content.active()).unwrap().mode()
     }
   }
   fn active_view_mut(&mut self) -> &mut View {
-    if self.tabs[self.active].search.is_some() {
-      self.tabs[self.active].search.as_mut().unwrap()
-    } else {
-      self.views.get_mut(self.tabs[self.active].content.active()).unwrap()
-    }
+    self.views.get_mut(self.tabs[self.active].content.active()).unwrap()
   }
 
   fn on_key(&mut self, key: KeyStroke) {
@@ -362,7 +358,7 @@ impl State {
       e.temporary_underline = temporary_underline;
     }
 
-    match Action::from_input(self.active_view().mode(), &self.keys) {
+    match Action::from_input(self.mode(), &self.keys) {
       Ok(action) => {
         self.perform_action(action);
         self.keys.clear();
@@ -407,18 +403,20 @@ impl State {
         }
       }
       Action::Navigate { nav: Navigation::OpenSearch } => {
-        self.active_tab_mut().search = Some(View {
-          // TODO: Get the window size in here.
-          bounds:  Rect::new(0.0, 0.0, 1.0, 1.0),
-          content: ViewContent::Search(view::Search::new(self.notify.clone())),
-        });
+        self.active_tab_mut().search = Some(view::Search::new(self.notify.clone()));
       }
       Action::SetMode { mode: be_input::Mode::Normal, .. }
         if self.active_tab().search.is_some() =>
       {
         self.active_tab_mut().search = None;
       }
-      _ => self.active_view_mut().perform_action(action),
+      _ => {
+        if let Some(search) = &mut self.active_tab_mut().search {
+          search.perform_action(action)
+        } else {
+          self.active_view_mut().perform_action(action)
+        }
+      }
     }
   }
 
