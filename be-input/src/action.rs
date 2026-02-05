@@ -1,6 +1,6 @@
 use std::num::NonZero;
 
-use crate::{KeyStroke, Mode, key::Key};
+use crate::{KeyStroke, Mode, VisualMode, key::Key};
 
 pub enum Action {
   SetMode { mode: Mode, delta: i32 },
@@ -131,7 +131,7 @@ impl Action {
         (Mode::Insert | Mode::Command, Key::ArrowLeft) => m!(Single(Direction::Left)),
         (Mode::Insert | Mode::Command, Key::ArrowRight) => m!(Single(Direction::Right)),
 
-        (Mode::Visual, Key::Escape) => Ok(Action::SetMode { mode: Mode::Normal, delta: 0 }),
+        (Mode::Visual(_), Key::Escape) => Ok(Action::SetMode { mode: Mode::Normal, delta: 0 }),
 
         (Mode::Normal, Key::Char(c @ '1'..='9')) => {
           count += u32::from(c) - u32::from('0');
@@ -164,12 +164,20 @@ impl Action {
         (Mode::Normal, Key::Char('a')) => Ok(Action::SetMode { mode: Mode::Insert, delta: 1 }),
         (Mode::Normal, Key::Char('o')) => Ok(Action::Append { after: true }),
         (Mode::Normal, Key::Char('O')) => Ok(Action::Append { after: false }),
-        (Mode::Normal, Key::Char('v')) => Ok(Action::SetMode { mode: Mode::Visual, delta: 0 }),
+        (Mode::Normal, Key::Char('v')) if key.control => {
+          Ok(Action::SetMode { mode: Mode::Visual(VisualMode::Block), delta: 0 })
+        }
+        (Mode::Normal, Key::Char('v')) => {
+          Ok(Action::SetMode { mode: Mode::Visual(VisualMode::Character), delta: 0 })
+        }
+        (Mode::Normal, Key::Char('V')) => {
+          Ok(Action::SetMode { mode: Mode::Visual(VisualMode::Line), delta: 0 })
+        }
         (Mode::Normal, Key::Char('R')) => Ok(Action::SetMode { mode: Mode::Replace, delta: 0 }),
         (Mode::Normal, Key::Char(':')) => Ok(Action::SetMode { mode: Mode::Command, delta: 0 }),
         (Mode::Normal, Key::Char('/')) => Ok(Action::OpenSearch),
 
-        (Mode::Normal | Mode::Visual, _) => {
+        (Mode::Normal | Mode::Visual(_), _) => {
           parse_move(key, iter).map(|m| Action::Move { count: NonZero::new(count), m })
         }
 

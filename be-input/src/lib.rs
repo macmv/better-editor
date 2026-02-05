@@ -6,9 +6,16 @@ pub enum Mode {
   #[default]
   Normal,
   Insert,
-  Visual,
+  Visual(VisualMode),
   Replace,
   Command,
+}
+
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+pub enum VisualMode {
+  Character,
+  Line,
+  Block,
 }
 
 pub use action::*;

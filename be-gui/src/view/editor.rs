@@ -193,7 +193,7 @@ impl EditorView {
 
     let mode = match self.editor.mode() {
       Mode::Normal if self.temporary_underline => Some(CursorMode::Underline),
-      Mode::Normal | Mode::Visual => Some(CursorMode::Block),
+      Mode::Normal | Mode::Visual(_) => Some(CursorMode::Block),
       Mode::Insert => Some(CursorMode::Line),
       Mode::Replace => Some(CursorMode::Underline),
       Mode::Command => None,
