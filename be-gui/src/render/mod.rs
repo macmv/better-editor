@@ -8,7 +8,7 @@ use peniko::{
   color::{AlphaColor, Oklab, Oklch, Srgb},
 };
 
-use crate::{Layout, render::text::TextStore, theme::Theme};
+use crate::{Layout, WidgetCollection, render::text::TextStore, theme::Theme};
 
 mod blitter;
 mod cursor;
@@ -28,10 +28,11 @@ pub enum Event {
 pub struct RenderStore {
   proxy: winit::event_loop::EventLoopProxy<Event>,
 
-  pub lsp:    Rc<RefCell<be_lsp::LanguageServerStore>>,
-  pub config: Rc<RefCell<Config>>,
-  pub text:   TextStore,
-  pub theme:  Theme,
+  pub lsp:     Rc<RefCell<be_lsp::LanguageServerStore>>,
+  pub config:  Rc<RefCell<Config>>,
+  pub text:    TextStore,
+  pub theme:   Theme,
+  pub widgets: WidgetCollection,
 
   render: vello::Renderer,
 }
@@ -124,6 +125,7 @@ pub fn run() {
       config,
       render: vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),
       theme: Theme::default_theme(),
+      widgets: WidgetCollection::new(),
     };
 
     let mut app = App {
@@ -182,6 +184,7 @@ impl App {
     {
       puffin::profile_scope!("layout");
       self.state.layout(&mut layout);
+      drop(layout);
     }
 
     let now = std::time::Instant::now();

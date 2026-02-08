@@ -3,8 +3,8 @@ use std::collections::HashSet;
 use kurbo::{Axis, Point, Rect, Size, Vec2};
 
 use crate::{
-  Color, Distance, Notify, RenderStore, TextLayout, ViewId, Widget, WidgetCollection, WidgetId,
-  WidgetPath, WidgetStore, theme::Theme,
+  Color, Distance, Notify, RenderStore, TextLayout, ViewId, Widget, WidgetId, WidgetPath,
+  WidgetStore, theme::Theme,
 };
 
 pub struct Layout<'a> {
@@ -17,8 +17,7 @@ pub struct Layout<'a> {
   path:    WidgetPath,
   next_id: u32,
 
-  pub(crate) widgets: Option<WidgetCollection>,
-  pub(crate) seen:    HashSet<WidgetId>,
+  pub(crate) seen: HashSet<WidgetId>,
 
   pub active:   Option<ViewId>,
   pub to_close: Vec<ViewId>,
@@ -40,7 +39,6 @@ impl<'a> Layout<'a> {
       path: WidgetPath(vec![]),
       next_id: 0,
       seen: HashSet::new(),
-      widgets: None,
       active: None,
       to_close: vec![],
     }
@@ -67,28 +65,26 @@ impl<'a> Layout<'a> {
   ) -> WidgetBuilder<'a, 'b, W> {
     let path = self.next_path();
 
-    let widgets = self.widgets.as_mut().expect("widgets not setup");
-
-    let id = if let Some(id) = widgets.get_path(&path) {
+    let id = if let Some(id) = self.store.widgets.get_path(&path) {
       id
     } else {
-      widgets.create(WidgetStore::new(path, widget()))
+      self.store.widgets.create(WidgetStore::new(path, widget()))
     };
     if !self.seen.insert(id) {
-      eprintln!("duplicate widget at path {:?}", widgets.widgets[&id].path);
+      eprintln!("duplicate widget at path {:?}", self.store.widgets.widgets[&id].path);
     }
     WidgetBuilder { layout: self, id, _phantom: std::marker::PhantomData }
   }
 
   pub fn layout(&mut self, root: WidgetId) -> Size {
-    let mut widget = self.widgets.as_mut().unwrap().widgets.remove(&root).unwrap();
+    let mut widget = self.store.widgets.widgets.remove(&root).unwrap();
     let size = widget.layout(self);
-    self.widgets.as_mut().unwrap().widgets.insert(root, widget);
+    self.store.widgets.widgets.insert(root, widget);
     size
   }
 
   pub fn set_bounds(&mut self, child: WidgetId, bounds: Rect) {
-    self.widgets.as_mut().unwrap().widgets.get_mut(&child).unwrap().bounds = bounds;
+    self.store.widgets.widgets.get_mut(&child).unwrap().bounds = bounds;
   }
 
   fn next_path(&mut self) -> WidgetPath {
@@ -183,6 +179,19 @@ impl<'a> Layout<'a> {
 
     let (built, backgrounds) = builder.build(text);
     self.build_layout(built, backgrounds)
+  }
+}
+
+impl Drop for Layout<'_> {
+  fn drop(&mut self) {
+    self.store.widgets.widgets.retain(|id, widget| {
+      if !self.seen.contains(id) {
+        self.store.widgets.paths.remove(&widget.path);
+        false
+      } else {
+        true
+      }
+    });
   }
 }
 
