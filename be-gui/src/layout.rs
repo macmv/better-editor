@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{any::Any, collections::HashSet};
 
 use kurbo::{Axis, Point, Rect, Size, Vec2};
 
@@ -23,10 +23,9 @@ pub struct Layout<'a> {
   pub to_close: Vec<ViewId>,
 }
 
-pub struct WidgetBuilder<'a: 'b, 'b, W: Widget> {
-  pub(crate) layout: &'b mut Layout<'a>,
-  id:                WidgetId,
-  _phantom:          std::marker::PhantomData<W>,
+pub struct WidgetMut<'a, W: Widget> {
+  pub id:     WidgetId,
+  pub widget: &'a mut W,
 }
 
 impl<'a> Layout<'a> {
@@ -62,7 +61,7 @@ impl<'a> Layout<'a> {
   pub fn add_widget<'b, W: Widget + 'static>(
     &'b mut self,
     widget: impl FnOnce() -> W,
-  ) -> WidgetBuilder<'a, 'b, W> {
+  ) -> WidgetMut<'b, W> {
     let path = self.next_path();
 
     let id = if let Some(id) = self.store.widgets.get_path(&path) {
@@ -73,7 +72,8 @@ impl<'a> Layout<'a> {
     if !self.seen.insert(id) {
       eprintln!("duplicate widget at path {:?}", self.store.widgets.widgets[&id].path);
     }
-    WidgetBuilder { layout: self, id, _phantom: std::marker::PhantomData }
+    let widget = self.store.widgets.widgets.get_mut(&id).unwrap();
+    WidgetMut { id, widget: (&mut *widget.content as &mut dyn Any).downcast_mut().unwrap() }
   }
 
   pub fn layout(&mut self, root: WidgetId) -> Size {
@@ -193,15 +193,4 @@ impl Drop for Layout<'_> {
       }
     });
   }
-}
-
-impl<'a, 'b, W: Widget> WidgetBuilder<'a, 'b, W> {
-  pub fn wrap<U: Widget + 'static>(
-    self,
-    f: impl FnOnce(WidgetId) -> U,
-  ) -> WidgetBuilder<'a, 'b, U> {
-    self.layout.add_widget(|| f(self.id))
-  }
-
-  pub fn build(self) -> WidgetId { self.id }
 }

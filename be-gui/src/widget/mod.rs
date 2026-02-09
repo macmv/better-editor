@@ -10,7 +10,7 @@ pub use button::Button;
 pub use padding::Padding;
 pub use stack::{Align, Justify, Stack};
 
-use crate::{Layout, MouseEvent, Render, WidgetId, WidgetPath, layout::WidgetBuilder};
+use crate::{Layout, MouseEvent, Render, WidgetId, WidgetPath};
 
 pub struct WidgetStore {
   pub content: Box<dyn Widget>,
@@ -43,7 +43,7 @@ macro_rules! op {
   }
 }
 
-pub trait Widget {
+pub trait Widget: std::any::Any {
   fn layout(&mut self, layout: &mut Layout) -> Option<Size> {
     let _ = layout;
     None
@@ -116,6 +116,7 @@ impl From<f64> for Corners {
   fn from(c: f64) -> Self { Corners::all(c) }
 }
 
+/*
 impl<'a, 'b, W: Widget> WidgetBuilder<'a, 'b, W> {
   op!(padding(p: impl Into<Borders>) -> Padding::new(p.into()));
   op!(padding_left(left: f64) -> Padding::new(Borders::left(left)));
@@ -125,3 +126,4 @@ impl<'a, 'b, W: Widget> WidgetBuilder<'a, 'b, W> {
   op!(padding_left_right(p: f64) -> Padding::new(Borders::left_right(p)));
   op!(padding_top_bottom(p: f64) -> Padding::new(Borders::top_bottom(p)));
 }
+*/

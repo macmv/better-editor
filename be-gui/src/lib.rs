@@ -432,15 +432,16 @@ impl State {
     let mut row = vec![];
 
     for tab in self.tabs.iter() {
-      row.push(layout.add_widget(|| crate::widget::Button::new(&tab.title)).build());
+      let button = layout.add_widget(|| crate::widget::Button::new(&tab.title));
+
+      row.push(button.id);
     }
 
     let root = layout
       .add_widget(|| {
         crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, row).gap(5.0)
       })
-      .padding_left_right(10.0)
-      .build();
+      .id;
 
     layout.layout(root);
     self.root = Some(root);
