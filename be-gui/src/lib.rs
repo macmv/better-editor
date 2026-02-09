@@ -431,8 +431,12 @@ impl State {
   fn layout_tabs(&mut self, layout: &mut Layout) {
     let mut row = vec![];
 
-    for tab in self.tabs.iter() {
+    for (i, tab) in self.tabs.iter().enumerate() {
       let button = layout.add_widget(|| crate::widget::Button::new(&tab.title));
+
+      if button.pressed() {
+        self.active = i;
+      }
 
       row.push(button.id);
     }

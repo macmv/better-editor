@@ -1,4 +1,8 @@
-use std::{any::Any, collections::HashSet};
+use std::{
+  any::Any,
+  collections::HashSet,
+  ops::{Deref, DerefMut},
+};
 
 use kurbo::{Axis, Point, Rect, Size, Vec2};
 
@@ -193,4 +197,14 @@ impl Drop for Layout<'_> {
       }
     });
   }
+}
+
+impl<W: Widget> Deref for WidgetMut<'_, W> {
+  type Target = W;
+
+  fn deref(&self) -> &Self::Target { self.widget }
+}
+
+impl<W: Widget> DerefMut for WidgetMut<'_, W> {
+  fn deref_mut(&mut self) -> &mut Self::Target { self.widget }
 }
