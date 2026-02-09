@@ -244,6 +244,10 @@ impl State {
 
       while let Some((id, outer_bounds)) = stack.pop() {
         let widget = store.widgets.widgets.get(&id).unwrap();
+        if !widget.visible {
+          continue;
+        }
+
         let bounds = widget.bounds + outer_bounds.origin().to_vec2();
         if bounds.contains(pos) {
           path.push(id);
@@ -280,6 +284,10 @@ impl State {
 
       while let Some((id, outer_bounds)) = stack.pop() {
         let widget = render.store.widgets.widgets.get_mut(&id).unwrap();
+        if !widget.visible {
+          continue;
+        }
+
         let bounds = widget.bounds + outer_bounds.origin().to_vec2();
         render.clipped(bounds, |render| {
           let mut widget = render.store.widgets.widgets.remove(&id).unwrap();

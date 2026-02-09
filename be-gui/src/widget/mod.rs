@@ -15,6 +15,8 @@ pub struct WidgetStore {
   /// Bounds of this widget, relative to the parent.
   pub bounds:  Rect,
   pub path:    WidgetPath,
+
+  pub visible: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -70,8 +72,11 @@ impl Widget for Box<dyn Widget> {
 
 impl WidgetStore {
   pub fn new(path: WidgetPath, content: impl Widget + 'static) -> Self {
-    WidgetStore { content: Box::new(content), bounds: Rect::ZERO, path }
+    WidgetStore { content: Box::new(content), bounds: Rect::ZERO, path, visible: true }
   }
+
+  pub fn hide(&mut self) { self.visible = false }
+  pub fn show(&mut self) { self.visible = true }
 
   pub fn children(&self) -> &[WidgetId] { self.content.children() }
 
