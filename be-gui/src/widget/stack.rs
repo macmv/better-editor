@@ -44,7 +44,7 @@ impl Widget for Stack {
     self.sizes.clear();
     let mut size = Size::new(0.0, 0.0);
     for child in self.children.iter() {
-      let child_size = layout.layout(*child);
+      let child_size = layout.layout_widget(*child);
       match self.axis {
         Axis::Horizontal => {
           self.sizes.push(Rect::from_origin_size((size.width, 0.0), child_size));

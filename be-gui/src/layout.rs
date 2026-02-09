@@ -80,7 +80,7 @@ impl<'a> Layout<'a> {
     WidgetMut { id, widget: (&mut *widget.content as &mut dyn Any).downcast_mut().unwrap() }
   }
 
-  pub fn layout(&mut self, root: WidgetId) -> Size {
+  pub fn layout_widget(&mut self, root: WidgetId) -> Size {
     let mut widget = self.store.widgets.remove(root).unwrap();
     let size = widget.layout(self);
     self.store.widgets.insert(root, widget);

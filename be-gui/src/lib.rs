@@ -365,7 +365,6 @@ impl State {
       })
       .id;
 
-    layout.layout(root);
     layout.store.widgets.root = Some(root);
   }
 

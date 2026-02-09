@@ -184,6 +184,9 @@ impl App {
     {
       puffin::profile_scope!("layout");
       self.state.layout(&mut layout);
+      if let Some(root) = layout.store.widgets.root {
+        layout.layout_widget(root);
+      }
       drop(layout);
     }
 
