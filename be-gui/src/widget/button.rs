@@ -43,19 +43,16 @@ impl Widget for Button {
   }
 
   fn draw(&mut self, render: &mut crate::Render) {
-    if self.hover {
-      render.fill(
-        &Rect::from_origin_size(Point::ZERO, render.size()),
-        render.theme().background_raised_outline,
-      );
-    }
-
     if let Some(layout) = &mut self.layout {
-      super::Border {
+      let border = super::border::Border {
         borders: super::Borders::all(BORDER_WIDTH),
         radius:  super::Corners::all(BORDER_RADIUS),
+      };
+
+      border.draw_border(render);
+      if self.hover {
+        border.draw_inside(render, render.theme().background_raised_outline);
       }
-      .draw(render);
 
       render.draw_text(layout, Point::new(BORDER_WIDTH + HORIZONTAL_PADDING, BORDER_WIDTH));
     }

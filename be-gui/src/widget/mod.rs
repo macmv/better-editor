@@ -5,9 +5,7 @@ mod button;
 mod padding;
 mod stack;
 
-pub use border::Border;
 pub use button::Button;
-pub use padding::Padding;
 pub use stack::{Align, Justify, Stack};
 
 use crate::{Layout, MouseEvent, Render, WidgetId, WidgetPath};
