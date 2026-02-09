@@ -432,13 +432,7 @@ impl State {
     let mut row = vec![];
 
     for tab in self.tabs.iter() {
-      row.push(
-        layout
-          .add_widget(|| crate::widget::Button::new(&tab.title))
-          .padding_left_right(5.0)
-          .border_radius(1.0, 5.0)
-          .build(),
-      );
+      row.push(layout.add_widget(|| crate::widget::Button::new(&tab.title)).build());
     }
 
     let root = layout

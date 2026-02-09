@@ -1,49 +1,18 @@
-use kurbo::{Arc, BezPath, Point, Rect, RoundedRect, RoundedRectRadii, Size, Stroke, Vec2};
+use kurbo::{Arc, BezPath, Point, Rect, RoundedRect, RoundedRectRadii, Stroke, Vec2};
 
-use crate::{
-  Widget, WidgetId,
-  widget::{Borders, Corners},
-};
+use crate::widget::{Borders, Corners};
 
 pub struct Border {
-  borders: Borders,
-  radius:  Corners,
-
-  inner: WidgetId,
+  pub borders: Borders,
+  pub radius:  Corners,
 }
 
 impl Border {
-  pub fn new(borders: Borders, inner: WidgetId) -> Self {
-    Border::new_with_radius(borders, Corners::all(0.0), inner)
-  }
+  pub fn new(borders: Borders) -> Self { Border::new_with_radius(borders, Corners::all(0.0)) }
 
-  pub fn new_with_radius(borders: Borders, radius: Corners, inner: WidgetId) -> Self {
-    Border { borders, radius, inner }
-  }
-}
+  pub fn new_with_radius(borders: Borders, radius: Corners) -> Self { Border { borders, radius } }
 
-impl Widget for Border {
-  fn layout(&mut self, layout: &mut crate::Layout) -> Option<kurbo::Size> {
-    let size = layout.layout(self.inner);
-    layout.set_bounds(
-      self.inner,
-      Rect::new(
-        self.borders.left,
-        self.borders.top,
-        self.borders.left + size.width,
-        self.borders.top + size.height,
-      ),
-    );
-
-    Some(Size::new(
-      self.borders.left + size.width + self.borders.right,
-      self.borders.top + size.height + self.borders.bottom,
-    ))
-  }
-
-  fn children(&self) -> &[crate::WidgetId] { std::slice::from_ref(&self.inner) }
-
-  fn draw(&mut self, render: &mut crate::Render) {
+  pub fn draw(&mut self, render: &mut crate::Render) {
     if self.radius == Corners::all(0.0) {
       if self.borders.left > 0.0 {
         render

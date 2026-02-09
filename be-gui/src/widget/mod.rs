@@ -117,16 +117,6 @@ impl From<f64> for Corners {
 }
 
 impl<'a, 'b, W: Widget> WidgetBuilder<'a, 'b, W> {
-  op!(border(b: impl Into<Borders>) -> Border::new(b.into()));
-  op!(border_left(left: f64) -> Border::new(Borders::left(left)));
-  op!(border_top(top: f64) -> Border::new(Borders::top(top)));
-  op!(border_right(right: f64) -> Border::new(Borders::right(right)));
-  op!(border_bottom(bottom: f64) -> Border::new(Borders::bottom(bottom)));
-  op!(border_left_right(b: f64) -> Border::new(Borders::left_right(b)));
-  op!(border_top_bottom(b: f64) -> Border::new(Borders::top_bottom(b)));
-
-  op!(border_radius(b: impl Into<Borders>, radius: impl Into<Corners>) -> Border::new_with_radius(b.into(), radius.into()));
-
   op!(padding(p: impl Into<Borders>) -> Padding::new(p.into()));
   op!(padding_left(left: f64) -> Padding::new(Borders::left(left)));
   op!(padding_top(top: f64) -> Padding::new(Borders::top(top)));
