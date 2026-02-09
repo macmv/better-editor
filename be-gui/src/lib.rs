@@ -43,12 +43,6 @@ struct ViewCollection {
   views:        HashMap<ViewId, View>,
 }
 
-pub struct WidgetCollection {
-  next_widget_id: WidgetId,
-  paths:          HashMap<WidgetPath, WidgetId>,
-  widgets:        HashMap<WidgetId, WidgetStore>,
-}
-
 struct Tab {
   title:   String,
   content: Pane,
@@ -569,25 +563,5 @@ impl ViewCollection {
 
   pub fn visible_mut(&mut self) -> impl Iterator<Item = &mut View> {
     self.views.values_mut().filter(|v| v.visible())
-  }
-}
-
-impl WidgetCollection {
-  pub fn new() -> Self {
-    WidgetCollection {
-      next_widget_id: WidgetId(0),
-      paths:          HashMap::new(),
-      widgets:        HashMap::new(),
-    }
-  }
-
-  pub fn get_path(&self, path: &WidgetPath) -> Option<WidgetId> { self.paths.get(path).copied() }
-
-  pub fn create(&mut self, store: WidgetStore) -> WidgetId {
-    let id = self.next_widget_id;
-    self.next_widget_id.0 += 1;
-    self.paths.insert(store.path.clone(), id);
-    self.widgets.insert(id, store);
-    id
   }
 }

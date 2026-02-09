@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use kurbo::{Rect, Size};
 
 mod border;
@@ -17,6 +19,12 @@ pub struct WidgetStore {
   pub path:    WidgetPath,
 
   pub visible: bool,
+}
+
+pub struct WidgetCollection {
+  next_widget_id:     WidgetId,
+  pub(crate) paths:   HashMap<WidgetPath, WidgetId>,
+  pub(crate) widgets: HashMap<WidgetId, WidgetStore>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -130,3 +138,31 @@ impl<'a, 'b, W: Widget> WidgetBuilder<'a, 'b, W> {
   op!(padding_top_bottom(p: f64) -> Padding::new(Borders::top_bottom(p)));
 }
 */
+
+impl WidgetCollection {
+  pub fn new() -> Self {
+    WidgetCollection {
+      next_widget_id: WidgetId(0),
+      paths:          HashMap::new(),
+      widgets:        HashMap::new(),
+    }
+  }
+
+  pub fn get(&self, id: WidgetId) -> Option<&WidgetStore> { self.widgets.get(&id) }
+  pub fn get_mut(&mut self, id: WidgetId) -> Option<&mut WidgetStore> { self.widgets.get_mut(&id) }
+
+  pub(crate) fn remove(&mut self, id: WidgetId) -> Option<WidgetStore> { self.widgets.remove(&id) }
+  pub(crate) fn insert(&mut self, id: WidgetId, store: WidgetStore) {
+    self.widgets.insert(id, store);
+  }
+
+  pub fn get_path(&self, path: &WidgetPath) -> Option<WidgetId> { self.paths.get(path).copied() }
+
+  pub fn create(&mut self, store: WidgetStore) -> WidgetId {
+    let id = self.next_widget_id;
+    self.next_widget_id.0 += 1;
+    self.paths.insert(store.path.clone(), id);
+    self.widgets.insert(id, store);
+    id
+  }
+}

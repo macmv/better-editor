@@ -74,21 +74,21 @@ impl<'a> Layout<'a> {
       self.store.widgets.create(WidgetStore::new(path, widget()))
     };
     if !self.seen.insert(id) {
-      eprintln!("duplicate widget at path {:?}", self.store.widgets.widgets[&id].path);
+      eprintln!("duplicate widget at path {:?}", self.store.widgets.get(id).unwrap().path);
     }
-    let widget = self.store.widgets.widgets.get_mut(&id).unwrap();
+    let widget = self.store.widgets.get_mut(id).unwrap();
     WidgetMut { id, widget: (&mut *widget.content as &mut dyn Any).downcast_mut().unwrap() }
   }
 
   pub fn layout(&mut self, root: WidgetId) -> Size {
-    let mut widget = self.store.widgets.widgets.remove(&root).unwrap();
+    let mut widget = self.store.widgets.remove(root).unwrap();
     let size = widget.layout(self);
-    self.store.widgets.widgets.insert(root, widget);
+    self.store.widgets.insert(root, widget);
     size
   }
 
   pub fn set_bounds(&mut self, child: WidgetId, bounds: Rect) {
-    self.store.widgets.widgets.get_mut(&child).unwrap().bounds = bounds;
+    self.store.widgets.get_mut(child).unwrap().bounds = bounds;
   }
 
   fn next_path(&mut self) -> WidgetPath {

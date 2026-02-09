@@ -8,7 +8,7 @@ use peniko::{
   color::{AlphaColor, Oklab, Oklch, Srgb},
 };
 
-use crate::{Layout, WidgetCollection, render::text::TextStore, theme::Theme};
+use crate::{Layout, render::text::TextStore, theme::Theme, widget::WidgetCollection};
 
 mod blitter;
 mod cursor;
