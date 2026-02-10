@@ -144,6 +144,17 @@ impl State {
   }
 
   fn layout(&mut self, layout: &mut Layout) {
+    let tabs = self.layout_tabs(layout);
+    let main = layout.add_widget(|| crate::widget::Button::new("X")).id;
+
+    let root = layout
+      .add_widget(|| {
+        crate::widget::Split::new(Axis::Horizontal, Distance::Pixels(-25.0), main, tabs)
+      })
+      .id;
+
+    layout.store.widgets.root = Some(root);
+
     layout.split(
       self,
       Axis::Horizontal,
@@ -163,18 +174,7 @@ impl State {
           tab.content.layout(&mut state.views.views, layout);
         }
       },
-      |state, layout| {
-        let main = layout.add_widget(|| crate::widget::Button::new("X")).id;
-        let tabs = state.layout_tabs(layout);
-
-        let root = layout
-          .add_widget(|| {
-            crate::widget::Split::new(Axis::Horizontal, Distance::Pixels(-25.0), main, tabs)
-          })
-          .id;
-
-        layout.store.widgets.root = Some(root);
-      },
+      |_, _| {},
     );
   }
 
