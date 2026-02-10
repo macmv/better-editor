@@ -181,7 +181,9 @@ impl WidgetCollection {
         self.hover_path(new_path);
 
         for w in self.hover_path.iter().rev() {
-          self.widgets.get_mut(w).unwrap().content.on_mouse(&ev);
+          if let Some(w) = self.widgets.get_mut(w) {
+            w.content.on_mouse(&ev);
+          }
         }
 
         CursorKind::Default
@@ -211,7 +213,9 @@ impl WidgetCollection {
         .unwrap_or(path.len().min(self.hover_path.len()));
 
       for w in self.hover_path[diverge_idx..].iter().rev() {
-        self.widgets.get_mut(w).unwrap().content.on_mouse(&MouseEvent::Leave);
+        if let Some(w) = self.widgets.get_mut(w) {
+          w.content.on_mouse(&MouseEvent::Leave);
+        }
       }
       for w in path[diverge_idx..].iter().rev() {
         self.widgets.get_mut(w).unwrap().content.on_mouse(&MouseEvent::Enter);
