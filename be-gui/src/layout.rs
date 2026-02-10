@@ -67,8 +67,24 @@ impl<'a> Layout<'a> {
     widget: impl FnOnce() -> W,
   ) -> WidgetMut<'b, W> {
     let path = self.next_path();
+    self.add_widget_with_path(path, widget)
+  }
 
-    let id = if let Some(id) = self.store.widgets.get_path(&path) {
+  pub fn add_widget_with_key<'b, W: Widget + 'static>(
+    &'b mut self,
+    widget: impl FnOnce() -> W,
+    key: u32,
+  ) -> WidgetMut<'b, W> {
+    let path = self.next_path_with_key(key);
+    self.add_widget_with_path(path, widget)
+  }
+
+  fn add_widget_with_path<'b, W: Widget + 'static>(
+    &'b mut self,
+    path: WidgetPath,
+    widget: impl FnOnce() -> W,
+  ) -> WidgetMut<'b, W> {
+    let id = if let Some(id) = self.clean_widget_at(&path) {
       id
     } else {
       self.store.widgets.create(WidgetStore::new(path, widget()))
@@ -78,6 +94,20 @@ impl<'a> Layout<'a> {
     }
     let widget = self.store.widgets.get_mut(id).unwrap();
     WidgetMut { id, widget: (&mut *widget.content as &mut dyn Any).downcast_mut().unwrap() }
+  }
+
+  fn clean_widget_at(&self, path: &WidgetPath) -> Option<WidgetId> {
+    if let Some(id) = self.store.widgets.get_path(&path) {
+      for child in self.store.widgets.get(id).unwrap().children() {
+        if !self.seen.contains(child) {
+          return None;
+        }
+      }
+
+      Some(id)
+    } else {
+      None
+    }
   }
 
   pub fn layout_widget(&mut self, root: WidgetId) -> Size {
@@ -94,6 +124,14 @@ impl<'a> Layout<'a> {
   fn next_path(&mut self) -> WidgetPath {
     let mut path = self.path.clone();
     path.0.push(self.next_id);
+    self.next_id += 1;
+    path
+  }
+
+  fn next_path_with_key(&mut self, key: u32) -> WidgetPath {
+    let mut path = self.path.clone();
+    path.0.push(self.next_id);
+    path.0.push(key);
     self.next_id += 1;
     path
   }

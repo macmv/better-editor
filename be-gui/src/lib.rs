@@ -145,7 +145,12 @@ impl State {
 
   fn layout(&mut self, layout: &mut Layout) {
     let tabs = self.layout_tabs(layout);
-    let main = layout.add_widget(|| crate::widget::Button::new("X")).id;
+    let main = layout
+      .add_widget_with_key(
+        || crate::widget::Button::new(&self.active.to_string()),
+        self.active as u32,
+      )
+      .id;
 
     let root = layout
       .add_widget(|| {
