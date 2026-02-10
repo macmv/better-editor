@@ -164,7 +164,16 @@ impl State {
         }
       },
       |state, layout| {
-        state.layout_tabs(layout);
+        let main = layout.add_widget(|| crate::widget::Button::new("X")).id;
+        let tabs = state.layout_tabs(layout);
+
+        let root = layout
+          .add_widget(|| {
+            crate::widget::Split::new(Axis::Horizontal, Distance::Pixels(-25.0), main, tabs)
+          })
+          .id;
+
+        layout.store.widgets.root = Some(root);
       },
     );
   }
@@ -346,7 +355,7 @@ impl State {
     }
   }
 
-  fn layout_tabs(&mut self, layout: &mut Layout) {
+  fn layout_tabs(&mut self, layout: &mut Layout) -> WidgetId {
     let mut row = vec![];
 
     for (i, tab) in self.tabs.iter().enumerate() {
@@ -359,13 +368,11 @@ impl State {
       row.push(button.id);
     }
 
-    let root = layout
+    layout
       .add_widget(|| {
         crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, row).gap(5.0)
       })
-      .id;
-
-    layout.store.widgets.root = Some(root);
+      .id
   }
 
   fn draw_tabs(&self, render: &mut Render) {

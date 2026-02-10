@@ -239,6 +239,7 @@ impl App {
   }
 }
 
+#[derive(Clone, Copy)]
 pub enum Distance {
   Pixels(f64),
   Percent(f64),

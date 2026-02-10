@@ -5,9 +5,11 @@ use kurbo::{Point, Rect, Size};
 mod border;
 mod button;
 mod padding;
+mod split;
 mod stack;
 
 pub use button::Button;
+pub use split::Split;
 pub use stack::{Align, Justify, Stack};
 
 use crate::{CursorKind, Layout, MouseEvent, Render, RenderStore, WidgetId, WidgetPath};
