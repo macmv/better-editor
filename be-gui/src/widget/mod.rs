@@ -98,6 +98,7 @@ impl WidgetStore {
   }
 }
 
+#[allow(unused)]
 impl Borders {
   pub const fn all(b: f64) -> Self { Borders { left: b, top: b, right: b, bottom: b } }
 
