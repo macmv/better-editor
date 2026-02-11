@@ -330,7 +330,7 @@ impl State {
           self.views.get_mut(view).unwrap().on_visible(true);
         }
 
-        self.views.get_mut(self.tabs[prev_active].content.active()).unwrap().on_focus(true);
+        self.views.get_mut(self.tabs[new_active].content.active()).unwrap().on_focus(true);
       }
       Action::Navigate { nav: Navigation::Direction(dir) } => {
         let prev_focus = self.active_tab().content.active();
