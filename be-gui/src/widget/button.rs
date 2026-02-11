@@ -1,4 +1,4 @@
-use kurbo::{Point, Rect, Vec2};
+use kurbo::{Point, Vec2};
 
 use crate::{TextLayout, Widget};
 

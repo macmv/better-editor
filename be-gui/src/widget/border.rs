@@ -11,10 +11,6 @@ pub struct Border {
 }
 
 impl Border {
-  pub fn new(borders: Borders) -> Self { Border::new_with_radius(borders, Corners::all(0.0)) }
-
-  pub fn new_with_radius(borders: Borders, radius: Corners) -> Self { Border { borders, radius } }
-
   pub fn draw_border(&self, render: &mut crate::Render) {
     if self.radius == Corners::all(0.0) {
       if self.borders.left > 0.0 {
