@@ -2,12 +2,14 @@ use kurbo::{Rect, Size};
 
 use crate::{Widget, WidgetId, widget::Borders};
 
+#[allow(unused)]
 pub struct Padding {
   borders: Borders,
 
   inner: WidgetId,
 }
 
+#[allow(unused)]
 impl Padding {
   pub fn new(borders: Borders, inner: WidgetId) -> Self { Padding { borders, inner } }
 }
