@@ -12,7 +12,7 @@ pub use button::Button;
 pub use split::Split;
 pub use stack::{Align, Justify, Stack};
 
-use crate::{CursorKind, Layout, MouseEvent, Render, RenderStore, WidgetId, WidgetPath};
+use crate::{CursorKind, Layout, MouseEvent, Render, WidgetId, WidgetPath};
 
 pub struct WidgetStore {
   pub content: Box<dyn Widget>,
@@ -46,14 +46,6 @@ pub struct Corners {
   pub top_right:    f64,
   pub bottom_left:  f64,
   pub bottom_right: f64,
-}
-
-macro_rules! op {
-  ($name:ident($($arg_name:ident: $arg_ty:ty),*) -> $ty:ident::$new:ident($($arg_expr:expr),*)) => {
-    pub fn $name(self, $($arg_name: $arg_ty),*) -> WidgetBuilder<'a, 'b, $ty> {
-      self.wrap(|id| crate::widget::$ty::$new($($arg_expr),*, id))
-    }
-  }
 }
 
 pub trait Widget: std::any::Any {
@@ -131,18 +123,6 @@ impl Corners {
 impl From<f64> for Corners {
   fn from(c: f64) -> Self { Corners::all(c) }
 }
-
-/*
-impl<'a, 'b, W: Widget> WidgetBuilder<'a, 'b, W> {
-  op!(padding(p: impl Into<Borders>) -> Padding::new(p.into()));
-  op!(padding_left(left: f64) -> Padding::new(Borders::left(left)));
-  op!(padding_top(top: f64) -> Padding::new(Borders::top(top)));
-  op!(padding_right(right: f64) -> Padding::new(Borders::right(right)));
-  op!(padding_bottom(bottom: f64) -> Padding::new(Borders::bottom(bottom)));
-  op!(padding_left_right(p: f64) -> Padding::new(Borders::left_right(p)));
-  op!(padding_top_bottom(p: f64) -> Padding::new(Borders::top_bottom(p)));
-}
-*/
 
 impl WidgetCollection {
   pub fn new() -> Self {
