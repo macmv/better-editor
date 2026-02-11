@@ -6,7 +6,7 @@ use std::{
 use be_input::{Action, Direction, Mode, Move};
 use kurbo::{Point, Rect, Vec2};
 
-use crate::{Notify, Render, icon};
+use crate::{Notify, Render, Widget, icon};
 
 pub struct FileTree {
   tree:    Directory,
@@ -241,8 +241,8 @@ impl Item {
   }
 }
 
-impl FileTree {
-  pub fn draw(&self, render: &mut Render) {
+impl Widget for FileTree {
+  fn draw(&mut self, render: &mut Render) {
     puffin::profile_function!();
 
     render.fill(

@@ -5,7 +5,7 @@ use kurbo::{Point, Rect, RoundedRect, Stroke};
 use nucleo::{Injector, Nucleo};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{Notify, Render};
+use crate::{Notify, Render, Widget};
 
 pub struct Search {
   index:  Index,
@@ -30,10 +30,16 @@ impl Search {
     search.change_pattern(false);
     search
   }
+}
 
-  pub fn layout(&mut self) { self.index.nucleo.tick(1); }
+impl Widget for Search {
+  fn layout(&mut self, _layout: &mut crate::Layout) -> Option<kurbo::Size> {
+    self.index.nucleo.tick(1);
 
-  pub fn draw(&mut self, render: &mut Render) {
+    None
+  }
+
+  fn draw(&mut self, render: &mut Render) {
     let snap = self.index.nucleo.snapshot();
 
     let bounds = Rect::from_origin_size(Point::ZERO, render.size());
@@ -96,7 +102,9 @@ impl Search {
     let cursor = layout.cursor(self.cursor as usize, crate::CursorMode::Line);
     render.fill(&(cursor + text_pos.to_vec2()), render.theme().text);
   }
+}
 
+impl Search {
   fn change_pattern(&mut self, append: bool) {
     self.index.nucleo.pattern.reparse(
       0,
