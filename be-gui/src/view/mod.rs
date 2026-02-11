@@ -1,7 +1,7 @@
 use be_input::{Action, Mode};
 use kurbo::{Rect, Size};
 
-use crate::{Layout, Render};
+use crate::{Layout, Render, Widget};
 
 mod command;
 mod editor;
