@@ -96,6 +96,13 @@ impl WidgetStore {
     }
     self.bounds.size()
   }
+
+  pub fn cast<W: Widget>(&self) -> Option<&W> {
+    (&*self.content as &dyn std::any::Any).downcast_ref()
+  }
+  pub fn cast_mut<W: Widget>(&mut self) -> Option<&mut W> {
+    (&mut *self.content as &mut dyn std::any::Any).downcast_mut()
+  }
 }
 
 #[allow(unused)]
