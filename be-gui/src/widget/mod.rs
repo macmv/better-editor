@@ -9,7 +9,7 @@ mod split;
 mod stack;
 
 pub use button::Button;
-pub use split::Split;
+pub use split::{ManySplit, Split};
 pub use stack::{Align, Justify, Stack};
 
 use crate::{CursorKind, Layout, MouseEvent, Render, WidgetId, WidgetPath};
