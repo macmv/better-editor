@@ -113,16 +113,6 @@ pub trait Widget: std::any::Any {
   }
 }
 
-impl Widget for Box<dyn Widget> {
-  fn layout(&mut self, layout: &mut Layout) -> Option<Size> { (**self).layout(layout) }
-  fn children(&self) -> &[WidgetId] { (**self).children() }
-  fn draw(&mut self, render: &mut Render) { (**self).draw(render) }
-  fn on_mouse(&mut self, mouse: &MouseEvent) { (**self).on_mouse(mouse); }
-  fn on_visible(&mut self, visible: bool) { (**self).on_visible(visible); }
-  fn on_focus(&mut self, focus: bool) { (**self).on_focus(focus); }
-  fn type_name(&self) -> &'static str { (**self).type_name() }
-}
-
 impl WidgetStore {
   pub fn new(path: WidgetPath, content: impl Widget + 'static) -> Self {
     WidgetStore { content: Box::new(content), bounds: Rect::ZERO, path, visible: true }
