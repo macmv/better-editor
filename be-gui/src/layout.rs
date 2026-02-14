@@ -25,6 +25,8 @@ pub struct Layout<'a> {
 
   pub active:   Option<ViewId>,
   pub to_close: Vec<ViewId>,
+
+  remove_unseen: bool,
 }
 
 pub struct WidgetMut<'a, W: Widget> {
@@ -44,6 +46,7 @@ impl<'a> Layout<'a> {
       seen: HashSet::new(),
       active: None,
       to_close: vec![],
+      remove_unseen: true,
     }
   }
 
@@ -228,18 +231,22 @@ impl<'a> Layout<'a> {
     let (built, backgrounds) = builder.build(text);
     self.build_layout(built, backgrounds)
   }
+
+  pub fn drop_ignore_unseen(mut self) { self.remove_unseen = false; }
 }
 
 impl Drop for Layout<'_> {
   fn drop(&mut self) {
-    self.store.widgets.widgets.retain(|id, widget| {
-      if !self.seen.contains(id) {
-        self.store.widgets.paths.remove(&widget.path);
-        false
-      } else {
-        true
-      }
-    });
+    if self.remove_unseen {
+      self.store.widgets.widgets.retain(|id, widget| {
+        if !self.seen.contains(id) {
+          self.store.widgets.paths.remove(&widget.path);
+          false
+        } else {
+          true
+        }
+      });
+    }
   }
 }
 
