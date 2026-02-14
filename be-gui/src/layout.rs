@@ -84,7 +84,7 @@ impl<'a> Layout<'a> {
     path: WidgetPath,
     widget: impl FnOnce() -> W,
   ) -> WidgetMut<'b, W> {
-    let id = if let Some(id) = self.clean_widget_at(&path) {
+    let id = if let Some(id) = self.clean_widget_at::<W>(&path) {
       id
     } else {
       self.store.widgets.create(WidgetStore::new(path, widget()))
@@ -96,8 +96,14 @@ impl<'a> Layout<'a> {
     WidgetMut { id, widget: (&mut *widget.content as &mut dyn Any).downcast_mut().unwrap() }
   }
 
-  fn clean_widget_at(&self, path: &WidgetPath) -> Option<WidgetId> {
+  fn clean_widget_at<W: Widget + 'static>(&self, path: &WidgetPath) -> Option<WidgetId> {
     if let Some(id) = self.store.widgets.get_path(&path) {
+      if (&*self.store.widgets.get(id).unwrap().content as &dyn Any).type_id()
+        != std::any::TypeId::of::<W>()
+      {
+        return None;
+      }
+
       for child in self.store.widgets.get(id).unwrap().children() {
         if !self.seen.contains(child) {
           return None;
