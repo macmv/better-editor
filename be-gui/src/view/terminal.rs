@@ -36,8 +36,6 @@ impl TerminalView {
     }
   }
 
-  pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
-
   pub fn perform_action(&mut self, action: Action) {
     match action {
       Action::Move { count: _, m: Move::Single(Direction::Up) } => self.terminal.perform_up(),
@@ -144,6 +142,8 @@ impl Widget for TerminalView {
       }
     }
   }
+
+  fn on_focus(&mut self, focus: bool) { self.focused = focus; }
 }
 
 impl TerminalView {

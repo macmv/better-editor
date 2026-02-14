@@ -59,6 +59,10 @@ pub trait Widget: std::any::Any {
   fn draw(&mut self, render: &mut Render) { let _ = render; }
 
   fn on_mouse(&mut self, mouse: &MouseEvent) { let _ = mouse; }
+  /// Called when the widget becomes visible or invisible.
+  fn on_visible(&mut self, visible: bool) { let _ = visible; }
+  /// Called when the widget gains or loses keyboard focus.
+  fn on_focus(&mut self, focus: bool) { let _ = focus; }
 
   fn apply_if<U: Widget + 'static>(self, cond: bool, f: impl FnOnce(Self) -> U) -> Box<dyn Widget>
   where
@@ -73,6 +77,8 @@ impl Widget for Box<dyn Widget> {
   fn children(&self) -> &[WidgetId] { (**self).children() }
   fn draw(&mut self, render: &mut Render) { (**self).draw(render) }
   fn on_mouse(&mut self, mouse: &MouseEvent) { (**self).on_mouse(mouse); }
+  fn on_visible(&mut self, visible: bool) { (**self).on_visible(visible); }
+  fn on_focus(&mut self, focus: bool) { (**self).on_focus(focus); }
 }
 
 impl WidgetStore {

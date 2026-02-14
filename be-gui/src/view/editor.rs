@@ -44,8 +44,6 @@ impl EditorView {
     view
   }
 
-  pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
-
   pub fn animated(&self) -> bool { self.progress_animation.is_running() }
 }
 
@@ -76,6 +74,8 @@ impl Widget for EditorView {
       |state, render| state.draw_status(render),
     );
   }
+
+  fn on_focus(&mut self, focus: bool) { self.focused = focus; }
 }
 
 impl EditorView {

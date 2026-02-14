@@ -67,8 +67,6 @@ impl Ord for Directory {
 impl FileTree {
   pub fn current_directory(notify: Notify) -> Self { FileTree::new(Path::new("."), notify) }
 
-  pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
-
   pub fn new(path: &Path, notify: Notify) -> Self {
     let path = path.canonicalize().unwrap();
     let mut tree = Directory::new(path);
@@ -259,6 +257,8 @@ impl Widget for FileTree {
     }
     .draw_item(ItemRef::Directory(&self.tree), render);
   }
+
+  fn on_focus(&mut self, focus: bool) { self.focused = focus; }
 }
 
 struct TreeDraw {
