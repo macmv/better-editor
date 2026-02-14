@@ -50,11 +50,12 @@ impl fmt::Debug for WidgetCollection {
             Some(store) => {
               writeln!(
                 f,
-                "{}- {:?} path: {:?} type: {}",
+                "{}- {:?} path: {:?} type: {} bounds: {:?}",
                 indent,
                 id,
                 store.path,
-                store.content.type_name()
+                store.content.type_name(),
+                store.bounds
               )?;
               for &child in store.children().iter().rev() {
                 stack.push((child, depth + 1));
