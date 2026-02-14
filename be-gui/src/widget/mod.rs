@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use kurbo::{Point, Rect, Size};
 
@@ -30,6 +30,45 @@ pub struct WidgetCollection {
 
   pub(crate) root: Option<WidgetId>,
   hover_path:      Vec<WidgetId>,
+}
+
+impl fmt::Debug for WidgetCollection {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    writeln!(f, "WidgetCollection {{")?;
+    match self.root {
+      None => {
+        writeln!(f, "  root: None")?;
+      }
+      Some(root) => {
+        writeln!(f, "  root: {:?}", root)?;
+        writeln!(f, "  tree:")?;
+
+        let mut stack = vec![(root, 2usize)];
+        while let Some((id, depth)) = stack.pop() {
+          let indent = "  ".repeat(depth);
+          match self.widgets.get(&id) {
+            Some(store) => {
+              writeln!(
+                f,
+                "{}- {:?} path: {:?} type: {}",
+                indent,
+                id,
+                store.path,
+                store.content.type_name()
+              )?;
+              for &child in store.children().iter().rev() {
+                stack.push((child, depth + 1));
+              }
+            }
+            None => {
+              writeln!(f, "{}- {:?} path: <missing>", indent, id)?;
+            }
+          }
+        }
+      }
+    }
+    writeln!(f, "}}")
+  }
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -64,6 +103,8 @@ pub trait Widget: std::any::Any {
   /// Called when the widget gains or loses keyboard focus.
   fn on_focus(&mut self, focus: bool) { let _ = focus; }
 
+  fn type_name(&self) -> &'static str { std::any::type_name::<Self>() }
+
   fn apply_if<U: Widget + 'static>(self, cond: bool, f: impl FnOnce(Self) -> U) -> Box<dyn Widget>
   where
     Self: Sized + 'static,
@@ -79,6 +120,7 @@ impl Widget for Box<dyn Widget> {
   fn on_mouse(&mut self, mouse: &MouseEvent) { (**self).on_mouse(mouse); }
   fn on_visible(&mut self, visible: bool) { (**self).on_visible(visible); }
   fn on_focus(&mut self, focus: bool) { (**self).on_focus(focus); }
+  fn type_name(&self) -> &'static str { (**self).type_name() }
 }
 
 impl WidgetStore {
