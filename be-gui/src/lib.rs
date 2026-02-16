@@ -191,14 +191,6 @@ impl State {
   }
 
   fn on_mouse(&mut self, ev: MouseEvent, size: kurbo::Size, scale: f64) -> CursorKind {
-    macro_rules! send {
-      ($e:expr, $ev:expr) => {
-        if let Some(v) = self.collection($e) {
-          v.on_mouse($ev, size, scale);
-        }
-      };
-    }
-
     match ev {
       MouseEvent::Move { pos }
       | MouseEvent::Button { pos, .. }
@@ -206,11 +198,15 @@ impl State {
         let new_view = self.hit_view(pos, size);
         match (self.current_hover, new_view) {
           (Some(old), Some(new)) if old != new => {
-            send!(old, MouseEvent::Leave);
-            send!(new, MouseEvent::Enter);
+            self.send_mouse_event(old, MouseEvent::Leave, size, scale);
+            self.send_mouse_event(new, MouseEvent::Enter, size, scale);
           }
-          (Some(old), None) => send!(old, MouseEvent::Leave),
-          (None, Some(new)) => send!(new, MouseEvent::Enter),
+          (Some(old), None) => {
+            self.send_mouse_event(old, MouseEvent::Leave, size, scale);
+          }
+          (None, Some(new)) => {
+            self.send_mouse_event(new, MouseEvent::Enter, size, scale);
+          }
           _ => {}
         }
 
@@ -221,25 +217,29 @@ impl State {
 
       MouseEvent::Leave => {
         if let Some(old) = self.current_hover {
-          send!(old, MouseEvent::Leave);
+          self.send_mouse_event(old, MouseEvent::Leave, size, scale);
           self.current_hover = None;
         }
       }
     }
 
-    if let Some(current) = self.current_hover
-      && let Some(v) = self.collection(current)
-    {
-      v.on_mouse(ev, size, scale)
+    if let Some(current) = self.current_hover {
+      self.send_mouse_event(current, ev, size, scale).unwrap_or(CursorKind::Default)
     } else {
       CursorKind::Default
     }
   }
 
-  fn collection(&mut self, id: ViewId) -> Option<&mut WidgetCollection> {
+  fn send_mouse_event(
+    &mut self,
+    id: ViewId,
+    ev: MouseEvent,
+    size: kurbo::Size,
+    scale: f64,
+  ) -> Option<CursorKind> {
     match id {
-      ViewId::TABS => Some(&mut self.tab_layout),
-      _ => self.views.get_mut(id)?.collection(),
+      ViewId::TABS => Some(self.tab_layout.on_mouse(ev, size, scale)),
+      _ => self.views.get_mut(id)?.on_mouse(ev, size, scale),
     }
   }
 

@@ -110,7 +110,14 @@ impl View {
     }
   }
 
-  pub fn collection(&self) -> Option<&mut crate::widget::WidgetCollection> { None }
+  pub(crate) fn on_mouse(
+    &self,
+    ev: crate::MouseEvent,
+    size: Size,
+    scale: f64,
+  ) -> Option<crate::CursorKind> {
+    None
+  }
 }
 
 impl Popup {
