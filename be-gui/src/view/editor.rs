@@ -202,7 +202,10 @@ impl EditorView {
     let mut i = min_line.as_usize();
 
     let mut line_numbers = vec![];
-    let mut line_number_width = 0.0_f64;
+    // Layout the length line number by default. If `character_width` is wrong, then
+    // we'll still take the `max()` below.
+    let mut line_number_width = render.store.text.font_metrics().character_width
+      * ((self.editor.doc().len_lines() as f64).log10().floor() + 1.0);
 
     let start_y = -(self.scroll.y % line_height);
     while index < end {
