@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use crate::parse::ParseResult;
+
 trait Partial {
   type Partial;
   fn replace_with(&mut self, partial: Self::Partial);
@@ -143,7 +145,7 @@ config!(
 );
 
 impl Settings {
-  pub fn load() -> Settings {
+  pub fn load() -> ParseResult<Settings> {
     let mut config = crate::Config::default_ref().settings.clone();
 
     if let Ok(data) = std::fs::read_to_string(crate::config_root().unwrap().join("config.toml")) {
@@ -153,7 +155,7 @@ impl Settings {
       }
     }
 
-    config
+    ParseResult::ok(config)
   }
 
   pub(crate) fn parse_default() -> Settings { parse_default_config().unwrap() }

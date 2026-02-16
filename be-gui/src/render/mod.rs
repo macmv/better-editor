@@ -108,7 +108,11 @@ pub fn run() {
     });
     let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-    let config = Rc::new(RefCell::new(Config::load()));
+    let config = Config::load();
+    for diagnostic in &config.diagnostics {
+      println!("{diagnostic}");
+    }
+    let config = Rc::new(RefCell::new(config.value));
 
     let mut lsp_store = be_lsp::LanguageServerStore::default();
 

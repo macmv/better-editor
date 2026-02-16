@@ -1,10 +1,13 @@
 use std::{collections::HashMap, io, path::PathBuf, sync::LazyLock};
 
 mod lang;
+mod parse;
 mod settings;
 
 pub use lang::*;
 pub use settings::*;
+
+use crate::parse::ParseResult;
 
 #[derive(Clone)]
 pub struct Config {
@@ -39,7 +42,9 @@ impl Default for Config {
 impl Config {
   pub fn default_ref() -> &'static Config { &*DEFAULT_CONFIG }
 
-  pub fn load() -> Self { Config { settings: Settings::load(), languages: Language::builtin() } }
+  pub fn load() -> ParseResult<Self> {
+    Settings::load().map(|settings| Config { settings, languages: Language::builtin() })
+  }
 
   fn load_default() -> Config {
     Config { settings: Settings::parse_default(), languages: Language::builtin() }
