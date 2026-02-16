@@ -52,11 +52,30 @@ struct Tab {
 
 #[derive(Debug)]
 pub enum MouseEvent {
-  Move { pos: Point },
+  Move {
+    pos: Point,
+  },
   Enter,
   Leave,
-  Button { pos: Point, pressed: bool, button: MouseButton },
-  Scroll { pos: Point, axis: kurbo::Axis, delta: f64 },
+
+  /// A button press occurred at the given position.
+  ///
+  /// Note that the `pos` will always be the same as the previous `Move` event.
+  /// It is simply passed for convenience.
+  Button {
+    pos:     Point,
+    pressed: bool,
+    button:  MouseButton,
+  },
+  /// A scroll wheel event occurred at the given position.
+  ///
+  /// Note that the `pos` will always be the same as the previous `Move` event.
+  /// It is simply passed for convenience.
+  Scroll {
+    pos:   Point,
+    axis:  kurbo::Axis,
+    delta: f64,
+  },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -192,9 +211,7 @@ impl State {
 
   fn on_mouse(&mut self, ev: MouseEvent, size: kurbo::Size, scale: f64) -> CursorKind {
     match ev {
-      MouseEvent::Move { pos }
-      | MouseEvent::Button { pos, .. }
-      | MouseEvent::Scroll { pos, .. } => {
+      MouseEvent::Move { pos } => {
         let new_view = self.hit_view(pos, size);
         match (self.current_hover, new_view) {
           (Some(old), Some(new)) if old != new => {
@@ -213,14 +230,14 @@ impl State {
         self.current_hover = new_view;
       }
 
-      MouseEvent::Enter => {}
-
       MouseEvent::Leave => {
         if let Some(old) = self.current_hover {
           self.send_mouse_event(old, &MouseEvent::Leave, size, scale);
           self.current_hover = None;
         }
       }
+
+      _ => {}
     }
 
     if let Some(current) = self.current_hover {

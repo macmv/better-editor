@@ -243,10 +243,8 @@ impl WidgetCollection {
       MouseEvent::Leave => {
         self.hover_path(vec![]);
       }
-      MouseEvent::Button { pos, .. } | MouseEvent::Scroll { pos, .. } => {
-        let Some(path) = self.hit_widgets(pos, size) else { return CursorKind::Default };
-
-        for w in path.iter().rev() {
+      MouseEvent::Button { .. } | MouseEvent::Scroll { .. } => {
+        for w in self.hover_path.iter().rev() {
           let widget = self.widgets.get_mut(w).unwrap();
           if let Some(ev) = ev.within(&widget.bounds) {
             widget.content.on_mouse(&ev)
