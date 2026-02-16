@@ -184,7 +184,7 @@ impl Split {
 
           bounds.x1 = bounds.x0 + distance;
           if bounds.contains(pos) {
-            return item.hit_view(pos - bounds.origin().to_vec2(), size);
+            return item.hit_view(pos - bounds.origin().to_vec2(), bounds.size());
           }
           bounds.x0 += distance;
         }
@@ -199,7 +199,7 @@ impl Split {
 
           bounds.y1 = bounds.y0 + distance;
           if bounds.contains(pos) {
-            return item.hit_view(pos - bounds.origin().to_vec2(), size);
+            return item.hit_view(pos - bounds.origin().to_vec2(), bounds.size());
           }
           bounds.y0 += distance;
         }
