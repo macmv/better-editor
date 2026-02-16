@@ -263,7 +263,7 @@ impl State {
       _ => {
         let view = self.views.get_mut(id)?;
         if let Some(ev) = ev.within(&view.bounds) {
-          return view.on_mouse(&ev, store);
+          return view.on_mouse(&ev, view.bounds.size(), store);
         }
       }
     }

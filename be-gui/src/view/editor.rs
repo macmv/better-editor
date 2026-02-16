@@ -1,11 +1,14 @@
 use std::collections::HashMap;
 
 use be_animation::Animation;
+use be_doc::Cursor;
 use be_editor::{CommandMode, EditorState, IndentLevel};
 use be_input::Mode;
-use kurbo::{Arc, Circle, Line, Point, Rect, RoundedRect, Stroke, Triangle, Vec2};
+use kurbo::{Arc, Circle, Line, Point, Rect, RoundedRect, Size, Stroke, Triangle, Vec2};
 
-use crate::{CursorMode, Render, RenderStore, TextLayout, theme::Underline};
+use crate::{
+  CursorMode, MouseButton, MouseEvent, Render, RenderStore, TextLayout, theme::Underline,
+};
 
 pub struct EditorView {
   pub editor: EditorState,
@@ -75,7 +78,47 @@ impl EditorView {
 
   pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
 
-  pub fn on_mouse(&self, _ev: &crate::MouseEvent, _store: &RenderStore) -> crate::CursorKind {
+  pub fn on_mouse(
+    &mut self,
+    ev: &crate::MouseEvent,
+    size: Size,
+    store: &RenderStore,
+  ) -> crate::CursorKind {
+    let line_height = store.text.font_metrics().line_height;
+
+    match ev {
+      MouseEvent::Button { pos, pressed: true, button: MouseButton::Left } => {
+        if pos.y >= size.height - line_height {
+          // status bar
+        } else {
+          let line_region_y = self.scroll.y + pos.y;
+          let line = be_doc::Line(
+            ((line_region_y / line_height).floor() as usize)
+              .clamp(0, self.editor.doc().rope.lines().len().saturating_sub(1)),
+          );
+
+          let Some(layout) = self.cached_layouts.get(&line.0) else {
+            return crate::CursorKind::Default;
+          };
+
+          let Some(cursor_mode) = self.cursor_mode() else {
+            return crate::CursorKind::Default;
+          };
+
+          let column_byte = layout.index(pos.x - 28.0, cursor_mode);
+          let column = self.editor.doc().line(line).byte_slice(..column_byte).graphemes().count();
+
+          self.editor.move_to(Cursor {
+            line,
+            column: be_doc::Column(column),
+            target_column: be_doc::VisualColumn(0), // NB: Replaced in `move_to`.
+          });
+        }
+      }
+
+      _ => {}
+    }
+
     crate::CursorKind::Default
   }
 
@@ -195,15 +238,7 @@ impl EditorView {
 
     indent_guides.finish(render);
 
-    let mode = match self.editor.mode() {
-      Mode::Normal if self.temporary_underline => Some(CursorMode::Underline),
-      Mode::Normal | Mode::Visual(_) => Some(CursorMode::Block),
-      Mode::Insert => Some(CursorMode::Line),
-      Mode::Replace => Some(CursorMode::Underline),
-      Mode::Command => None,
-    };
-
-    if let Some(mode) = mode {
+    if let Some(mode) = self.cursor_mode() {
       let line = self.editor.cursor().line.as_usize();
       let layout = &self.cached_layouts[&line];
 
@@ -488,6 +523,16 @@ impl EditorView {
     let layout = render.build_layout(layout, backgrounds);
 
     Some(entry.insert(layout))
+  }
+
+  fn cursor_mode(&self) -> Option<CursorMode> {
+    match self.editor.mode() {
+      Mode::Normal if self.temporary_underline => Some(CursorMode::Underline),
+      Mode::Normal | Mode::Visual(_) => Some(CursorMode::Block),
+      Mode::Insert => Some(CursorMode::Line),
+      Mode::Replace => Some(CursorMode::Underline),
+      Mode::Command => None,
+    }
   }
 }
 

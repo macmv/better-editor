@@ -2,6 +2,7 @@ use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 use be_config::Config;
 use kurbo::{Affine, Line, Point, Rect, Size, Stroke, Vec2};
+use parley::{BreakReason, ClusterSide};
 use peniko::{
   Blob, Fill, ImageBrush, ImageData,
   color::{AlphaColor, Srgb},
@@ -566,6 +567,31 @@ impl TextLayout {
     };
 
     rect.scale_from_origin(1.0 / self.scale)
+  }
+
+  pub fn index(&self, x: f64, mode: CursorMode) -> usize {
+    if let Some((cluster, side)) =
+      parley::Cluster::from_point(&self.layout, (x * self.scale) as f32, 0.0)
+    {
+      if cluster.is_rtl() {
+        match side {
+          ClusterSide::Left => cluster.text_range().end,
+          ClusterSide::Right => cluster.text_range().start,
+        }
+      } else {
+        match side {
+          ClusterSide::Left => cluster.text_range().start,
+          // We never want to position the cursor _after_ a hard
+          // line since that cursor appears visually at the start
+          // of the next line
+          _ if cluster.is_line_break() == Some(BreakReason::Explicit) => cluster.text_range().start,
+          _ if !matches!(mode, CursorMode::Line) => cluster.text_range().start,
+          ClusterSide::Right => cluster.text_range().end,
+        }
+      }
+    } else {
+      self.layout.get(0).unwrap().text_range().end
+    }
   }
 
   pub fn size(&self) -> Size {
