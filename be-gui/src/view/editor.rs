@@ -126,10 +126,13 @@ impl EditorView {
         if pos.y >= size.height - line_height {
           // status bar
         } else {
-          let Some(line) = self.line_for_mouse(store, pos.y) else {
-            return crate::CursorKind::Default;
-          };
-          if pos.x < self.gutter_width() {
+          if pos.x >= self.gutter_width() {
+            return crate::CursorKind::Beam;
+          } else {
+            let Some(line) = self.line_for_mouse(store, pos.y) else {
+              return crate::CursorKind::Default;
+            };
+
             if pos.x < 4.0
               && let Some(()) = self.change_gutter_for_line(line)
             {
