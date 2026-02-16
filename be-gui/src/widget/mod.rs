@@ -33,6 +33,7 @@ pub struct WidgetCollection {
 
   pub(crate) root: Option<WidgetId>,
   hover_path:      Vec<WidgetId>,
+  bounds:          Rect,
 }
 
 pub struct WidgetLayout<'a, 'b> {
@@ -201,6 +202,7 @@ impl WidgetCollection {
       widgets:        HashMap::new(),
       root:           None,
       hover_path:     Vec::new(),
+      bounds:         Rect::ZERO,
     }
   }
 
@@ -225,7 +227,7 @@ impl WidgetCollection {
   pub(crate) fn on_mouse(&mut self, ev: MouseEvent, size: Size, _scale: f64) -> CursorKind {
     match ev {
       MouseEvent::Move { pos } => {
-        let new_path = self.hit_widgets(pos, size);
+        let Some(new_path) = self.hit_widgets(pos, size) else { return CursorKind::Default };
 
         self.hover_path(new_path);
 
@@ -234,23 +236,21 @@ impl WidgetCollection {
             w.content.on_mouse(&ev);
           }
         }
-
-        CursorKind::Default
       }
-      MouseEvent::Enter => unreachable!(),
+      MouseEvent::Enter => {}
       MouseEvent::Leave => {
         self.hover_path(vec![]);
-
-        CursorKind::Default
       }
       MouseEvent::Button { pos, .. } | MouseEvent::Scroll { pos, .. } => {
-        for w in self.hit_widgets(pos, size).iter().rev() {
+        let Some(path) = self.hit_widgets(pos, size) else { return CursorKind::Default };
+
+        for w in path.iter().rev() {
           self.widgets.get_mut(w).unwrap().content.on_mouse(&ev);
         }
-
-        CursorKind::Default
       }
     }
+
+    CursorKind::Default
   }
 
   fn hover_path(&mut self, path: Vec<WidgetId>) {
@@ -276,7 +276,12 @@ impl WidgetCollection {
 
   /// Returns a list of all widgets hit by the given point. Parents are returned
   /// first.
-  fn hit_widgets(&self, pos: Point, size: Size) -> Vec<WidgetId> {
+  fn hit_widgets(&self, pos: Point, size: Size) -> Option<Vec<WidgetId>> {
+    if !self.bounds.contains(pos) {
+      return None;
+    }
+    let pos = pos - self.bounds.origin().to_vec2();
+
     let mut path = vec![];
 
     if let Some(root) = self.root {
@@ -296,10 +301,11 @@ impl WidgetCollection {
       }
     }
 
-    path
+    Some(path)
   }
 
   pub fn begin<'a, 'b>(&'a mut self, layout: &'a mut Layout<'b>) -> WidgetLayout<'a, 'b> {
+    self.bounds = layout.current_bounds();
     WidgetLayout { layout, widgets: self, seen: HashSet::new(), next_id: 0 }
   }
 

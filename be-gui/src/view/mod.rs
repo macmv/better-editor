@@ -109,6 +109,8 @@ impl View {
       ViewContent::Terminal(terminal) => terminal.on_focus(focus),
     }
   }
+
+  pub fn collection(&self) -> Option<&mut crate::widget::WidgetCollection> { None }
 }
 
 impl Popup {

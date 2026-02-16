@@ -35,6 +35,8 @@ struct State {
   tab_layout: WidgetCollection,
 
   notify: Notify,
+
+  current_hover: Option<ViewId>,
 }
 
 struct ViewCollection {
@@ -73,15 +75,20 @@ pub struct WidgetId(u64);
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct WidgetPath(Vec<u32>);
 
+impl ViewId {
+  pub const TABS: ViewId = ViewId(u64::MAX);
+}
+
 impl State {
   pub fn new(store: &RenderStore) -> Self {
     let mut state = State {
-      keys:       vec![],
-      active:     1,
-      tabs:       vec![],
-      views:      ViewCollection::new(),
-      tab_layout: WidgetCollection::new(),
-      notify:     store.notifier(),
+      keys:          vec![],
+      active:        1,
+      tabs:          vec![],
+      views:         ViewCollection::new(),
+      tab_layout:    WidgetCollection::new(),
+      notify:        store.notifier(),
+      current_hover: None,
     };
 
     let layout = store.config.borrow().settings.layout.clone();
@@ -172,6 +179,67 @@ impl State {
         }
       },
     );
+  }
+
+  fn hit_view(&self, pos: Point, size: kurbo::Size) -> Option<ViewId> {
+    if pos.y >= size.height - 25.0 {
+      return Some(ViewId::TABS);
+    }
+
+    None
+  }
+
+  fn on_mouse(&mut self, ev: MouseEvent, size: kurbo::Size, scale: f64) -> CursorKind {
+    macro_rules! send {
+      ($e:expr, $ev:expr) => {
+        if let Some(v) = self.collection($e) {
+          v.on_mouse($ev, size, scale);
+        }
+      };
+    }
+
+    match ev {
+      MouseEvent::Move { pos }
+      | MouseEvent::Button { pos, .. }
+      | MouseEvent::Scroll { pos, .. } => {
+        let new_view = self.hit_view(pos, size);
+        match (self.current_hover, new_view) {
+          (Some(old), Some(new)) if old != new => {
+            send!(old, MouseEvent::Leave);
+            send!(new, MouseEvent::Enter);
+          }
+          (Some(old), None) => send!(old, MouseEvent::Leave),
+          (None, Some(new)) => send!(new, MouseEvent::Enter),
+          _ => {}
+        }
+
+        self.current_hover = new_view;
+      }
+
+      MouseEvent::Enter => {}
+
+      MouseEvent::Leave => {
+        if let Some(old) = self.current_hover {
+          send!(old, MouseEvent::Leave);
+          self.current_hover = None;
+        }
+      }
+    }
+
+    if let Some(current) = self.current_hover
+      && let Some(v) = self.collection(current)
+    {
+      v.on_mouse(ev, size, scale)
+    } else {
+      CursorKind::Default
+    }
+  }
+
+  fn collection(&mut self, id: ViewId) -> Option<&mut WidgetCollection> {
+    match id {
+      ViewId::TABS => Some(&mut self.tab_layout),
+      _ => self.views.get_mut(id)?.collection(),
+    }
   }
 
   fn animated(&self) -> bool { self.tabs[self.active].content.animated(&self.views.views) }
@@ -418,10 +486,6 @@ impl State {
     }
 
     false
-  }
-
-  fn on_mouse(&self, pos: MouseEvent, size: kurbo::Size, scale: f64) -> CursorKind {
-    CursorKind::Default
   }
 }
 
