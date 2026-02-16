@@ -1,15 +1,6 @@
-use std::{
-  any::Any,
-  collections::HashSet,
-  ops::{Deref, DerefMut},
-};
-
 use kurbo::{Axis, Point, Rect, Size, Vec2};
 
-use crate::{
-  Color, Distance, Notify, RenderStore, TextLayout, ViewId, Widget, WidgetId, WidgetPath,
-  WidgetStore, theme::Theme,
-};
+use crate::{Color, Distance, Notify, RenderStore, TextLayout, ViewId, WidgetPath, theme::Theme};
 
 pub struct Layout<'a> {
   pub store: &'a mut RenderStore,
@@ -21,17 +12,8 @@ pub struct Layout<'a> {
   path:    WidgetPath,
   next_id: u32,
 
-  pub(crate) seen: HashSet<WidgetId>,
-
   pub active:   Option<ViewId>,
   pub to_close: Vec<ViewId>,
-
-  remove_unseen: bool,
-}
-
-pub struct WidgetMut<'a, W: Widget> {
-  pub id:     WidgetId,
-  pub widget: &'a mut W,
 }
 
 impl<'a> Layout<'a> {
@@ -43,10 +25,8 @@ impl<'a> Layout<'a> {
       stack: vec![],
       path: WidgetPath(vec![]),
       next_id: 0,
-      seen: HashSet::new(),
       active: None,
       to_close: vec![],
-      remove_unseen: true,
     }
   }
 
@@ -63,86 +43,6 @@ impl<'a> Layout<'a> {
 
   pub fn current_bounds(&self) -> Rect {
     Rect::from_origin_size(self.offset().to_point(), self.size())
-  }
-
-  pub fn add_widget<'b, W: Widget + 'static>(
-    &'b mut self,
-    widget: impl FnOnce() -> W,
-  ) -> WidgetMut<'b, W> {
-    let path = self.next_path();
-    self.add_widget_with_path(path, widget)
-  }
-
-  pub fn add_widget_with_key<'b, W: Widget + 'static>(
-    &'b mut self,
-    widget: impl FnOnce() -> W,
-    key: u32,
-  ) -> WidgetMut<'b, W> {
-    let path = self.next_path_with_key(key);
-    self.add_widget_with_path(path, widget)
-  }
-
-  fn add_widget_with_path<'b, W: Widget + 'static>(
-    &'b mut self,
-    path: WidgetPath,
-    widget: impl FnOnce() -> W,
-  ) -> WidgetMut<'b, W> {
-    let id = if let Some(id) = self.clean_widget_at::<W>(&path) {
-      id
-    } else {
-      self.store.widgets.create(WidgetStore::new(path, widget()))
-    };
-    if !self.seen.insert(id) {
-      eprintln!("duplicate widget at path {:?}", self.store.widgets.get(id).unwrap().path);
-    }
-    let widget = self.store.widgets.get_mut(id).unwrap();
-    WidgetMut { id, widget: (&mut *widget.content as &mut dyn Any).downcast_mut().unwrap() }
-  }
-
-  fn clean_widget_at<W: Widget + 'static>(&self, path: &WidgetPath) -> Option<WidgetId> {
-    if let Some(id) = self.store.widgets.get_path(&path) {
-      if (&*self.store.widgets.get(id).unwrap().content as &dyn Any).type_id()
-        != std::any::TypeId::of::<W>()
-      {
-        return None;
-      }
-
-      for child in self.store.widgets.get(id).unwrap().children() {
-        if !self.seen.contains(child) {
-          return None;
-        }
-      }
-
-      Some(id)
-    } else {
-      None
-    }
-  }
-
-  pub fn layout_widget(&mut self, root: WidgetId) -> Size {
-    let mut widget = self.store.widgets.remove(root).unwrap();
-    let size = widget.layout(self);
-    self.store.widgets.insert(root, widget);
-    size
-  }
-
-  pub fn set_bounds(&mut self, child: WidgetId, bounds: Rect) {
-    self.store.widgets.get_mut(child).unwrap().bounds = bounds;
-  }
-
-  fn next_path(&mut self) -> WidgetPath {
-    let mut path = self.path.clone();
-    path.0.push(self.next_id);
-    self.next_id += 1;
-    path
-  }
-
-  fn next_path_with_key(&mut self, key: u32) -> WidgetPath {
-    let mut path = self.path.clone();
-    path.0.push(self.next_id);
-    path.0.push(key);
-    self.next_id += 1;
-    path
   }
 
   pub fn split<S>(
@@ -231,31 +131,4 @@ impl<'a> Layout<'a> {
     let (built, backgrounds) = builder.build(text);
     self.build_layout(built, backgrounds)
   }
-
-  pub fn drop_ignore_unseen(mut self) { self.remove_unseen = false; }
-}
-
-impl Drop for Layout<'_> {
-  fn drop(&mut self) {
-    if self.remove_unseen {
-      self.store.widgets.widgets.retain(|id, widget| {
-        if !self.seen.contains(id) {
-          self.store.widgets.paths.remove(&widget.path);
-          false
-        } else {
-          true
-        }
-      });
-    }
-  }
-}
-
-impl<W: Widget> Deref for WidgetMut<'_, W> {
-  type Target = W;
-
-  fn deref(&self) -> &Self::Target { self.widget }
-}
-
-impl<W: Widget> DerefMut for WidgetMut<'_, W> {
-  fn deref_mut(&mut self) -> &mut Self::Target { self.widget }
 }

@@ -2,7 +2,7 @@ use be_input::{Action, Direction, Edit, Move};
 use kurbo::{Point, Rect, RoundedRect, Stroke};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{Notify, Render, Widget};
+use crate::{Notify, Render};
 
 pub struct CommandView {
   notify: Notify,
@@ -13,12 +13,8 @@ pub struct CommandView {
 
 impl CommandView {
   pub fn new(notify: Notify) -> Self { CommandView { command: String::new(), cursor: 0, notify } }
-}
 
-impl Widget for CommandView {
-  fn layout(&mut self, _layout: &mut crate::Layout) -> Option<kurbo::Size> { None }
-
-  fn draw(&mut self, render: &mut Render) {
+  pub fn draw(&mut self, render: &mut Render) {
     let bounds = Rect::from_origin_size(Point::ZERO, render.size());
 
     let radius = 20.0;
@@ -46,9 +42,7 @@ impl Widget for CommandView {
     let cursor = layout.cursor(self.cursor as usize, crate::CursorMode::Line);
     render.fill(&(cursor + text_pos.to_vec2()), render.theme().text);
   }
-}
 
-impl CommandView {
   pub fn perform_action(&mut self, action: Action) {
     match action {
       Action::Move { m: Move::Single(Direction::Left), .. } => self.move_cursor(-1),

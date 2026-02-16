@@ -1,6 +1,6 @@
 use kurbo::{Point, Vec2};
 
-use crate::{TextLayout, Widget};
+use crate::{TextLayout, Widget, widget::LayoutCtx};
 
 pub struct Button {
   content: String,
@@ -27,11 +27,11 @@ const BORDER_RADIUS: f64 = 5.0;
 const HORIZONTAL_PADDING: f64 = 5.0;
 
 impl Widget for Button {
-  fn layout(&mut self, layout: &mut crate::Layout) -> Option<kurbo::Size> {
+  fn layout(&mut self, layout: &mut LayoutCtx) -> Option<kurbo::Size> {
     self.pending_press = false;
 
     if self.layout.as_ref().is_none_or(|l| layout.is_stale(l)) {
-      self.layout = Some(layout.layout_text(&self.content, layout.theme().text));
+      self.layout = Some(layout.layout.layout_text(&self.content, layout.theme().text));
     }
 
     Some(

@@ -1,15 +1,18 @@
-use std::{collections::HashMap, fmt};
+use std::{
+  any::Any,
+  collections::{HashMap, HashSet},
+  fmt,
+  ops::{Deref, DerefMut},
+};
 
-use kurbo::{Point, Rect, Size};
+use kurbo::{Point, Rect, Size, Vec2};
 
 mod border;
 mod button;
 mod padding;
-mod split;
 mod stack;
 
 pub use button::Button;
-pub use split::{ManySplit, Split};
 pub use stack::{Align, Justify, Stack};
 
 use crate::{CursorKind, Layout, MouseEvent, Render, WidgetId, WidgetPath};
@@ -30,6 +33,26 @@ pub struct WidgetCollection {
 
   pub(crate) root: Option<WidgetId>,
   hover_path:      Vec<WidgetId>,
+  bounds:          Rect,
+}
+
+pub struct WidgetLayout<'a, 'b> {
+  layout:  &'a mut Layout<'b>,
+  widgets: &'a mut WidgetCollection,
+
+  seen:    HashSet<WidgetId>,
+  next_id: u32,
+}
+
+pub struct LayoutCtx<'a, 'b> {
+  layout:  &'a mut Layout<'b>,
+  widgets: &'a mut WidgetCollection,
+  stack:   Vec<Rect>,
+}
+
+pub struct WidgetMut<'a, W: Widget> {
+  pub id:     WidgetId,
+  pub widget: &'a mut W,
 }
 
 impl fmt::Debug for WidgetCollection {
@@ -89,7 +112,7 @@ pub struct Corners {
 }
 
 pub trait Widget: std::any::Any {
-  fn layout(&mut self, layout: &mut Layout) -> Option<Size> {
+  fn layout(&mut self, layout: &mut LayoutCtx) -> Option<Size> {
     let _ = layout;
     None
   }
@@ -126,7 +149,7 @@ impl WidgetStore {
 
   pub fn animated(&self) -> bool { false }
 
-  pub fn layout(&mut self, layout: &mut Layout) -> Size {
+  pub fn layout(&mut self, layout: &mut LayoutCtx) -> Size {
     if let Some(size) = self.content.layout(layout) {
       let current = layout.current_bounds();
       self.bounds = current.with_size(size);
@@ -179,6 +202,7 @@ impl WidgetCollection {
       widgets:        HashMap::new(),
       root:           None,
       hover_path:     Vec::new(),
+      bounds:         Rect::ZERO,
     }
   }
 
@@ -203,7 +227,7 @@ impl WidgetCollection {
   pub(crate) fn on_mouse(&mut self, ev: MouseEvent, size: Size, _scale: f64) -> CursorKind {
     match ev {
       MouseEvent::Move { pos } => {
-        let new_path = self.hit_widgets(pos, size);
+        let Some(new_path) = self.hit_widgets(pos, size) else { return CursorKind::Default };
 
         self.hover_path(new_path);
 
@@ -212,23 +236,21 @@ impl WidgetCollection {
             w.content.on_mouse(&ev);
           }
         }
-
-        CursorKind::Default
       }
-      MouseEvent::Enter => unreachable!(),
+      MouseEvent::Enter => {}
       MouseEvent::Leave => {
         self.hover_path(vec![]);
-
-        CursorKind::Default
       }
       MouseEvent::Button { pos, .. } | MouseEvent::Scroll { pos, .. } => {
-        for w in self.hit_widgets(pos, size).iter().rev() {
+        let Some(path) = self.hit_widgets(pos, size) else { return CursorKind::Default };
+
+        for w in path.iter().rev() {
           self.widgets.get_mut(w).unwrap().content.on_mouse(&ev);
         }
-
-        CursorKind::Default
       }
     }
+
+    CursorKind::Default
   }
 
   fn hover_path(&mut self, path: Vec<WidgetId>) {
@@ -254,7 +276,12 @@ impl WidgetCollection {
 
   /// Returns a list of all widgets hit by the given point. Parents are returned
   /// first.
-  fn hit_widgets(&self, pos: Point, size: Size) -> Vec<WidgetId> {
+  fn hit_widgets(&self, pos: Point, size: Size) -> Option<Vec<WidgetId>> {
+    if !self.bounds.contains(pos) {
+      return None;
+    }
+    let pos = pos - self.bounds.origin().to_vec2();
+
     let mut path = vec![];
 
     if let Some(root) = self.root {
@@ -274,6 +301,146 @@ impl WidgetCollection {
       }
     }
 
-    path
+    Some(path)
   }
+
+  pub fn begin<'a, 'b>(&'a mut self, layout: &'a mut Layout<'b>) -> WidgetLayout<'a, 'b> {
+    self.bounds = layout.current_bounds();
+    WidgetLayout { layout, widgets: self, seen: HashSet::new(), next_id: 0 }
+  }
+
+  pub fn draw(&mut self, render: &mut Render) {
+    if let Some(root) = self.root {
+      let mut stack = vec![(root, Rect::from_origin_size(Point::ZERO, render.size()))];
+
+      while let Some((id, outer_bounds)) = stack.pop() {
+        let widget = self.widgets.get_mut(&id).unwrap();
+        if !widget.visible {
+          continue;
+        }
+
+        let bounds = widget.bounds + outer_bounds.origin().to_vec2();
+        render.clipped(bounds, |render| {
+          let mut widget = self.widgets.remove(&id).unwrap();
+          widget.content.draw(render);
+          self.widgets.insert(id, widget);
+        });
+        let widget = self.widgets.get(&id).unwrap();
+        stack.extend(widget.children().iter().rev().map(|&c| (c, bounds)));
+      }
+    }
+  }
+}
+
+impl WidgetLayout<'_, '_> {
+  pub fn add_widget<'b, W: Widget + 'static>(&'b mut self, widget: W) -> WidgetMut<'b, W> {
+    let path = self.next_path();
+    self.add_widget_with_path(path, widget)
+  }
+
+  fn next_path(&mut self) -> WidgetPath {
+    let id = self.next_id;
+    self.next_id += 1;
+    WidgetPath(vec![id])
+  }
+
+  fn add_widget_with_path<'b, W: Widget + 'static>(
+    &'b mut self,
+    path: WidgetPath,
+    widget: W,
+  ) -> WidgetMut<'b, W> {
+    let id = if let Some(id) = self.clean_widget_at::<W>(&path) {
+      id
+    } else {
+      self.widgets.create(WidgetStore::new(path, widget))
+    };
+    if !self.seen.insert(id) {
+      eprintln!("duplicate widget at path {:?}", self.widgets.get(id).unwrap().path);
+    }
+    let widget = self.widgets.get_mut(id).unwrap();
+    WidgetMut { id, widget: (&mut *widget.content as &mut dyn Any).downcast_mut().unwrap() }
+  }
+
+  fn clean_widget_at<W: Widget + 'static>(&self, path: &WidgetPath) -> Option<WidgetId> {
+    if let Some(id) = self.widgets.get_path(&path) {
+      if (&*self.widgets.get(id).unwrap().content as &dyn Any).type_id()
+        != std::any::TypeId::of::<W>()
+      {
+        return None;
+      }
+
+      for child in self.widgets.get(id).unwrap().children() {
+        if !self.seen.contains(child) {
+          return None;
+        }
+      }
+
+      Some(id)
+    } else {
+      None
+    }
+  }
+
+  pub fn finish(self, root: WidgetId) {
+    self.widgets.root = Some(root);
+
+    let mut widget = self.widgets.remove(root).unwrap();
+    widget.layout(&mut LayoutCtx { layout: self.layout, widgets: self.widgets, stack: vec![] });
+    self.widgets.insert(root, widget);
+
+    // TODO: Tree walk from the root instead of the seen set.
+    self.widgets.widgets.retain(|id, widget| {
+      if !self.seen.contains(id) {
+        self.widgets.paths.remove(&widget.path);
+        false
+      } else {
+        true
+      }
+    });
+  }
+}
+
+impl LayoutCtx<'_, '_> {
+  pub fn set_bounds(&mut self, child: WidgetId, bounds: Rect) {
+    self.widgets.get_mut(child).unwrap().bounds = bounds;
+  }
+
+  pub fn size(&self) -> Size {
+    if let Some(top) = self.stack.last() { top.size() } else { self.layout.size() }
+  }
+
+  fn offset(&self) -> Vec2 {
+    if let Some(top) = self.stack.last() { top.origin().to_vec2() } else { Vec2::ZERO }
+  }
+
+  pub fn current_bounds(&self) -> Rect {
+    Rect::from_origin_size(self.offset().to_point(), self.size())
+  }
+
+  pub fn layout_widget(&mut self, root: WidgetId) -> Size {
+    let mut widget = self.widgets.remove(root).unwrap();
+    let size = widget.layout(self);
+    self.widgets.insert(root, widget);
+    size
+  }
+}
+
+impl<'a> Deref for LayoutCtx<'_, 'a> {
+  type Target = Layout<'a>;
+
+  fn deref(&self) -> &Self::Target { self.layout }
+}
+
+impl DerefMut for LayoutCtx<'_, '_> {
+  fn deref_mut(&mut self) -> &mut Self::Target { self.layout }
+}
+
+impl<W: Widget> Deref for WidgetMut<'_, W> {
+  type Target = W;
+
+  fn deref(&self) -> &Self::Target { self.widget }
+}
+
+impl<W: Widget> DerefMut for WidgetMut<'_, W> {
+  fn deref_mut(&mut self) -> &mut Self::Target { self.widget }
 }

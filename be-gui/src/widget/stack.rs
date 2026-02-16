@@ -1,6 +1,6 @@
 use kurbo::{Axis, Rect, Size};
 
-use crate::{Widget, WidgetId};
+use crate::{Widget, WidgetId, widget::LayoutCtx};
 
 pub struct Stack {
   axis:    Axis,
@@ -40,7 +40,7 @@ impl Stack {
 }
 
 impl Widget for Stack {
-  fn layout(&mut self, layout: &mut crate::Layout) -> Option<kurbo::Size> {
+  fn layout(&mut self, layout: &mut LayoutCtx) -> Option<kurbo::Size> {
     self.sizes.clear();
     let mut size = Size::new(0.0, 0.0);
     for child in self.children.iter() {

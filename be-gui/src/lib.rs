@@ -4,7 +4,7 @@ use std::{collections::HashMap, hash::Hash};
 
 use be_doc::Cursor;
 use be_input::{Action, KeyStroke, Navigation};
-use kurbo::{Axis, Point, Rect};
+use kurbo::{Axis, Point, Rect, Size};
 pub use render::*;
 
 use pane::Pane;
@@ -12,7 +12,7 @@ use view::View;
 
 use crate::{
   view::{FileTree, ViewContent},
-  widget::{Align, Justify},
+  widget::{Align, Justify, WidgetCollection},
 };
 
 mod icon;
@@ -32,7 +32,11 @@ struct State {
 
   views: ViewCollection,
 
+  tab_layout: WidgetCollection,
+
   notify: Notify,
+
+  current_hover: Option<ViewId>,
 }
 
 struct ViewCollection {
@@ -71,14 +75,20 @@ pub struct WidgetId(u64);
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct WidgetPath(Vec<u32>);
 
+impl ViewId {
+  pub const TABS: ViewId = ViewId(u64::MAX);
+}
+
 impl State {
   pub fn new(store: &RenderStore) -> Self {
     let mut state = State {
-      keys:   vec![],
-      active: 1,
-      tabs:   vec![],
-      views:  ViewCollection::new(),
-      notify: store.notifier(),
+      keys:          vec![],
+      active:        1,
+      tabs:          vec![],
+      views:         ViewCollection::new(),
+      tab_layout:    WidgetCollection::new(),
+      notify:        store.notifier(),
+      current_hover: None,
     };
 
     let layout = store.config.borrow().settings.layout.clone();
@@ -144,43 +154,93 @@ impl State {
   }
 
   fn layout(&mut self, layout: &mut Layout) {
-    let tabs = self.layout_tabs(layout);
-    let main = layout
-      .add_widget_with_key(
-        || crate::widget::Button::new(&self.active.to_string()),
-        self.active as u32,
-      )
-      .id;
+    layout.clipped(
+      Rect::new(0.0, layout.size().height - 25.0, layout.size().width, layout.size().height),
+      |layout| {
+        self.layout_tabs(layout);
+      },
+    );
 
-    let root = layout
-      .add_widget(|| {
-        crate::widget::Split::new(Axis::Horizontal, Distance::Pixels(-25.0), main, tabs)
-      })
-      .id;
-
-    layout.store.widgets.root = Some(root);
-
-    layout.split(
-      self,
-      Axis::Horizontal,
-      Distance::Pixels(-25.0),
-      |state, layout| {
-        let tab = &mut state.tabs[state.active];
+    layout.clipped(
+      Rect::new(0.0, 0.0, layout.size().width, layout.size().height - 25.0),
+      |layout| {
+        let tab = &mut self.tabs[self.active];
         if let Some(popup) = &mut tab.popup {
           popup.layout(layout);
         }
-        tab.content.layout(&mut state.views.views, layout);
+        tab.content.layout(&mut self.views.views, layout);
         if !layout.to_close.is_empty() {
           for to_close in layout.to_close.drain(..) {
-            tab.content.close(to_close, &mut state.views.views);
+            tab.content.close(to_close, &mut self.views.views);
           }
 
           // Re-run layout after removing closed views.
-          tab.content.layout(&mut state.views.views, layout);
+          tab.content.layout(&mut self.views.views, layout);
         }
       },
-      |_, _| {},
     );
+  }
+
+  fn hit_view(&self, pos: Point, size: kurbo::Size) -> Option<ViewId> {
+    if pos.y < size.height - 25.0 {
+      let tab = &self.tabs[self.active];
+      tab.content.hit_view(pos, Size::new(size.width, size.height - 25.0))
+    } else {
+      Some(ViewId::TABS)
+    }
+  }
+
+  fn on_mouse(&mut self, ev: MouseEvent, size: kurbo::Size, scale: f64) -> CursorKind {
+    macro_rules! send {
+      ($e:expr, $ev:expr) => {
+        if let Some(v) = self.collection($e) {
+          v.on_mouse($ev, size, scale);
+        }
+      };
+    }
+
+    match ev {
+      MouseEvent::Move { pos }
+      | MouseEvent::Button { pos, .. }
+      | MouseEvent::Scroll { pos, .. } => {
+        let new_view = self.hit_view(pos, size);
+        match (self.current_hover, new_view) {
+          (Some(old), Some(new)) if old != new => {
+            send!(old, MouseEvent::Leave);
+            send!(new, MouseEvent::Enter);
+          }
+          (Some(old), None) => send!(old, MouseEvent::Leave),
+          (None, Some(new)) => send!(new, MouseEvent::Enter),
+          _ => {}
+        }
+
+        self.current_hover = new_view;
+      }
+
+      MouseEvent::Enter => {}
+
+      MouseEvent::Leave => {
+        if let Some(old) = self.current_hover {
+          send!(old, MouseEvent::Leave);
+          self.current_hover = None;
+        }
+      }
+    }
+
+    if let Some(current) = self.current_hover
+      && let Some(v) = self.collection(current)
+    {
+      v.on_mouse(ev, size, scale)
+    } else {
+      CursorKind::Default
+    }
+  }
+
+  fn collection(&mut self, id: ViewId) -> Option<&mut WidgetCollection> {
+    match id {
+      ViewId::TABS => Some(&mut self.tab_layout),
+      _ => self.views.get_mut(id)?.collection(),
+    }
   }
 
   fn animated(&self) -> bool { self.tabs[self.active].content.animated(&self.views.views) }
@@ -202,26 +262,6 @@ impl State {
       },
       |state, render| state.draw_tabs(render),
     );
-
-    if let Some(root) = render.store.widgets.root {
-      let mut stack = vec![(root, Rect::from_origin_size(Point::ZERO, render.size()))];
-
-      while let Some((id, outer_bounds)) = stack.pop() {
-        let widget = render.store.widgets.widgets.get_mut(&id).unwrap();
-        if !widget.visible {
-          continue;
-        }
-
-        let bounds = widget.bounds + outer_bounds.origin().to_vec2();
-        render.clipped(bounds, |render| {
-          let mut widget = render.store.widgets.widgets.remove(&id).unwrap();
-          widget.content.draw(render);
-          render.store.widgets.widgets.insert(id, widget);
-        });
-        let widget = render.store.widgets.widgets.get(&id).unwrap();
-        stack.extend(widget.children().iter().rev().map(|&c| (c, bounds)));
-      }
-    }
   }
 
   fn open(&mut self, path: &std::path::Path, cursor: Option<Cursor>) {
@@ -360,11 +400,13 @@ impl State {
     }
   }
 
-  fn layout_tabs(&mut self, layout: &mut Layout) -> WidgetId {
+  fn layout_tabs(&mut self, layout: &mut Layout) {
+    let mut tab_layout = self.tab_layout.begin(layout);
+
     let mut row = vec![];
 
     for (i, tab) in self.tabs.iter().enumerate() {
-      let button = layout.add_widget(|| crate::widget::Button::new(&tab.title));
+      let button = tab_layout.add_widget(crate::widget::Button::new(&tab.title));
 
       if button.pressed() {
         self.active = i;
@@ -373,46 +415,19 @@ impl State {
       row.push(button.id);
     }
 
-    layout
-      .add_widget(|| {
-        crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, row).gap(5.0)
-      })
-      .id
+    let root = tab_layout
+      .add_widget(
+        crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, row).gap(5.0),
+      )
+      .id;
+    tab_layout.finish(root);
   }
 
-  fn draw_tabs(&self, render: &mut Render) {
+  fn draw_tabs(&mut self, render: &mut Render) {
     render
       .fill(&Rect::from_origin_size(Point::ZERO, render.size()), render.theme().background_lower);
 
-    /*
-    let mut x = 10.0;
-    for (i, tab) in self.tabs.iter().enumerate() {
-      let layout = render.layout_text(&tab.title, render.theme().text);
-
-      if i == self.active {
-        render.fill(
-          &Rect::new(
-            x - 5.0,
-            render.size().height - 20.0,
-            x + layout.size().width + 5.0,
-            render.size().height,
-          ),
-          render.theme().background,
-        );
-      }
-
-      render.draw_text(&layout, (x, 0.0));
-      x += layout.size().width;
-
-      x += 5.0;
-      render.stroke(
-        &Line::new((x, 0.0), (x, render.size().height)),
-        render.theme().text,
-        Stroke::new(1.0).with_caps(Cap::Butt),
-      );
-      x += 6.0;
-    }
-    */
+    self.tab_layout.draw(render);
   }
 
   fn active_editor(&mut self) -> Option<&mut be_editor::EditorState> {

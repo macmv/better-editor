@@ -109,6 +109,8 @@ impl View {
       ViewContent::Terminal(terminal) => terminal.on_focus(focus),
     }
   }
+
+  pub fn collection(&self) -> Option<&mut crate::widget::WidgetCollection> { None }
 }
 
 impl Popup {
@@ -121,11 +123,11 @@ impl Popup {
     }
   }
 
-  pub fn layout(&mut self, layout: &mut Layout) {
+  pub fn layout(&mut self, _layout: &mut Layout) {
     match self {
-      Popup::Search(search) => search.layout(layout),
-      Popup::Command(command) => command.layout(layout),
-    };
+      Popup::Search(search) => search.layout(),
+      Popup::Command(_) => {}
+    }
   }
 
   pub fn draw(&mut self, render: &mut Render) {
