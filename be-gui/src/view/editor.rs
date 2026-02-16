@@ -20,6 +20,7 @@ pub struct EditorView {
   pub(crate) temporary_underline: bool,
   cached_layouts:                 HashMap<usize, TextLayout>,
   cached_scale:                   f64,
+  gutter_width:                   f64,
 
   progress_animation: Animation,
 }
@@ -33,6 +34,7 @@ impl EditorView {
       temporary_underline: false,
       cached_layouts:      HashMap::new(),
       cached_scale:        0.0,
+      gutter_width:        0.0,
 
       progress_animation: Animation::linear(2.0),
     };
@@ -105,7 +107,7 @@ impl EditorView {
             return crate::CursorKind::Default;
           };
 
-          let column_byte = layout.index(pos.x - 28.0, cursor_mode);
+          let column_byte = layout.index(pos.x - self.gutter_width, cursor_mode);
           let column = self.editor.doc().line(line).byte_slice(..column_byte).graphemes().count();
 
           self.editor.move_to(Cursor {
@@ -204,7 +206,7 @@ impl EditorView {
     const LINE_NUMBER_MARGIN_LEFT: f64 = 10.0;
     const LINE_NUMBER_MARGIN_RIGHT: f64 = 10.0;
 
-    let margin = line_number_width + LINE_NUMBER_MARGIN_LEFT + LINE_NUMBER_MARGIN_RIGHT;
+    self.gutter_width = line_number_width + LINE_NUMBER_MARGIN_LEFT + LINE_NUMBER_MARGIN_RIGHT;
 
     index = start;
     i = min_line.as_usize();
@@ -212,7 +214,7 @@ impl EditorView {
     let mut indent_guides = IndentGuides::new(
       self.editor.config.borrow().settings.editor.indent_width as usize,
       start_y,
-      margin,
+      self.gutter_width,
     );
     while index < end {
       indent_guides
@@ -225,9 +227,9 @@ impl EditorView {
       );
 
       let layout = self.cached_layouts.get(&i).unwrap();
-      render.draw_text(&layout, Point::new(margin, y));
+      render.draw_text(&layout, Point::new(self.gutter_width, y));
 
-      self.draw_trailing_spaces(i, margin + layout.size().width, y, render);
+      self.draw_trailing_spaces(i, self.gutter_width + layout.size().width, y, render);
 
       y += line_height;
       i += 1;
@@ -244,7 +246,7 @@ impl EditorView {
 
       let cursor = layout
         .cursor(self.editor.doc().cursor_column_offset(self.editor.cursor()), mode)
-        + Vec2::new(margin, start_y + (line - min_line.as_usize()) as f64 * line_height);
+        + Vec2::new(self.gutter_width, start_y + (line - min_line.as_usize()) as f64 * line_height);
       if self.focused {
         render.fill(&cursor.ceil(), render.theme().text);
       } else {
