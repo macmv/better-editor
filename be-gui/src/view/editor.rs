@@ -24,6 +24,14 @@ pub struct EditorView {
   line_numbers:      Vec<TextLayout>,
   line_number_width: f64,
 
+  /// The minimum visible line. This will always be a real line in the file. It
+  /// may only be partially visible.
+  min_line: be_doc::Line,
+  /// The maximum visible line. This might not be a real line in the file, if
+  /// the file is too short, or the user has scrolled down. It may only be
+  /// partially visible.
+  max_line: be_doc::Line,
+
   progress_animation: Animation,
 }
 
@@ -40,6 +48,8 @@ impl EditorView {
       cached_layouts:      HashMap::new(),
       cached_scale:        0.0,
 
+      min_line:          be_doc::Line(0),
+      max_line:          be_doc::Line(0),
       line_numbers:      vec![],
       line_number_width: 0.0,
 
@@ -199,24 +209,24 @@ impl EditorView {
       self.scroll.y = (target_line as f64 * line_height) - layout.size().height;
     }
 
-    let min_line = be_doc::Line(
+    self.min_line = be_doc::Line(
       ((self.scroll.y / line_height).floor() as usize)
-        .clamp(0, self.editor.doc().rope.lines().len()),
+        .clamp(0, self.editor.doc().rope.lines().len().saturating_sub(1)),
     );
-    let max_line = be_doc::Line(
+    self.max_line = be_doc::Line(
       (((self.scroll.y + layout.size().height) / line_height).ceil() as usize)
-        .clamp(0, self.editor.doc().rope.lines().len()),
+        .clamp(0, self.editor.doc().rope.lines().len().saturating_sub(1)),
     );
 
-    let start = self.editor.doc().byte_of_line(min_line);
-    let end = if max_line.as_usize() >= self.editor.doc().len_lines() {
+    let start = self.editor.doc().byte_of_line(self.min_line);
+    let end = if self.max_line.as_usize() >= self.editor.doc().len_lines() {
       self.editor.doc().rope.byte_len()
     } else {
-      self.editor.doc().byte_of_line(max_line + 1)
+      self.editor.doc().byte_of_line(self.max_line + 1)
     };
 
     let mut index = start;
-    let mut i = min_line.as_usize();
+    let mut i = self.min_line.as_usize();
 
     self.line_numbers.clear();
     // Layout the length line number by default. If `character_width` is wrong, then
@@ -253,25 +263,16 @@ impl EditorView {
 
     let line_height = render.store.text.font_metrics().line_height;
 
-    let min_line = be_doc::Line(
-      ((self.scroll.y / line_height).floor() as usize)
-        .clamp(0, self.editor.doc().rope.lines().len()),
-    );
-    let max_line = be_doc::Line(
-      (((self.scroll.y + render.size().height) / line_height).ceil() as usize)
-        .clamp(0, self.editor.doc().rope.lines().len()),
-    );
-
     let start_y = -(self.scroll.y % line_height);
-    let start = self.editor.doc().byte_of_line(min_line);
-    let end = if max_line.as_usize() >= self.editor.doc().len_lines() {
+    let start = self.editor.doc().byte_of_line(self.min_line);
+    let end = if self.max_line.as_usize() >= self.editor.doc().len_lines() {
       self.editor.doc().rope.byte_len()
     } else {
-      self.editor.doc().byte_of_line(max_line + 1)
+      self.editor.doc().byte_of_line(self.max_line + 1)
     };
 
     let mut index = start;
-    let mut i = min_line.as_usize();
+    let mut i = self.min_line.as_usize();
     let mut y = start_y;
     let mut indent_guides = IndentGuides::new(
       self.editor.config.borrow().settings.editor.indent_width as usize,
@@ -282,7 +283,7 @@ impl EditorView {
       indent_guides
         .visit(self.editor.guess_indent(be_doc::Line(i), be_input::VerticalDirection::Up), render);
 
-      let layout = &self.line_numbers[i - min_line.as_usize()];
+      let layout = &self.line_numbers[i - self.min_line.as_usize()];
       render.draw_text(
         layout,
         Point::new(LINE_NUMBER_MARGIN_LEFT + self.line_number_width - layout.size().width, y),
@@ -298,7 +299,7 @@ impl EditorView {
       index += self.editor.doc().rope.byte_slice(index..).raw_lines().next().unwrap().byte_len();
     }
 
-    self.draw_change_gutter(start_y, min_line, max_line, render);
+    self.draw_change_gutter(start_y, render);
 
     indent_guides.finish(render);
 
@@ -310,7 +311,7 @@ impl EditorView {
         .cursor(self.editor.doc().cursor_column_offset(self.editor.cursor()), mode)
         + Vec2::new(
           self.gutter_width(),
-          start_y + (line - min_line.as_usize()) as f64 * line_height,
+          start_y + (line - self.min_line.as_usize()) as f64 * line_height,
         );
       if self.focused {
         render.fill(&cursor.ceil(), render.theme().text);
@@ -411,38 +412,35 @@ impl EditorView {
     }
   }
 
-  fn draw_change_gutter(
-    &self,
-    start_y: f64,
-    min_line: be_doc::Line,
-    max_line: be_doc::Line,
-    render: &mut Render,
-  ) {
+  fn draw_change_gutter(&self, start_y: f64, render: &mut Render) {
     let line_height = render.store.text.font_metrics().line_height;
 
     if let Some(changes) = &self.editor.changes {
       for hunk in changes.hunks() {
-        if be_doc::Line(hunk.after.end) < min_line || be_doc::Line(hunk.after.start) > max_line {
+        if be_doc::Line(hunk.after.end) < self.min_line
+          || be_doc::Line(hunk.after.start) > self.max_line
+        {
           continue;
         }
 
         for change in hunk.changes.iter().rev() {
-          if be_doc::Line(change.after().end) < min_line
-            || be_doc::Line(change.after().start) > max_line
+          if be_doc::Line(change.after().end) < self.min_line
+            || be_doc::Line(change.after().start) > self.max_line
           {
             continue;
           }
 
           if change.after().is_empty() {
-            let y = start_y + (change.after().start - min_line.as_usize()) as f64 * line_height;
+            let y =
+              start_y + (change.after().start - self.min_line.as_usize()) as f64 * line_height;
 
             let shape = Triangle::new((0.0, y - 4.0), (0.0, y + 4.0), (4.0, y));
             render.fill(&shape, render.theme().diff_remove);
           } else {
-            let min_y =
-              start_y + (change.after().start as f64 - min_line.as_usize() as f64) * line_height;
+            let min_y = start_y
+              + (change.after().start as f64 - self.min_line.as_usize() as f64) * line_height;
             let max_y =
-              start_y + (change.after().end as f64 - min_line.as_usize() as f64) * line_height;
+              start_y + (change.after().end as f64 - self.min_line.as_usize() as f64) * line_height;
 
             let shape = Rect::new(0.0, min_y, 4.0, max_y);
             render.fill(
