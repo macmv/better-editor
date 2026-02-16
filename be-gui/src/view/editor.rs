@@ -126,12 +126,7 @@ impl EditorView {
         if pos.y >= size.height - line_height {
           // status bar
         } else {
-          let line_region_y = self.scroll.y + pos.y;
-          let line = be_doc::Line(
-            ((line_region_y / line_height).floor() as usize)
-              .clamp(0, self.editor.doc().rope.lines().len().saturating_sub(1)),
-          );
-
+          let line = self.line_for_mouse(store, pos.y);
           let Some(layout) = self.cached_layouts.get(&line.0) else {
             return crate::CursorKind::Default;
           };
@@ -177,6 +172,16 @@ impl EditorView {
     }
 
     crate::CursorKind::Default
+  }
+
+  fn line_for_mouse(&self, store: &RenderStore, y: f64) -> be_doc::Line {
+    let line_height = store.text.font_metrics().line_height;
+
+    let line_region_y = self.scroll.y + y;
+    be_doc::Line(
+      ((line_region_y / line_height).floor() as usize)
+        .clamp(0, self.editor.doc().rope.lines().len().saturating_sub(1)),
+    )
   }
 
   fn layout_editor(&mut self, layout: &mut Layout) {
