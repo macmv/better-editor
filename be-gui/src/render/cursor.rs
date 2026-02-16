@@ -4,6 +4,7 @@ use winit::window::Window;
 pub enum CursorKind {
   Default,
   Pointer,
+  Beam,
 
   ResizeEastWest,
   ResizeNorthSouth,
@@ -22,6 +23,7 @@ fn set_ns_cursor(kind: CursorKind) {
     let cursor: *mut AnyObject = match kind {
       CursorKind::Default => msg_send![ns_cursor, arrowCursor],
       CursorKind::Pointer => msg_send![ns_cursor, pointingHandCursor],
+      CursorKind::Beam => msg_send![ns_cursor, IBeamCursor],
       CursorKind::ResizeEastWest => {
         msg_send![ns_cursor, frameResizeCursorFromPosition:FRAME_POS_LEFT, inDirections:FRAME_DIR_ALL]
       }
@@ -42,6 +44,7 @@ pub fn set_cursor(_window: &Window, cursor: CursorKind) {
   _window.set_cursor(match cursor {
     CursorKind::Default => winit::window::CursorIcon::Default,
     CursorKind::Pointer => winit::window::CursorIcon::Pointer,
+    CursorKind::Beam => winit::window::CursorIcon::Text,
     CursorKind::ResizeEastWest => winit::window::CursorIcon::EwResize,
     CursorKind::ResizeNorthSouth => winit::window::CursorIcon::NsResize,
   });
