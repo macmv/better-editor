@@ -183,7 +183,7 @@ impl EditorState {
     self.move_to_col(cursor.column);
   }
 
-  fn move_to_line(&mut self, line: Line) {
+  pub fn move_to_line(&mut self, line: Line) {
     self.cursor.line = line.clamp(self.max_line());
     self.cursor.column = self
       .doc

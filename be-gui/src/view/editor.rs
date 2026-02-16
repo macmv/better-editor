@@ -118,6 +118,28 @@ impl EditorView {
         }
       }
 
+      MouseEvent::Scroll { pos, delta } => {
+        if pos.y >= size.height - line_height {
+          // status bar
+        } else {
+          let size = Size::new(size.width, size.height - line_height);
+
+          self.scroll.y = (self.scroll.y - delta.y).max(0.0);
+
+          let scroll_offset = self.editor.config.borrow().settings.editor.scroll_offset as usize;
+
+          let min_fully_visible_row = (self.scroll.y / line_height).ceil() as usize + scroll_offset;
+          let max_fully_visible_row =
+            ((self.scroll.y + size.height) / line_height).floor() as usize - 1 - scroll_offset;
+
+          if self.editor.cursor().line.as_usize() < min_fully_visible_row {
+            self.editor.move_to_line(be_doc::Line(min_fully_visible_row));
+          } else if self.editor.cursor().line.as_usize() > max_fully_visible_row {
+            self.editor.move_to_line(be_doc::Line(max_fully_visible_row));
+          }
+        }
+      }
+
       _ => {}
     }
 
