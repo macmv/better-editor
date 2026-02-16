@@ -4,7 +4,7 @@ use std::{collections::HashMap, hash::Hash};
 
 use be_doc::Cursor;
 use be_input::{Action, KeyStroke, Navigation};
-use kurbo::{Axis, Point, Rect};
+use kurbo::{Axis, Point, Rect, Size};
 pub use render::*;
 
 use pane::Pane;
@@ -182,11 +182,12 @@ impl State {
   }
 
   fn hit_view(&self, pos: Point, size: kurbo::Size) -> Option<ViewId> {
-    if pos.y >= size.height - 25.0 {
-      return Some(ViewId::TABS);
+    if pos.y < size.height - 25.0 {
+      let tab = &self.tabs[self.active];
+      tab.content.hit_view(pos, Size::new(size.width, size.height - 25.0))
+    } else {
+      Some(ViewId::TABS)
     }
-
-    None
   }
 
   fn on_mouse(&mut self, ev: MouseEvent, size: kurbo::Size, scale: f64) -> CursorKind {

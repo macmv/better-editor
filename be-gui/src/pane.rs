@@ -42,6 +42,13 @@ impl Pane {
     }
   }
 
+  pub fn hit_view(&self, pos: Point, size: kurbo::Size) -> Option<ViewId> {
+    match self {
+      Pane::View(id) => Some(*id),
+      Pane::Split(split) => split.hit_view(pos, size),
+    }
+  }
+
   pub fn active(&self) -> ViewId {
     match self {
       Pane::View(id) => *id,
@@ -129,6 +136,9 @@ impl Pane {
 }
 
 impl Split {
+  // TODO: This (layout + hit_view) kinda sucks. However, I believe it is the
+  // least bad option, as this lets views own all of their state.
+
   fn layout(&self, views: &mut HashMap<ViewId, View>, layout: &mut Layout) {
     let mut bounds = Rect::from_origin_size(Point::ZERO, layout.size());
 
@@ -159,6 +169,44 @@ impl Split {
         }
       }
     }
+  }
+
+  pub fn hit_view(&self, pos: Point, size: kurbo::Size) -> Option<ViewId> {
+    let mut bounds = Rect::from_origin_size(Point::ZERO, size);
+
+    match self.axis {
+      Axis::Vertical => {
+        for (percent, item) in self.items.iter() {
+          let mut distance = Distance::Percent(*percent).to_pixels_in(size.width);
+          if distance < 0.0 {
+            distance += size.width;
+          }
+
+          bounds.x1 = bounds.x0 + distance;
+          if bounds.contains(pos) {
+            return item.hit_view(pos - bounds.origin().to_vec2(), size);
+          }
+          bounds.x0 += distance;
+        }
+      }
+
+      Axis::Horizontal => {
+        for (percent, item) in self.items.iter() {
+          let mut distance = Distance::Percent(*percent).to_pixels_in(size.height);
+          if distance < 0.0 {
+            distance += size.height;
+          }
+
+          bounds.y1 = bounds.y0 + distance;
+          if bounds.contains(pos) {
+            return item.hit_view(pos - bounds.origin().to_vec2(), size);
+          }
+          bounds.y0 += distance;
+        }
+      }
+    }
+
+    None
   }
 
   /// Returns true if the focus changed.
