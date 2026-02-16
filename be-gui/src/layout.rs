@@ -19,6 +19,9 @@ impl<'a> Layout<'a> {
     Self { store, scale, size, stack: vec![], active: None, to_close: vec![] }
   }
 
+  /// TODO: Don't expose this.
+  pub(crate) fn scale(&self) -> f64 { self.scale }
+
   pub fn size(&self) -> Size {
     if let Some(top) = self.stack.last() { top.size() } else { self.size }
   }

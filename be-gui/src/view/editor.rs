@@ -7,7 +7,7 @@ use be_input::Mode;
 use kurbo::{Arc, Circle, Line, Point, Rect, RoundedRect, Size, Stroke, Triangle, Vec2};
 
 use crate::{
-  CursorMode, MouseButton, MouseEvent, Render, RenderStore, TextLayout, theme::Underline,
+  CursorMode, Layout, MouseButton, MouseEvent, Render, RenderStore, TextLayout, theme::Underline,
 };
 
 pub struct EditorView {
@@ -20,10 +20,15 @@ pub struct EditorView {
   pub(crate) temporary_underline: bool,
   cached_layouts:                 HashMap<usize, TextLayout>,
   cached_scale:                   f64,
-  gutter_width:                   f64,
+
+  line_numbers:      Vec<TextLayout>,
+  line_number_width: f64,
 
   progress_animation: Animation,
 }
+
+const LINE_NUMBER_MARGIN_LEFT: f64 = 10.0;
+const LINE_NUMBER_MARGIN_RIGHT: f64 = 10.0;
 
 impl EditorView {
   pub fn new(store: &RenderStore) -> Self {
@@ -34,7 +39,9 @@ impl EditorView {
       temporary_underline: false,
       cached_layouts:      HashMap::new(),
       cached_scale:        0.0,
-      gutter_width:        0.0,
+
+      line_numbers:      vec![],
+      line_number_width: 0.0,
 
       progress_animation: Animation::linear(2.0),
     };
@@ -51,12 +58,14 @@ impl EditorView {
 
   pub fn animated(&self) -> bool { self.progress_animation.is_running() }
 
-  pub fn draw(&mut self, render: &mut Render) {
+  pub fn layout(&mut self, layout: &mut Layout) {
     puffin::profile_function!();
 
-    if self.cached_scale != render.scale() {
+    self.editor.layout();
+
+    if self.cached_scale != layout.scale() {
       self.cached_layouts.clear();
-      self.cached_scale = render.scale();
+      self.cached_scale = layout.scale();
     }
 
     if self.editor.take_damage_all() {
@@ -66,6 +75,20 @@ impl EditorView {
     for line in self.editor.take_damages() {
       self.cached_layouts.remove(&line.as_usize());
     }
+
+    let line_height = layout.store.text.font_metrics().line_height;
+
+    layout.split(
+      self,
+      kurbo::Axis::Horizontal,
+      crate::Distance::Pixels(-line_height),
+      |state, layout| state.layout_editor(layout),
+      |_, _| {},
+    );
+  }
+
+  pub fn draw(&mut self, render: &mut Render) {
+    puffin::profile_function!();
 
     let line_height = render.store.text.font_metrics().line_height;
 
@@ -107,7 +130,7 @@ impl EditorView {
             return crate::CursorKind::Default;
           };
 
-          let column_byte = layout.index(pos.x - self.gutter_width, cursor_mode);
+          let column_byte = layout.index(pos.x - self.gutter_width(), cursor_mode);
           let column = self.editor.doc().line(line).byte_slice(..column_byte).graphemes().count();
 
           self.editor.move_to(Cursor {
@@ -146,19 +169,13 @@ impl EditorView {
     crate::CursorKind::Default
   }
 
-  fn draw_editor(&mut self, render: &mut Render) {
-    render.fill(
-      &Rect::new(0.0, 0.0, render.size().width, render.size().height),
-      render.theme().background,
-    );
-
-    let line_height = render.store.text.font_metrics().line_height;
-
+  fn layout_editor(&mut self, layout: &mut Layout) {
+    let line_height = layout.store.text.font_metrics().line_height;
     let scroll_offset = self.editor.config.borrow().settings.editor.scroll_offset as usize;
 
     let min_fully_visible_row = (self.scroll.y / line_height).ceil() as usize + scroll_offset;
     let max_fully_visible_row =
-      ((self.scroll.y + render.size().height) / line_height).floor() as usize - 1 - scroll_offset;
+      ((self.scroll.y + layout.size().height) / line_height).floor() as usize - 1 - scroll_offset;
 
     if self.editor.cursor().line.as_usize() < min_fully_visible_row {
       let target_line = self
@@ -179,7 +196,7 @@ impl EditorView {
         .saturating_add(scroll_offset + 1)
         .clamp(0, self.editor.doc().rope.lines().len());
 
-      self.scroll.y = (target_line as f64 * line_height) - render.size().height;
+      self.scroll.y = (target_line as f64 * line_height) - layout.size().height;
     }
 
     let min_line = be_doc::Line(
@@ -187,7 +204,7 @@ impl EditorView {
         .clamp(0, self.editor.doc().rope.lines().len()),
     );
     let max_line = be_doc::Line(
-      (((self.scroll.y + render.size().height) / line_height).ceil() as usize)
+      (((self.scroll.y + layout.size().height) / line_height).ceil() as usize)
         .clamp(0, self.editor.doc().rope.lines().len()),
     );
 
@@ -201,60 +218,80 @@ impl EditorView {
     let mut index = start;
     let mut i = min_line.as_usize();
 
-    let mut line_numbers = vec![];
+    self.line_numbers.clear();
     // Layout the length line number by default. If `character_width` is wrong, then
     // we'll still take the `max()` below.
-    let mut line_number_width = render.store.text.font_metrics().character_width
+    self.line_number_width = layout.store.text.font_metrics().character_width
       * ((self.editor.doc().len_lines() as f64).log10().floor() + 1.0);
 
-    let start_y = -(self.scroll.y % line_height);
     while index < end {
-      if self.layout_line(render, i, index).is_none() {
+      if self.layout_line(layout, i, index).is_none() {
         break;
       };
 
       let color = if self.focused && self.editor.cursor().line.as_usize() == i {
-        render.theme().text
+        layout.theme().text
       } else {
-        render.theme().text_dim
+        layout.theme().text_dim
       };
 
       let line_number_text = (i + 1).to_string();
-      let layout = render.layout_text(&line_number_text, color);
-      line_number_width = line_number_width.max(layout.size().width);
-      line_numbers.push(layout);
+      let layout = layout.layout_text(&line_number_text, color);
+      self.line_number_width = self.line_number_width.max(layout.size().width);
+      self.line_numbers.push(layout);
 
       i += 1;
       index += self.editor.doc().rope.byte_slice(index..).raw_lines().next().unwrap().byte_len();
     }
+  }
 
-    const LINE_NUMBER_MARGIN_LEFT: f64 = 10.0;
-    const LINE_NUMBER_MARGIN_RIGHT: f64 = 10.0;
+  fn draw_editor(&mut self, render: &mut Render) {
+    render.fill(
+      &Rect::new(0.0, 0.0, render.size().width, render.size().height),
+      render.theme().background,
+    );
 
-    self.gutter_width = line_number_width + LINE_NUMBER_MARGIN_LEFT + LINE_NUMBER_MARGIN_RIGHT;
+    let line_height = render.store.text.font_metrics().line_height;
 
-    index = start;
-    i = min_line.as_usize();
+    let min_line = be_doc::Line(
+      ((self.scroll.y / line_height).floor() as usize)
+        .clamp(0, self.editor.doc().rope.lines().len()),
+    );
+    let max_line = be_doc::Line(
+      (((self.scroll.y + render.size().height) / line_height).ceil() as usize)
+        .clamp(0, self.editor.doc().rope.lines().len()),
+    );
+
+    let start_y = -(self.scroll.y % line_height);
+    let start = self.editor.doc().byte_of_line(min_line);
+    let end = if max_line.as_usize() >= self.editor.doc().len_lines() {
+      self.editor.doc().rope.byte_len()
+    } else {
+      self.editor.doc().byte_of_line(max_line + 1)
+    };
+
+    let mut index = start;
+    let mut i = min_line.as_usize();
     let mut y = start_y;
     let mut indent_guides = IndentGuides::new(
       self.editor.config.borrow().settings.editor.indent_width as usize,
       start_y,
-      self.gutter_width,
+      self.gutter_width(),
     );
     while index < end {
       indent_guides
         .visit(self.editor.guess_indent(be_doc::Line(i), be_input::VerticalDirection::Up), render);
 
-      let layout = &line_numbers[i - min_line.as_usize()];
+      let layout = &self.line_numbers[i - min_line.as_usize()];
       render.draw_text(
         layout,
-        Point::new(LINE_NUMBER_MARGIN_LEFT + line_number_width - layout.size().width, y),
+        Point::new(LINE_NUMBER_MARGIN_LEFT + self.line_number_width - layout.size().width, y),
       );
 
       let layout = self.cached_layouts.get(&i).unwrap();
-      render.draw_text(&layout, Point::new(self.gutter_width, y));
+      render.draw_text(&layout, Point::new(self.gutter_width(), y));
 
-      self.draw_trailing_spaces(i, self.gutter_width + layout.size().width, y, render);
+      self.draw_trailing_spaces(i, self.gutter_width() + layout.size().width, y, render);
 
       y += line_height;
       i += 1;
@@ -271,7 +308,10 @@ impl EditorView {
 
       let cursor = layout
         .cursor(self.editor.doc().cursor_column_offset(self.editor.cursor()), mode)
-        + Vec2::new(self.gutter_width, start_y + (line - min_line.as_usize()) as f64 * line_height);
+        + Vec2::new(
+          self.gutter_width(),
+          start_y + (line - min_line.as_usize()) as f64 * line_height,
+        );
       if self.focused {
         render.fill(&cursor.ceil(), render.theme().text);
       } else {
@@ -486,7 +526,7 @@ impl EditorView {
 
   fn layout_line(
     &mut self,
-    render: &mut Render,
+    layout: &mut Layout,
     i: usize,
     index: usize,
   ) -> Option<&mut TextLayout> {
@@ -499,9 +539,9 @@ impl EditorView {
     let max_index = index + line.byte_len();
 
     let line_string = line.to_string();
-    let theme = &render.store.theme;
-    let mut layout =
-      render.store.text.layout_builder(&line_string, render.theme().text, render.scale());
+    let theme = &layout.store.theme;
+    let mut text_layout =
+      layout.store.text.layout_builder(&line_string, layout.theme().text, layout.scale());
 
     let highlights = self.editor.highlights(index..max_index);
     let mut prev = index;
@@ -522,20 +562,20 @@ impl EditorView {
       if let Some(highlight) = theme.syntax.lookup(&highlight.highlights) {
         let range = prev - index..pos - index;
         if let Some(foreground) = highlight.foreground {
-          layout.color_range(range.clone(), foreground);
+          text_layout.color_range(range.clone(), foreground);
         }
         if let Some(weight) = highlight.weight {
-          layout.apply(range.clone(), parley::StyleProperty::FontWeight(weight.to_parley()));
+          text_layout.apply(range.clone(), parley::StyleProperty::FontWeight(weight.to_parley()));
         }
         if let Some(underline) = highlight.underline {
-          layout.apply(range.clone(), parley::StyleProperty::Underline(true));
+          text_layout.apply(range.clone(), parley::StyleProperty::Underline(true));
 
           if let Underline::Color(c) = underline {
-            layout.apply(range.clone(), parley::StyleProperty::UnderlineBrush(Some(c.into())));
+            text_layout.apply(range.clone(), parley::StyleProperty::UnderlineBrush(Some(c.into())));
           }
         }
         if let Some(background) = highlight.background {
-          layout.background(range.clone(), background);
+          text_layout.background(range.clone(), background);
         }
       }
 
@@ -546,10 +586,10 @@ impl EditorView {
       prev = pos;
     }
 
-    let (layout, backgrounds) = layout.build(&line_string);
-    let layout = render.build_layout(layout, backgrounds);
+    let (text_layout, backgrounds) = text_layout.build(&line_string);
+    let text_layout = layout.build_layout(text_layout, backgrounds);
 
-    Some(entry.insert(layout))
+    Some(entry.insert(text_layout))
   }
 
   fn cursor_mode(&self) -> Option<CursorMode> {
@@ -560,6 +600,10 @@ impl EditorView {
       Mode::Replace => Some(CursorMode::Underline),
       Mode::Command => None,
     }
+  }
+
+  fn gutter_width(&self) -> f64 {
+    self.line_number_width + LINE_NUMBER_MARGIN_LEFT + LINE_NUMBER_MARGIN_RIGHT
   }
 }
 

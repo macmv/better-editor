@@ -62,7 +62,7 @@ impl View {
 
   pub fn layout(&mut self, layout: &mut Layout) {
     match &mut self.content {
-      ViewContent::Editor(editor) => editor.editor.layout(),
+      ViewContent::Editor(editor) => editor.layout(layout),
       ViewContent::FileTree(_) => {}
       ViewContent::Terminal(terminal) => terminal.layout(layout),
     }
