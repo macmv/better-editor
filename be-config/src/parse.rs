@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{collections::HashSet, fmt};
 
 use toml::de::{DeTable, DeValue};
 
@@ -31,8 +31,10 @@ pub(crate) struct Parser {
 }
 
 pub(crate) trait ParseTable {
-  /// Sets the key from a table entry. Returns `true` if the key was valid, and
-  /// `false` if the struct does not respond to the given key.
+  /// Returns all keys that are required.
+  fn required_keys() -> &'static [&'static str];
+  /// Sets the key from a table entry. Returns `true` if the struct was
+  /// modified, and `false` if the struct does not respond to the given key.
   fn set_key(&mut self, key: &str, value: DeValue, de: &mut Parser) -> bool;
 }
 
@@ -70,11 +72,18 @@ impl Parser {
 
   pub fn table<T: Default + ParseTable>(&mut self, table: DeTable) -> T {
     let mut res = T::default();
+    let mut required = HashSet::<&str>::from_iter(T::required_keys().iter().copied());
 
     for (k, v) in table {
+      required.remove(&**k.get_ref());
+
       if !res.set_key(k.get_ref(), v.into_inner(), self) {
         self.warn(format!("unknown key: {}", k.get_ref()), k.span());
       }
+    }
+
+    for key in required {
+      self.error(format!("missing key: '{}'", key), 0..0); // todo: bah this library is bad
     }
 
     res
@@ -97,6 +106,14 @@ impl Parser {
         None
       }
     }
+  }
+
+  fn error(&mut self, title: String, span: std::ops::Range<usize>) {
+    self.diagnostics.push(Diagnostic {
+      title,
+      line: span.start as u32,
+      level: DiagnosticLevel::Error,
+    })
   }
 
   fn warn(&mut self, title: String, span: std::ops::Range<usize>) {
@@ -160,6 +177,8 @@ mod tests {
   }
 
   impl ParseTable for Foo {
+    fn required_keys() -> &'static [&'static str] { &["a", "b", "nested"] }
+
     fn set_key(&mut self, key: &str, value: DeValue, de: &mut Parser) -> bool {
       match key {
         "a" => self.a = de.value(value),
@@ -173,6 +192,8 @@ mod tests {
   }
 
   impl ParseTable for Bar {
+    fn required_keys() -> &'static [&'static str] { &["c"] }
+
     fn set_key(&mut self, key: &str, value: DeValue, de: &mut Parser) -> bool {
       match key {
         "c" => self.c = de.value(value),
