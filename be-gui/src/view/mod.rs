@@ -1,7 +1,7 @@
 use be_input::{Action, Mode};
 use kurbo::{Rect, Size};
 
-use crate::{Layout, Render, Widget};
+use crate::{Layout, Render, RenderStore, Widget};
 
 mod command;
 mod editor;
@@ -113,10 +113,10 @@ impl View {
   pub(crate) fn on_mouse(
     &mut self,
     ev: &crate::MouseEvent,
-    scale: f64,
+    store: &RenderStore,
   ) -> Option<crate::CursorKind> {
     match &mut self.content {
-      ViewContent::Editor(editor) => Some(editor.on_mouse(ev, scale)),
+      ViewContent::Editor(editor) => Some(editor.on_mouse(ev, store)),
       ViewContent::FileTree(_) => None,
       ViewContent::Terminal(_) => None,
     }

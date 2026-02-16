@@ -15,7 +15,7 @@ mod stack;
 pub use button::Button;
 pub use stack::{Align, Justify, Stack};
 
-use crate::{CursorKind, Layout, MouseEvent, Render, WidgetId, WidgetPath};
+use crate::{CursorKind, Layout, MouseEvent, Render, RenderStore, WidgetId, WidgetPath};
 
 pub struct WidgetStore {
   pub content: Box<dyn Widget>,
@@ -224,7 +224,12 @@ impl WidgetCollection {
     id
   }
 
-  pub(crate) fn on_mouse(&mut self, ev: &MouseEvent, size: Size, _scale: f64) -> CursorKind {
+  pub(crate) fn on_mouse(
+    &mut self,
+    ev: &MouseEvent,
+    size: Size,
+    _store: &RenderStore,
+  ) -> CursorKind {
     match *ev {
       MouseEvent::Move { pos } => {
         let Some(new_path) = self.hit_widgets(pos, size) else { return CursorKind::Default };

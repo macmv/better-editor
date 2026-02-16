@@ -209,20 +209,20 @@ impl State {
     }
   }
 
-  fn on_mouse(&mut self, ev: MouseEvent, size: kurbo::Size, scale: f64) -> CursorKind {
+  fn on_mouse(&mut self, ev: MouseEvent, size: kurbo::Size, store: &RenderStore) -> CursorKind {
     match ev {
       MouseEvent::Move { pos } => {
         let new_view = self.hit_view(pos, size);
         match (self.current_hover, new_view) {
           (Some(old), Some(new)) if old != new => {
-            self.send_mouse_event(old, &MouseEvent::Leave, size, scale);
-            self.send_mouse_event(new, &MouseEvent::Enter, size, scale);
+            self.send_mouse_event(old, &MouseEvent::Leave, size, store);
+            self.send_mouse_event(new, &MouseEvent::Enter, size, store);
           }
           (Some(old), None) => {
-            self.send_mouse_event(old, &MouseEvent::Leave, size, scale);
+            self.send_mouse_event(old, &MouseEvent::Leave, size, store);
           }
           (None, Some(new)) => {
-            self.send_mouse_event(new, &MouseEvent::Enter, size, scale);
+            self.send_mouse_event(new, &MouseEvent::Enter, size, store);
           }
           _ => {}
         }
@@ -232,7 +232,7 @@ impl State {
 
       MouseEvent::Leave => {
         if let Some(old) = self.current_hover {
-          self.send_mouse_event(old, &MouseEvent::Leave, size, scale);
+          self.send_mouse_event(old, &MouseEvent::Leave, size, store);
           self.current_hover = None;
         }
       }
@@ -241,7 +241,7 @@ impl State {
     }
 
     if let Some(current) = self.current_hover {
-      self.send_mouse_event(current, &ev, size, scale).unwrap_or(CursorKind::Default)
+      self.send_mouse_event(current, &ev, size, store).unwrap_or(CursorKind::Default)
     } else {
       CursorKind::Default
     }
@@ -252,18 +252,18 @@ impl State {
     id: ViewId,
     ev: &MouseEvent,
     size: kurbo::Size,
-    scale: f64,
+    store: &RenderStore,
   ) -> Option<CursorKind> {
     match id {
       ViewId::TABS => {
         if let Some(ev) = ev.within(&Rect::new(0.0, size.height - 25.0, size.width, size.height)) {
-          return Some(self.tab_layout.on_mouse(&ev, size, scale));
+          return Some(self.tab_layout.on_mouse(&ev, size, store));
         }
       }
       _ => {
         let view = self.views.get_mut(id)?;
         if let Some(ev) = ev.within(&view.bounds) {
-          return view.on_mouse(&ev, scale);
+          return view.on_mouse(&ev, store);
         }
       }
     }

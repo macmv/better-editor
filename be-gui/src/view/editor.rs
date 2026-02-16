@@ -75,7 +75,7 @@ impl EditorView {
 
   pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
 
-  pub fn on_mouse(&self, _ev: &crate::MouseEvent, _scale: f64) -> crate::CursorKind {
+  pub fn on_mouse(&self, _ev: &crate::MouseEvent, _store: &RenderStore) -> crate::CursorKind {
     crate::CursorKind::Default
   }
 
