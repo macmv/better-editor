@@ -224,15 +224,17 @@ impl WidgetCollection {
     id
   }
 
-  pub(crate) fn on_mouse(&mut self, ev: MouseEvent, size: Size, _scale: f64) -> CursorKind {
-    match ev {
+  pub(crate) fn on_mouse(&mut self, ev: &MouseEvent, size: Size, _scale: f64) -> CursorKind {
+    match *ev {
       MouseEvent::Move { pos } => {
         let Some(new_path) = self.hit_widgets(pos, size) else { return CursorKind::Default };
 
         self.hover_path(new_path);
 
         for w in self.hover_path.iter().rev() {
-          if let Some(w) = self.widgets.get_mut(w) {
+          if let Some(w) = self.widgets.get_mut(w)
+            && let Some(ev) = ev.within(&w.bounds)
+          {
             w.content.on_mouse(&ev);
           }
         }
@@ -245,7 +247,10 @@ impl WidgetCollection {
         let Some(path) = self.hit_widgets(pos, size) else { return CursorKind::Default };
 
         for w in path.iter().rev() {
-          self.widgets.get_mut(w).unwrap().content.on_mouse(&ev);
+          let widget = self.widgets.get_mut(w).unwrap();
+          if let Some(ev) = ev.within(&widget.bounds) {
+            widget.content.on_mouse(&ev)
+          }
         }
       }
     }
@@ -277,11 +282,6 @@ impl WidgetCollection {
   /// Returns a list of all widgets hit by the given point. Parents are returned
   /// first.
   fn hit_widgets(&self, pos: Point, size: Size) -> Option<Vec<WidgetId>> {
-    if !self.bounds.contains(pos) {
-      return None;
-    }
-    let pos = pos - self.bounds.origin().to_vec2();
-
     let mut path = vec![];
 
     if let Some(root) = self.root {

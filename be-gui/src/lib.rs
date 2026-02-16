@@ -59,7 +59,7 @@ pub enum MouseEvent {
   Scroll { pos: Point, axis: kurbo::Axis, delta: f64 },
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum MouseButton {
   Left,
   Middle,
@@ -198,14 +198,14 @@ impl State {
         let new_view = self.hit_view(pos, size);
         match (self.current_hover, new_view) {
           (Some(old), Some(new)) if old != new => {
-            self.send_mouse_event(old, MouseEvent::Leave, size, scale);
-            self.send_mouse_event(new, MouseEvent::Enter, size, scale);
+            self.send_mouse_event(old, &MouseEvent::Leave, size, scale);
+            self.send_mouse_event(new, &MouseEvent::Enter, size, scale);
           }
           (Some(old), None) => {
-            self.send_mouse_event(old, MouseEvent::Leave, size, scale);
+            self.send_mouse_event(old, &MouseEvent::Leave, size, scale);
           }
           (None, Some(new)) => {
-            self.send_mouse_event(new, MouseEvent::Enter, size, scale);
+            self.send_mouse_event(new, &MouseEvent::Enter, size, scale);
           }
           _ => {}
         }
@@ -217,14 +217,14 @@ impl State {
 
       MouseEvent::Leave => {
         if let Some(old) = self.current_hover {
-          self.send_mouse_event(old, MouseEvent::Leave, size, scale);
+          self.send_mouse_event(old, &MouseEvent::Leave, size, scale);
           self.current_hover = None;
         }
       }
     }
 
     if let Some(current) = self.current_hover {
-      self.send_mouse_event(current, ev, size, scale).unwrap_or(CursorKind::Default)
+      self.send_mouse_event(current, &ev, size, scale).unwrap_or(CursorKind::Default)
     } else {
       CursorKind::Default
     }
@@ -233,14 +233,25 @@ impl State {
   fn send_mouse_event(
     &mut self,
     id: ViewId,
-    ev: MouseEvent,
+    ev: &MouseEvent,
     size: kurbo::Size,
     scale: f64,
   ) -> Option<CursorKind> {
     match id {
-      ViewId::TABS => Some(self.tab_layout.on_mouse(ev, size, scale)),
-      _ => self.views.get_mut(id)?.on_mouse(ev, size, scale),
+      ViewId::TABS => {
+        if let Some(ev) = ev.within(&Rect::new(0.0, size.height - 25.0, size.width, size.height)) {
+          return Some(self.tab_layout.on_mouse(&ev, size, scale));
+        }
+      }
+      _ => {
+        let view = self.views.get_mut(id)?;
+        if let Some(ev) = ev.within(&view.bounds) {
+          return view.on_mouse(&ev, scale);
+        }
+      }
     }
+
+    None
   }
 
   fn animated(&self) -> bool { self.tabs[self.active].content.animated(&self.views.views) }
@@ -505,5 +516,35 @@ impl ViewCollection {
 
   pub fn visible_mut(&mut self) -> impl Iterator<Item = &mut View> {
     self.views.values_mut().filter(|v| v.visible())
+  }
+}
+
+impl MouseEvent {
+  pub fn within(&self, bounds: &Rect) -> Option<MouseEvent> {
+    match *self {
+      MouseEvent::Move { pos } => {
+        if bounds.contains(pos) {
+          Some(MouseEvent::Move { pos: pos - bounds.origin().to_vec2() })
+        } else {
+          None
+        }
+      }
+      MouseEvent::Button { pos, pressed, button } => {
+        if bounds.contains(pos) {
+          Some(MouseEvent::Button { pos: pos - bounds.origin().to_vec2(), pressed, button })
+        } else {
+          None
+        }
+      }
+      MouseEvent::Scroll { pos, axis, delta } => {
+        if bounds.contains(pos) {
+          Some(MouseEvent::Scroll { pos: pos - bounds.origin().to_vec2(), axis, delta })
+        } else {
+          None
+        }
+      }
+      MouseEvent::Enter => Some(MouseEvent::Enter),
+      MouseEvent::Leave => Some(MouseEvent::Leave),
+    }
   }
 }
