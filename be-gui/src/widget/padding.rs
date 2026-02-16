@@ -1,6 +1,9 @@
 use kurbo::{Rect, Size};
 
-use crate::{Widget, WidgetId, widget::Borders};
+use crate::{
+  Widget, WidgetId,
+  widget::{Borders, LayoutCtx},
+};
 
 #[allow(unused)]
 pub struct Padding {
@@ -15,7 +18,7 @@ impl Padding {
 }
 
 impl Widget for Padding {
-  fn layout(&mut self, layout: &mut crate::Layout) -> Option<kurbo::Size> {
+  fn layout(&mut self, layout: &mut LayoutCtx) -> Option<kurbo::Size> {
     let size = layout.layout_widget(self.inner);
     layout.set_bounds(
       self.inner,
