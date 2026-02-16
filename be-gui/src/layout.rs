@@ -1,6 +1,6 @@
 use kurbo::{Axis, Point, Rect, Size, Vec2};
 
-use crate::{Color, Distance, Notify, RenderStore, TextLayout, ViewId, WidgetPath, theme::Theme};
+use crate::{Color, Distance, Notify, RenderStore, TextLayout, ViewId, theme::Theme};
 
 pub struct Layout<'a> {
   pub store: &'a mut RenderStore,
@@ -8,9 +8,7 @@ pub struct Layout<'a> {
   scale: f64,
   size:  Size,
 
-  stack:   Vec<Rect>,
-  path:    WidgetPath,
-  next_id: u32,
+  stack: Vec<Rect>,
 
   pub active:   Option<ViewId>,
   pub to_close: Vec<ViewId>,
@@ -18,16 +16,7 @@ pub struct Layout<'a> {
 
 impl<'a> Layout<'a> {
   pub fn new(store: &'a mut RenderStore, scale: f64, size: Size) -> Self {
-    Self {
-      store,
-      scale,
-      size,
-      stack: vec![],
-      path: WidgetPath(vec![]),
-      next_id: 0,
-      active: None,
-      to_close: vec![],
-    }
+    Self { store, scale, size, stack: vec![], active: None, to_close: vec![] }
   }
 
   pub fn size(&self) -> Size {
@@ -86,12 +75,9 @@ impl<'a> Layout<'a> {
 
     let scaled_rect = rect.scale_from_origin(self.scale).round();
     self.stack.push(scaled_rect.scale_from_origin(1.0 / self.scale));
-    self.path.0.push(self.next_id);
-    self.next_id = 0;
 
     let ret = f(self);
 
-    self.next_id = self.path.0.pop().expect("no clip layer to pop");
     self.stack.pop();
 
     ret
