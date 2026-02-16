@@ -111,12 +111,16 @@ impl View {
   }
 
   pub(crate) fn on_mouse(
-    &self,
+    &mut self,
     ev: crate::MouseEvent,
     size: Size,
     scale: f64,
   ) -> Option<crate::CursorKind> {
-    None
+    match &mut self.content {
+      ViewContent::Editor(editor) => Some(editor.on_mouse(ev, size, scale)),
+      ViewContent::FileTree(_) => None,
+      ViewContent::Terminal(_) => None,
+    }
   }
 }
 
