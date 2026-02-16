@@ -264,22 +264,18 @@ impl EditorView {
     let line_height = render.store.text.font_metrics().line_height;
 
     let start_y = -(self.scroll.y % line_height);
-    let start = self.editor.doc().byte_of_line(self.min_line);
-    let end = if self.max_line.as_usize() >= self.editor.doc().len_lines() {
-      self.editor.doc().rope.byte_len()
-    } else {
-      self.editor.doc().byte_of_line(self.max_line + 1)
-    };
 
-    let mut index = start;
-    let mut i = self.min_line.as_usize();
     let mut y = start_y;
     let mut indent_guides = IndentGuides::new(
       self.editor.config.borrow().settings.editor.indent_width as usize,
       start_y,
       self.gutter_width(),
     );
-    while index < end {
+    for i in self.min_line.as_usize()..=self.max_line.as_usize() {
+      if self.cached_layouts.get(&i).is_none() {
+        break;
+      }
+
       indent_guides
         .visit(self.editor.guess_indent(be_doc::Line(i), be_input::VerticalDirection::Up), render);
 
@@ -295,8 +291,6 @@ impl EditorView {
       self.draw_trailing_spaces(i, self.gutter_width() + layout.size().width, y, render);
 
       y += line_height;
-      i += 1;
-      index += self.editor.doc().rope.byte_slice(index..).raw_lines().next().unwrap().byte_len();
     }
 
     self.draw_change_gutter(start_y, render);
