@@ -135,14 +135,16 @@ impl EditorView {
             return crate::CursorKind::Default;
           };
 
-          let column_byte = layout.index(pos.x - self.gutter_width(), cursor_mode);
-          let column = self.editor.doc().line(line).byte_slice(..column_byte).graphemes().count();
+          if pos.x >= self.gutter_width() {
+            let column_byte = layout.index(pos.x - self.gutter_width(), cursor_mode);
+            let column = self.editor.doc().line(line).byte_slice(..column_byte).graphemes().count();
 
-          self.editor.move_to(Cursor {
-            line,
-            column: be_doc::Column(column),
-            target_column: be_doc::VisualColumn(0), // NB: Replaced in `move_to`.
-          });
+            self.editor.move_to(Cursor {
+              line,
+              column: be_doc::Column(column),
+              target_column: be_doc::VisualColumn(0), // NB: Replaced in `move_to`.
+            });
+          }
         }
       }
 
