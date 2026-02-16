@@ -122,11 +122,31 @@ impl EditorView {
     let line_height = store.text.font_metrics().line_height;
 
     match ev {
+      MouseEvent::Move { pos } => {
+        if pos.y >= size.height - line_height {
+          // status bar
+        } else {
+          let Some(line) = self.line_for_mouse(store, pos.y) else {
+            return crate::CursorKind::Default;
+          };
+          if pos.x < self.gutter_width() {
+            if pos.x < 4.0
+              && let Some(()) = self.change_gutter_for_line(line)
+            {
+              // TODO: Show the gutter in a popup when clicked.
+              return crate::CursorKind::Pointer;
+            }
+          }
+        }
+      }
+
       MouseEvent::Button { pos, pressed: true, button: MouseButton::Left } => {
         if pos.y >= size.height - line_height {
           // status bar
         } else {
-          let line = self.line_for_mouse(store, pos.y);
+          let line = self.line_for_mouse(store, pos.y).unwrap_or_else(|| {
+            be_doc::Line(self.editor.doc().rope.lines().len().saturating_sub(1))
+          });
           let Some(layout) = self.cached_layouts.get(&line.0) else {
             return crate::CursorKind::Default;
           };
@@ -176,14 +196,12 @@ impl EditorView {
     crate::CursorKind::Default
   }
 
-  fn line_for_mouse(&self, store: &RenderStore, y: f64) -> be_doc::Line {
+  fn line_for_mouse(&self, store: &RenderStore, y: f64) -> Option<be_doc::Line> {
     let line_height = store.text.font_metrics().line_height;
 
     let line_region_y = self.scroll.y + y;
-    be_doc::Line(
-      ((line_region_y / line_height).floor() as usize)
-        .clamp(0, self.editor.doc().rope.lines().len().saturating_sub(1)),
-    )
+    let line = (line_region_y / line_height).floor() as usize;
+    if line < self.editor.doc().rope.lines().len() { Some(be_doc::Line(line)) } else { None }
   }
 
   fn layout_editor(&mut self, layout: &mut Layout) {
@@ -456,6 +474,10 @@ impl EditorView {
         }
       }
     }
+  }
+
+  fn change_gutter_for_line(&self, line: be_doc::Line) -> Option<()> {
+    self.editor.changes.as_ref()?.hunk_for_line(line).map(|_| ())
   }
 
   fn draw_completions(&mut self, cursor: Rect, render: &mut Render) {

@@ -87,6 +87,20 @@ impl LineDiffSimilarity {
       .rfind(|h| h.after.start < from.as_usize())
       .map(|h| be_doc::Line(h.after.start))
   }
+
+  pub fn hunk_for_line(&self, line: be_doc::Line) -> Option<&LineHunkSimilarity> {
+    self
+      .hunks
+      .binary_search_by(|h| {
+        if line.as_usize() >= h.after.start && line.as_usize() < h.after.end {
+          std::cmp::Ordering::Equal
+        } else {
+          h.after.start.cmp(&line.as_usize())
+        }
+      })
+      .ok()
+      .map(|i| &self.hunks[i])
+  }
 }
 
 impl LineHunk {
