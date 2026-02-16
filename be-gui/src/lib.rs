@@ -144,7 +144,7 @@ impl State {
   }
 
   fn layout(&mut self, layout: &mut Layout) {
-    let tabs = self.layout_tabs(layout);
+    let _tabs = self.layout_tabs(layout);
     let main = layout
       .add_widget_with_key(
         || crate::widget::Button::new(&self.active.to_string()),
@@ -152,13 +152,7 @@ impl State {
       )
       .id;
 
-    let root = layout
-      .add_widget(|| {
-        crate::widget::Split::new(Axis::Horizontal, Distance::Pixels(-25.0), main, tabs)
-      })
-      .id;
-
-    layout.store.widgets.root = Some(root);
+    layout.store.widgets.root = Some(main);
 
     layout.split(
       self,
