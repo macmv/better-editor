@@ -73,8 +73,7 @@ pub enum MouseEvent {
   /// It is simply passed for convenience.
   Scroll {
     pos:   Point,
-    axis:  kurbo::Axis,
-    delta: f64,
+    delta: kurbo::Vec2,
   },
 }
 
@@ -553,9 +552,9 @@ impl MouseEvent {
           None
         }
       }
-      MouseEvent::Scroll { pos, axis, delta } => {
+      MouseEvent::Scroll { pos, delta } => {
         if bounds.contains(pos) {
-          Some(MouseEvent::Scroll { pos: pos - bounds.origin().to_vec2(), axis, delta })
+          Some(MouseEvent::Scroll { pos: pos - bounds.origin().to_vec2(), delta })
         } else {
           None
         }

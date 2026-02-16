@@ -1,5 +1,5 @@
 use be_input::{Key, KeyStroke};
-use kurbo::Point;
+use kurbo::{Point, Vec2};
 use winit::{
   event::WindowEvent,
   event_loop::{self, ActiveEventLoop},
@@ -215,6 +215,30 @@ impl winit::application::ApplicationHandler<Event> for App {
                 winit::event::ElementState::Released => false,
               },
               button,
+            },
+            size,
+            &init.app.store,
+          );
+          init.window.request_redraw();
+        }
+      }
+
+      WindowEvent::MouseWheel { delta, .. } => {
+        if let Some(init) = &mut self.init
+          && let Some(cursor) = init.cursor
+        {
+          let size = kurbo::Size::new(
+            init.app.texture.width() as f64 / init.scale,
+            init.app.texture.height() as f64 / init.scale,
+          );
+
+          init.app.state.on_mouse(
+            MouseEvent::Scroll {
+              pos:   cursor,
+              delta: match delta {
+                winit::event::MouseScrollDelta::LineDelta(x, y) => Vec2::new(x as f64, y as f64),
+                winit::event::MouseScrollDelta::PixelDelta(pos) => Vec2::new(pos.x, pos.y),
+              },
             },
             size,
             &init.app.store,
