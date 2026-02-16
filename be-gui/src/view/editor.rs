@@ -5,7 +5,7 @@ use be_editor::{CommandMode, EditorState, IndentLevel};
 use be_input::Mode;
 use kurbo::{Arc, Circle, Line, Point, Rect, RoundedRect, Stroke, Triangle, Vec2};
 
-use crate::{CursorMode, Render, RenderStore, TextLayout, Widget, theme::Underline};
+use crate::{CursorMode, Render, RenderStore, TextLayout, theme::Underline};
 
 pub struct EditorView {
   pub editor: EditorState,
@@ -45,10 +45,8 @@ impl EditorView {
   }
 
   pub fn animated(&self) -> bool { self.progress_animation.is_running() }
-}
 
-impl Widget for EditorView {
-  fn draw(&mut self, render: &mut Render) {
+  pub fn draw(&mut self, render: &mut Render) {
     puffin::profile_function!();
 
     if self.cached_scale != render.scale() {
@@ -75,10 +73,8 @@ impl Widget for EditorView {
     );
   }
 
-  fn on_focus(&mut self, focus: bool) { self.focused = focus; }
-}
+  pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
 
-impl EditorView {
   fn draw_editor(&mut self, render: &mut Render) {
     render.fill(
       &Rect::new(0.0, 0.0, render.size().width, render.size().height),

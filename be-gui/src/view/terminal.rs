@@ -4,7 +4,7 @@ use kurbo::{Rect, Stroke};
 use parley::FontWeight;
 use peniko::color::AlphaColor;
 
-use crate::{Color, Layout, Render, TextLayout, Widget, oklch, theme::Theme};
+use crate::{Color, Layout, Render, TextLayout, oklch, theme::Theme};
 
 pub struct TerminalView {
   terminal:  Terminal,
@@ -82,10 +82,8 @@ impl TerminalView {
     self.terminal.set_size(self.size);
     self.terminal.update();
   }
-}
 
-impl Widget for TerminalView {
-  fn draw(&mut self, render: &mut Render) {
+  pub fn draw(&mut self, render: &mut Render) {
     puffin::profile_function!();
 
     if self.cached_scale != render.scale() {
@@ -143,10 +141,8 @@ impl Widget for TerminalView {
     }
   }
 
-  fn on_focus(&mut self, focus: bool) { self.focused = focus; }
-}
+  pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
 
-impl TerminalView {
   fn layout_line(&mut self, render: &mut Render, i: usize) -> Option<&mut LineLayout> {
     if self.cached_layouts.len() < i {
       return Some(&mut self.cached_layouts[i]);
