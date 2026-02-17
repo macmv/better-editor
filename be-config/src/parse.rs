@@ -57,19 +57,19 @@ where
   }
 }
 
+pub fn parse<T: Default + ParseTable>(content: &str) -> ParseResult<T> {
+  let mut parser = Parser { diagnostics: vec![] };
+
+  let value = if let Some(table) = parser.check(DeTable::parse(content)) {
+    parser.table(table.into_inner())
+  } else {
+    T::default()
+  };
+
+  ParseResult { value, diagnostics: parser.diagnostics }
+}
+
 impl Parser {
-  pub fn parse<T: Default + ParseTable>(content: &str) -> ParseResult<T> {
-    let mut parser = Parser { diagnostics: vec![] };
-
-    let value = if let Some(table) = parser.check(DeTable::parse(content)) {
-      parser.table(table.into_inner())
-    } else {
-      T::default()
-    };
-
-    ParseResult { value, diagnostics: parser.diagnostics }
-  }
-
   pub fn table<T: Default + ParseTable>(&mut self, table: DeTable) -> T {
     let mut res = T::default();
     let mut required = HashSet::<&str>::from_iter(T::required_keys().iter().copied());
@@ -180,7 +180,7 @@ mod tests {
 
   #[test]
   fn foo() {
-    let res = Parser::parse::<Foo>("a = 1\nb = \"foo\"\n[nested]\nc = 3");
+    let res = parse::<Foo>("a = 1\nb = \"foo\"\n[nested]\nc = 3");
     assert_eq!(res.value.a, 1);
     assert_eq!(res.value.b, "foo");
     assert_eq!(res.value.nested.c, 3);
