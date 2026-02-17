@@ -202,10 +202,12 @@ impl EditorState {
   }
 
   pub(crate) fn lsp_request_completions(&mut self) {
-    let tasks = self.lsp.client.send(&command::Completion {
-      path:   self.file.as_ref().unwrap().path().to_path_buf(),
-      cursor: self.cursor,
-    });
+    let Some(file) = &self.file else { return };
+
+    let tasks = self
+      .lsp
+      .client
+      .send(&command::Completion { path: file.path().to_path_buf(), cursor: self.cursor });
     self.lsp.completions.clear_on_message = true;
     self.lsp.completions.tasks = tasks;
   }
@@ -239,8 +241,10 @@ impl EditorState {
   pub fn active_completion(&self) -> Option<usize> { self.lsp.completions.active }
 
   pub(crate) fn lsp_request_goto_definition(&mut self) {
+    let Some(file) = &self.file else { return };
+
     let task = self.lsp.client.send_first_capable(&command::GotoDefinition {
-      path:   self.file.as_ref().unwrap().path().to_path_buf(),
+      path:   file.path().to_path_buf(),
       cursor: self.cursor,
     });
 
