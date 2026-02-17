@@ -485,6 +485,7 @@ impl EditorView {
 
   fn draw_completions(&mut self, cursor: Rect, render: &mut Render) {
     let line_height = render.store.text.font_metrics().line_height;
+    let active = self.editor.active_completion();
 
     if let Some(completions) = self.editor.completions() {
       let layouts = completions
@@ -541,7 +542,14 @@ impl EditorView {
       );
       render.fill(&RoundedRect::from_rect(rect, MARGIN_Y), render.theme().background_raised);
 
-      for layout in layouts {
+      for (i, layout) in layouts.iter().enumerate() {
+        if active == Some(i) {
+          render.fill(
+            &Rect::from_origin_size(Point::new(start_x, y), Size::new(inner_width, line_height)),
+            render.theme().background_raised_outline,
+          );
+        }
+
         render.draw_text(&layout, (start_x, y));
         y += line_height;
       }

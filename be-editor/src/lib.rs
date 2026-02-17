@@ -332,6 +332,7 @@ impl EditorState {
       Action::Move { count: _, m } => self.perform_move(m),
       Action::Edit { count: _, e } => self.perform_edit(e),
       Action::Autocomplete => self.perform_autocomplete(),
+      Action::MoveCompletion { next } => self.move_completion(next),
       Action::Navigate { nav } => error!("unhandled navigate passed to editor: {nav:?}"),
       Action::Control { .. } => {} // only really used for the terminal
     }

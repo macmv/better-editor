@@ -11,6 +11,7 @@ pub enum Action {
   Control { char: char },
   Navigate { nav: Navigation },
   Autocomplete,
+  MoveCompletion { next: bool },
 }
 
 #[derive(Debug)]
@@ -120,6 +121,8 @@ impl Action {
         }
 
         (Mode::Insert, Key::Char(' ')) if key.control => Ok(Action::Autocomplete),
+        (Mode::Insert, Key::Char('p')) if key.control => Ok(Action::MoveCompletion { next: false }),
+        (Mode::Insert, Key::Char('n')) if key.control => Ok(Action::MoveCompletion { next: true }),
         (Mode::Insert, Key::Char(c)) if key.control => Ok(Action::Control { char: c }),
 
         (Mode::Insert | Mode::Command, Key::Char(c)) => e!(Insert(c)),

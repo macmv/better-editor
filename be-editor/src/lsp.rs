@@ -30,6 +30,7 @@ pub struct CompletionsState {
   clear_on_message: bool,
 
   visible_completions: Vec<String>,
+  active:              Option<usize>,
 }
 
 pub struct SaveTask {
@@ -208,6 +209,34 @@ impl EditorState {
     self.lsp.completions.clear_on_message = true;
     self.lsp.completions.tasks = tasks;
   }
+
+  pub(crate) fn move_completion(&mut self, next: bool) {
+    if !self.lsp.completions.show || self.lsp.completions.visible_completions.is_empty() {
+      return;
+    }
+
+    let max = self.lsp.completions.visible_completions.len() - 1;
+
+    if let Some(active) = &mut self.lsp.completions.active {
+      if next {
+        if *active == max {
+          *active = 0;
+        } else {
+          *active += 1;
+        }
+      } else {
+        if *active == 0 {
+          *active = max;
+        } else {
+          *active -= 1;
+        }
+      }
+    } else {
+      self.lsp.completions.active = Some(if next { 0 } else { max });
+    }
+  }
+
+  pub fn active_completion(&self) -> Option<usize> { self.lsp.completions.active }
 
   pub(crate) fn lsp_request_goto_definition(&mut self) {
     let task = self.lsp.client.send_first_capable(&command::GotoDefinition {
