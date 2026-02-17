@@ -1,5 +1,5 @@
 display-name = "Markdown"
 extensions = ["md"]
 
-[tree-sitter]
-repo = "https://github.com/tree-sitter-grammars/tree-sitter-markdown"
+#[tree-sitter]
+#repo = "https://github.com/tree-sitter-grammars/tree-sitter-markdown"
