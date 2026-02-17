@@ -241,18 +241,30 @@ impl Document {
   /// Returns the line of the given byte.
   #[track_caller]
   pub fn line_of_byte(&self, mut byte: usize) -> Line {
-    byte = self.clamp_inclusive(byte);
+    let len = self.rope.byte_len();
+    if len == 0 {
+      return Line(0);
+    }
+    if byte > len {
+      fatal!("byte {} is out of bounds", byte);
+      byte = len;
+    }
+    if byte == len {
+      return Line(self.len_lines().saturating_sub(1));
+    }
 
     // NB: `crop::line_of_byte` panics on non-char boundaries, so advance to the
     // next char.
-    while !self.rope.is_char_boundary(byte) {
+    while byte < len && !self.rope.is_char_boundary(byte) {
       fatal!("byte {} is not a char boundary", byte);
       byte += 1;
     }
 
-    byte = self.clamp_inclusive(byte);
-
-    Line(self.rope.line_of_byte(byte))
+    if byte >= len {
+      Line(self.len_lines().saturating_sub(1))
+    } else {
+      Line(self.rope.line_of_byte(byte))
+    }
   }
 
   #[track_caller]
