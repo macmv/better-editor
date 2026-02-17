@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use crate::parse::ParseResult;
 
+use be_config_macros::Config;
+
 trait Partial {
   type Partial;
   fn replace_with(&mut self, partial: Self::Partial);
@@ -58,6 +60,7 @@ macro_rules! config {
   ) => {
     #[derive(serde::Deserialize)]
     #[serde(rename_all = "kebab-case")]
+    #[derive(Config)]
     $(#[$attrs])*
     pub struct $name {
       $(pub $field_ident: $field_type,)*
@@ -65,7 +68,6 @@ macro_rules! config {
 
     #[derive(serde::Deserialize)]
     #[serde(default, rename_all = "kebab-case")]
-    #[derive(Default)]
     $(#[$attrs])*
     struct $partial_name {
       $($field_ident: <$field_type as Partial>::Partial,)*
@@ -85,7 +87,7 @@ macro_rules! config {
 
 config!(
   #[partial = ConfigDataPartial]
-  #[derive(Clone)]
+  #[derive(Default, Clone)]
   pub struct Settings {
     pub font:   FontSettings,
     pub editor: EditorSettings,
@@ -95,7 +97,7 @@ config!(
 
 config!(
   #[partial = FontSettingsPartial]
-  #[derive(Clone)]
+  #[derive(Default, Clone)]
   pub struct FontSettings {
     pub family: String,
     pub size:   f64,
@@ -104,22 +106,24 @@ config!(
 
 config!(
   #[partial = LayoutSettingsPartial]
-  #[derive(Clone)]
+  #[derive(Default, Clone)]
   pub struct LayoutSettings {
     pub tab: Vec<TabSettings>,
   }
 );
 
-#[derive(Clone, serde::Deserialize)]
+#[derive(Default, Clone, Config, serde::Deserialize)]
+#[config(tag = "pane")]
 #[serde(tag = "pane", rename_all = "kebab-case")]
 pub enum TabSettings {
   Split(SplitSettings),
   FileTree,
   Editor,
+  #[default]
   Terminal,
 }
 
-#[derive(Clone, serde::Deserialize)]
+#[derive(Default, Clone, Config, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct SplitSettings {
   pub axis:     Axis,
@@ -128,16 +132,17 @@ pub struct SplitSettings {
   pub children: Vec<TabSettings>,
 }
 
-#[derive(Clone, serde::Deserialize)]
+#[derive(Default, Clone, Config, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Axis {
+  #[default]
   Horizontal,
   Vertical,
 }
 
 config!(
   #[partial = EditorSettingsPartial]
-  #[derive(Clone)]
+  #[derive(Default, Clone)]
   pub struct EditorSettings {
     pub scroll_offset: u32,
     pub indent_width:  u32,
@@ -158,11 +163,11 @@ impl Settings {
     ParseResult::ok(config)
   }
 
-  pub(crate) fn parse_default() -> Settings { parse_default_config().unwrap() }
+  pub(crate) fn parse_default() -> Settings { parse_default_config().value }
 }
 
-fn parse_default_config() -> Result<Settings, toml::de::Error> {
-  toml::from_str(include_str!("../default.toml"))
+fn parse_default_config() -> ParseResult<Settings> {
+  crate::parse::parse(include_str!("../default.toml"))
 }
 
 #[cfg(test)]
@@ -171,8 +176,12 @@ mod tests {
 
   #[test]
   fn default_config() {
-    if let Err(e) = parse_default_config() {
-      panic!("invalid default config:\n{e}");
+    let res = parse_default_config();
+    if !res.diagnostics.is_empty() {
+      panic!(
+        "invalid default config:\n{}",
+        res.diagnostics.iter().map(|d| d.to_string()).collect::<Vec<_>>().join("\n")
+      );
     }
   }
 }
