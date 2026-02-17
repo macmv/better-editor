@@ -188,6 +188,15 @@ impl ParseValue for String {
   }
 }
 
+impl<T: ParseValue + Default> ParseValue for Vec<T> {
+  fn parse(value: DeValue, de: &mut Parser) -> Result<Self, String> {
+    match value {
+      DeValue::Array(a) => Ok(a.into_iter().map(|it| de.value(it.into_inner())).collect()),
+      _ => Err("expected array".to_string()),
+    }
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use be_config_macros::Config;
