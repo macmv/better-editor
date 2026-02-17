@@ -533,12 +533,8 @@ mod tests {
   }
 
   #[test]
-  fn tagged_enum_errors_and_unknown_top_level() {
-    check_parse_chain::<SingleNode>(
-      r#"
-      [node]
-      kind = "none"
-      "#,
+  fn tagged_enum_errors() {
+    check_parse::<SingleNode>(
       r#"
       [node]
       value = 1
@@ -552,11 +548,7 @@ mod tests {
       "#],
     );
 
-    check_parse_chain::<SingleNode>(
-      r#"
-      [node]
-      kind = "none"
-      "#,
+    check_parse::<SingleNode>(
       r#"
       [node]
       kind = "wat"
@@ -573,14 +565,67 @@ mod tests {
     check_parse_chain::<SingleNode>(
       r#"
       [node]
-      kind = "none"
+      kind = "root"
       "#,
+      r#"
+      [node]
+      value = 1
+      "#,
+      expect![@r#"
+        SingleNode {
+          node: Root,
+        }
+
+        error: missing key: 'kind'
+      "#],
+    );
+
+    check_parse_chain::<SingleNode>(
+      r#"
+      [node]
+      kind = "root"
+      "#,
+      r#"
+      [node]
+      kind = "wat"
+      "#,
+      expect![@r#"
+        SingleNode {
+          node: Root,
+        }
+
+        error: unknown kind variant: 'wat'
+      "#],
+    );
+  }
+
+  #[test]
+  fn unknown_top_level() {
+    check_parse::<SingleNode>(
       r#"
       mystery = 1
       "#,
       expect![@r#"
         SingleNode {
           node: None,
+        }
+
+        error: missing key: 'node'
+        warning: unknown key: mystery
+      "#],
+    );
+
+    check_parse_chain::<SingleNode>(
+      r#"
+      [node]
+      kind = "root"
+      "#,
+      r#"
+      mystery = 1
+      "#,
+      expect![@r#"
+        SingleNode {
+          node: Root,
         }
 
         warning: unknown key: mystery
