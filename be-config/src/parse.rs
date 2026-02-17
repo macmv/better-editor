@@ -1,6 +1,6 @@
 use std::{collections::HashSet, fmt};
 
-use toml::de::{DeTable, DeValue};
+pub use toml::de::{DeTable, DeValue};
 
 pub struct ParseResult<T> {
   pub value:       T,
@@ -162,46 +162,20 @@ impl ParseValue for String {
 
 #[cfg(test)]
 mod tests {
+  use be_config_macros::Config;
+
   use super::*;
 
-  #[derive(Default)]
+  #[derive(Default, Config)]
   struct Foo {
     a:      i32,
     b:      String,
     nested: Bar,
   }
 
-  #[derive(Default)]
+  #[derive(Default, Config)]
   struct Bar {
     c: i32,
-  }
-
-  impl ParseTable for Foo {
-    fn required_keys() -> &'static [&'static str] { &["a", "b", "nested"] }
-
-    fn set_key(&mut self, key: &str, value: DeValue, de: &mut Parser) -> bool {
-      match key {
-        "a" => self.a = de.value(value),
-        "b" => self.b = de.value(value),
-        "nested" => self.nested = de.value(value),
-        _ => return false,
-      }
-
-      true
-    }
-  }
-
-  impl ParseTable for Bar {
-    fn required_keys() -> &'static [&'static str] { &["c"] }
-
-    fn set_key(&mut self, key: &str, value: DeValue, de: &mut Parser) -> bool {
-      match key {
-        "c" => self.c = de.value(value),
-        _ => return false,
-      }
-
-      true
-    }
   }
 
   #[test]

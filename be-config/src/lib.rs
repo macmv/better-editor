@@ -9,6 +9,8 @@ pub use settings::*;
 
 use crate::parse::ParseResult;
 
+extern crate self as be_config;
+
 #[derive(Clone)]
 pub struct Config {
   pub settings:  Settings,
