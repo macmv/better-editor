@@ -28,6 +28,8 @@ pub struct CompletionsState {
   completions:      types::CompletionList,
   show:             bool,
   clear_on_message: bool,
+
+  visible_completions: Vec<String>,
 }
 
 pub struct SaveTask {
@@ -216,7 +218,7 @@ impl EditorState {
     self.lsp.goto_definition = task;
   }
 
-  pub fn completions(&mut self) -> Option<Vec<String>> {
+  pub(crate) fn lsp_update_completions(&mut self) {
     self.lsp.completions.tasks.retain(|task| {
       if let Some(completed) = task.completed() {
         if self.lsp.completions.clear_on_message {
@@ -240,24 +242,26 @@ impl EditorState {
     if self.lsp.completions.show {
       let current_word = self.current_word_for_completions();
 
-      Some(
-        self
-          .lsp
-          .completions
-          .completions
-          .items
-          .iter()
-          .filter(|i| {
-            let filter_text = i.filter_text.as_ref().unwrap_or(&i.label);
-            // `starts_with` using a rope slice
-            filter_text.bytes().take(current_word.byte_len()).eq(current_word.bytes())
-          })
-          .map(|i| i.label.clone())
-          .collect(),
-      )
+      self.lsp.completions.visible_completions = self
+        .lsp
+        .completions
+        .completions
+        .items
+        .iter()
+        .filter(|i| {
+          let filter_text = i.filter_text.as_ref().unwrap_or(&i.label);
+          // `starts_with` using a rope slice
+          filter_text.bytes().take(current_word.byte_len()).eq(current_word.bytes())
+        })
+        .map(|i| i.label.clone())
+        .collect();
     } else {
-      None
+      self.lsp.completions.visible_completions.clear();
     }
+  }
+
+  pub fn completions(&self) -> Option<&Vec<String>> {
+    if self.lsp.completions.show { Some(&self.lsp.completions.visible_completions) } else { None }
   }
 
   fn current_word_for_completions(&self) -> RopeSlice<'_> {
