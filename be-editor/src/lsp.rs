@@ -1,6 +1,6 @@
 use std::{cell::RefCell, ops::Range, rc::Rc};
 
-use be_doc::{Change, Edit, crop::RopeSlice};
+use be_doc::{Change, Edit};
 use be_lsp::{LanguageClientState, LanguageServerKey, TextEdit, command, types};
 use be_task::Task;
 
@@ -238,6 +238,21 @@ impl EditorState {
     }
   }
 
+  pub(crate) fn accept_completion(&mut self) {
+    let Some(active) = self.lsp.completions.active else { return };
+    let Some(text) = self.lsp.completions.visible_completions.get(active) else { return };
+
+    let range = self.current_range_for_completions();
+    let to_move = (text.len() - range.len()) as i32;
+    self.change(Change::replace(range, text));
+    self.move_col_rel(to_move as i32);
+
+    self.lsp.completions.show = false;
+    self.lsp.completions.active = None;
+    self.lsp.completions.tasks.clear();
+    self.lsp.completions.visible_completions.clear();
+  }
+
   pub fn active_completion(&self) -> Option<usize> { self.lsp.completions.active }
 
   pub(crate) fn lsp_request_goto_definition(&mut self) {
@@ -273,7 +288,7 @@ impl EditorState {
     });
 
     if self.lsp.completions.show {
-      let current_word = self.current_word_for_completions();
+      let current_word = self.doc.range(self.current_range_for_completions());
 
       self.lsp.completions.visible_completions = self
         .lsp
@@ -297,7 +312,7 @@ impl EditorState {
     if self.lsp.completions.show { Some(&self.lsp.completions.visible_completions) } else { None }
   }
 
-  fn current_word_for_completions(&self) -> RopeSlice<'_> {
+  fn current_range_for_completions(&self) -> Range<usize> {
     let end = self.doc.cursor_offset(self.cursor);
     let len = self
       .doc
@@ -308,7 +323,7 @@ impl EditorState {
       .map(|c| c.len_utf8())
       .sum::<usize>();
 
-    self.doc.range(end - len..end)
+    end - len..end
   }
 }
 

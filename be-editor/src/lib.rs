@@ -330,6 +330,11 @@ impl EditorState {
         }
       }
       Action::Move { count: _, m } => self.perform_move(m),
+      Action::Edit { count: _, e: be_input::Edit::Insert('\n') }
+        if self.active_completion().is_some() =>
+      {
+        self.accept_completion()
+      }
       Action::Edit { count: _, e } => self.perform_edit(e),
       Action::Autocomplete => self.perform_autocomplete(),
       Action::MoveCompletion { next } => self.move_completion(next),
