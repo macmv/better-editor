@@ -19,11 +19,11 @@ fn struct_config(ident: &syn::Ident, s: syn::DataStruct) -> proc_macro2::TokenSt
 
   let required_keys = s.fields.iter().filter_map(|f| {
     let id = f.ident.as_ref().unwrap();
-    Some(id.to_string())
+    Some(to_kebab_case(&id.to_string()))
   });
 
   let key_ident = s.fields.iter().map(|f| f.ident.as_ref().unwrap());
-  let key_str = key_ident.clone().map(|i| i.to_string());
+  let key_str = key_ident.clone().map(|i| to_kebab_case(&i.to_string()));
 
   quote::quote! {
     impl ::be_config::parse::ParseTable for #ident {
@@ -50,4 +50,21 @@ fn struct_config(ident: &syn::Ident, s: syn::DataStruct) -> proc_macro2::TokenSt
 
 fn enum_config(input: &syn::Ident, e: syn::DataEnum) -> proc_macro2::TokenStream {
   proc_macro_error::abort_call_site!("todo: enums");
+}
+
+fn to_kebab_case(name: &str) -> String {
+  let mut out = String::new();
+  for c in name.chars() {
+    if c.is_ascii_uppercase() {
+      if !out.is_empty() {
+        out.push('-');
+      }
+      out.push(c.to_ascii_lowercase());
+    } else if c == '_' {
+      out.push('-');
+    } else {
+      out.push(c);
+    }
+  }
+  out
 }
