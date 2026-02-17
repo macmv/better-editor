@@ -62,7 +62,9 @@ impl OpenedFile {
   pub fn save(&mut self, doc: &Document) -> io::Result<()> {
     let stat = self.path.metadata()?;
     if stat.mtime() > self.mtime {
-      return Err(io::Error::new(io::ErrorKind::Other, "file has been modified"));
+      // TODO: Confirm popup
+      // return Err(io::Error::new(io::ErrorKind::Other, "file has been modified"));
+      warn!("file has been modified");
     }
 
     let mut file = std::fs::OpenOptions::new().write(true).truncate(true).open(&self.path)?;
