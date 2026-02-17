@@ -27,7 +27,8 @@ impl<T> ParseResult<T> {
 }
 
 pub(crate) struct Parser {
-  diagnostics: Vec<Diagnostic>,
+  allow_partial: bool,
+  diagnostics:   Vec<Diagnostic>,
 }
 
 pub(crate) trait ParseTable {
@@ -42,55 +43,81 @@ pub(crate) trait ParseValue
 where
   Self: Sized,
 {
-  fn parse(value: DeValue, de: &mut Parser) -> Result<Self, String>;
+  fn parse(&mut self, value: DeValue, de: &mut Parser) -> Result<(), String>;
 }
 
 impl<T> ParseValue for T
 where
   T: Default + ParseTable,
 {
-  fn parse(value: DeValue, de: &mut Parser) -> Result<Self, String> {
+  fn parse(&mut self, value: DeValue, de: &mut Parser) -> Result<(), String> {
     match value {
-      DeValue::Table(table) => Ok(de.table(table)),
+      DeValue::Table(table) => {
+        de.table(self, table);
+        Ok(())
+      }
       _ => Err("expected table".to_string()),
     }
   }
 }
 
 pub fn parse<T: Default + ParseTable>(content: &str) -> ParseResult<T> {
-  let mut parser = Parser { diagnostics: vec![] };
+  let mut parser = Parser { allow_partial: false, diagnostics: vec![] };
 
-  let value = if let Some(table) = parser.check(DeTable::parse(content)) {
-    parser.table(table.into_inner())
-  } else {
-    T::default()
+  let mut value = T::default();
+  if let Some(table) = parser.check(DeTable::parse(content)) {
+    parser.table(&mut value, table.into_inner())
   };
 
   ParseResult { value, diagnostics: parser.diagnostics }
 }
 
+pub fn parse_into<T: Default + ParseTable>(value: &mut T, content: &str) -> Vec<Diagnostic> {
+  let mut parser = Parser { allow_partial: true, diagnostics: vec![] };
+
+  if let Some(table) = parser.check(DeTable::parse(content)) {
+    parser.table(value, table.into_inner())
+  };
+
+  parser.diagnostics
+}
+
 impl Parser {
-  pub fn table<T: Default + ParseTable>(&mut self, table: DeTable) -> T {
-    let mut res = T::default();
-    let mut required = HashSet::<&str>::from_iter(T::required_keys().iter().copied());
+  pub fn table<T: Default + ParseTable>(&mut self, out: &mut T, table: DeTable) {
+    let mut required = if self.allow_partial {
+      None
+    } else {
+      Some(HashSet::<&str>::from_iter(T::required_keys().iter().copied()))
+    };
 
     for (k, v) in table {
-      required.remove(&**k.get_ref());
+      if let Some(required) = &mut required {
+        required.remove(&**k.get_ref());
+      }
 
-      if !res.set_key(k.get_ref(), v.into_inner(), self) {
+      if !out.set_key(k.get_ref(), v.into_inner(), self) {
         self.warn(format!("unknown key: {}", k.get_ref()), k.span());
       }
     }
 
-    for key in required {
-      self.error(format!("missing key: '{}'", key), 0..0); // todo: bah this library is bad
+    if let Some(required) = required {
+      for key in required {
+        self.error(format!("missing key: '{}'", key), 0..0); // todo: bah this library is bad
+      }
     }
-
-    res
   }
 
-  pub fn value<T: Default + ParseValue>(&mut self, value: DeValue) -> T {
-    let res = T::parse(value, self);
+  pub fn complete_value<T: Default + ParseValue>(&mut self, value: DeValue) -> T {
+    let mut v = T::default();
+    let partial = self.allow_partial;
+    self.allow_partial = false;
+    self.partial_value(&mut v, value);
+    self.allow_partial = partial;
+    v
+  }
+
+  pub fn partial_value<T: Default + ParseValue>(&mut self, v: &mut T, value: DeValue) {
+    let res = v.parse(value, self);
     self.check(res).unwrap_or_default()
   }
 
@@ -144,10 +171,11 @@ macro_rules! int {
   ($($ty:ty)*) => {
     $(
     impl ParseValue for $ty {
-      fn parse(value: DeValue, _de: &mut Parser) -> Result<Self, String> {
+      fn parse(&mut self, value: DeValue, _de: &mut Parser) -> Result<(), String> {
         match value {
           DeValue::Integer(i) => {
-            <$ty>::from_str_radix(i.as_str(), i.radix()).map_err(|_| "expected integer".to_string())
+            *self = <$ty>::from_str_radix(i.as_str(), i.radix()).map_err(|_| "expected integer".to_string())?;
+            Ok(())
           }
           _ => Err("expected integer".to_string()),
         }
@@ -160,40 +188,51 @@ macro_rules! int {
 int!(i8 i16 i32 i64 u8 u16 u32 u64 isize usize);
 
 impl ParseValue for f32 {
-  fn parse(value: DeValue, _de: &mut Parser) -> Result<Self, String> {
-    match value {
-      DeValue::Integer(i) => i.as_str().parse().map_err(|_| "expected float".to_string()),
-      DeValue::Float(i) => i.as_str().parse().map_err(|_| "expected float".to_string()),
-      _ => Err("expected float".to_string()),
-    }
+  fn parse(&mut self, value: DeValue, _de: &mut Parser) -> Result<(), String> {
+    *self = match value {
+      DeValue::Integer(i) => i.as_str().parse().map_err(|_| "expected float".to_string())?,
+      DeValue::Float(i) => i.as_str().parse().map_err(|_| "expected float".to_string())?,
+      _ => return Err("expected float".to_string()),
+    };
+
+    Ok(())
   }
 }
 
 impl ParseValue for f64 {
-  fn parse(value: DeValue, _de: &mut Parser) -> Result<Self, String> {
-    match value {
-      DeValue::Integer(i) => i.as_str().parse().map_err(|_| "expected float".to_string()),
-      DeValue::Float(i) => i.as_str().parse().map_err(|_| "expected float".to_string()),
-      _ => Err("expected float".to_string()),
-    }
+  fn parse(&mut self, value: DeValue, _de: &mut Parser) -> Result<(), String> {
+    *self = match value {
+      DeValue::Integer(i) => i.as_str().parse().map_err(|_| "expected float".to_string())?,
+      DeValue::Float(i) => i.as_str().parse().map_err(|_| "expected float".to_string())?,
+      _ => return Err("expected float".to_string()),
+    };
+
+    Ok(())
   }
 }
 
 impl ParseValue for String {
-  fn parse(value: DeValue, _de: &mut Parser) -> Result<Self, String> {
+  fn parse(&mut self, value: DeValue, _de: &mut Parser) -> Result<(), String> {
     match value {
-      DeValue::String(s) => Ok(s.into()),
-      _ => Err("expected string".to_string()),
+      DeValue::String(s) => *self = s.into(),
+      _ => return Err("expected string".to_string()),
     }
+
+    Ok(())
   }
 }
 
 impl<T: ParseValue + Default> ParseValue for Vec<T> {
-  fn parse(value: DeValue, de: &mut Parser) -> Result<Self, String> {
+  fn parse(&mut self, value: DeValue, de: &mut Parser) -> Result<(), String> {
+    // NB: Parsing arrays replaces them.
+    self.clear();
+
     match value {
-      DeValue::Array(a) => Ok(a.into_iter().map(|it| de.value(it.into_inner())).collect()),
-      _ => Err("expected array".to_string()),
+      DeValue::Array(a) => self.extend(a.into_iter().map(|it| de.complete_value(it.into_inner()))),
+      _ => return Err("expected array".to_string()),
     }
+
+    Ok(())
   }
 }
 

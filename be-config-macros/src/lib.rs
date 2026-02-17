@@ -44,7 +44,7 @@ fn struct_config(ident: &syn::Ident, s: syn::DataStruct) -> proc_macro2::TokenSt
         de: &mut ::be_config::parse::Parser,
       ) -> bool {
         match key {
-          #(#key_str => self.#key_ident = de.value(value),)*
+          #(#key_str => de.partial_value(&mut self.#key_ident, value),)*
           _ => return false,
         }
 
@@ -101,7 +101,7 @@ fn tagged_enum_config(
             if !is_empty {
               de.warn(format!("unknown key for variant '{}'", #variant_tag_lit), 0..0);
             }
-            ::std::result::Result::Ok(#ident::#variant_ident)
+            #ident::#variant_ident
           }
         });
       }
@@ -111,7 +111,7 @@ fn tagged_enum_config(
         }
 
         variant_arms.push(quote::quote! {
-          #variant_tag_lit => Ok(#ident::#variant_ident(de.value(rest)))
+          #variant_tag_lit => #ident::#variant_ident(de.complete_value(rest))
         });
       }
       syn::Fields::Named(_) => {
@@ -123,9 +123,10 @@ fn tagged_enum_config(
   quote::quote! {
     impl ::be_config::parse::ParseValue for #ident {
       fn parse(
+        &mut self,
         value: ::be_config::parse::DeValue,
         de: &mut ::be_config::parse::Parser,
-      ) -> ::std::result::Result<Self, String> {
+      ) -> ::std::result::Result<(), String> {
         let ::be_config::parse::DeValue::Table(mut table) = value else {
           return Err("expected table".to_string());
         };
@@ -141,14 +142,16 @@ fn tagged_enum_config(
         let is_empty = table.is_empty();
         let rest = ::be_config::parse::DeValue::Table(table);
 
-        match tag.as_ref() {
+        *self = match tag.as_ref() {
           #(#variant_arms,)*
-          _ => Err(format!(
+          _ => return Err(format!(
             "unknown {} variant: '{}'",
             #tag,
             tag.as_ref()
           )),
-        }
+        };
+
+        Ok(())
       }
     }
   }
@@ -169,24 +172,27 @@ fn string_enum_config(ident: &syn::Ident, e: syn::DataEnum) -> proc_macro2::Toke
     let variant_tag_lit = syn::LitStr::new(&variant_tag, variant_ident.span());
 
     variant_arms.push(quote::quote! {
-      #variant_tag_lit => Ok(#ident::#variant_ident)
+      #variant_tag_lit => #ident::#variant_ident
     });
   }
 
   quote::quote! {
     impl ::be_config::parse::ParseValue for #ident {
       fn parse(
+        &mut self,
         value: ::be_config::parse::DeValue,
         de: &mut ::be_config::parse::Parser,
-      ) -> ::std::result::Result<Self, String> {
+      ) -> ::std::result::Result<(), String> {
         let ::be_config::parse::DeValue::String(mut s) = value else {
           return Err("expected string".to_string());
         };
 
-        match &*s {
+        *self = match &*s {
           #(#variant_arms,)*
-          s => Err(format!("unknown variant: '{s}'")),
-        }
+          s => return Err(format!("unknown variant: '{s}'")),
+        };
+
+        Ok(())
       }
     }
   }
