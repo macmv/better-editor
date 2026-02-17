@@ -154,9 +154,10 @@ impl Settings {
     let mut config = crate::Config::default_ref().settings.clone();
 
     if let Ok(data) = std::fs::read_to_string(crate::config_root().unwrap().join("config.toml")) {
-      match toml::from_str::<ConfigDataPartial>(&data) {
-        Ok(partial) => config.replace_with(partial),
-        Err(e) => eprintln!("failed to parse config: {e}"), // TODO: User-visible error
+      let diagnostics = crate::parse::parse_into(&mut config, &data);
+
+      for diag in diagnostics {
+        eprintln!("failed to parse config: {diag}"); // TODO: User-visible error
       }
     }
 
