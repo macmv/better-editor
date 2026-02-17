@@ -159,6 +159,7 @@ name = "be-config"
 version = "0.1.0"
 dependencies = [
  "be-config-macros",
+ "expect-test",
  "serde",
  "toml",
 ]

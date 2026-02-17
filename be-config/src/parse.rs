@@ -239,26 +239,352 @@ impl<T: ParseValue + Default> ParseValue for Vec<T> {
 #[cfg(test)]
 mod tests {
   use be_config_macros::Config;
+  use expect_test::{Expect, expect};
 
   use super::*;
 
-  #[derive(Default, Config)]
-  struct Foo {
-    a:      i32,
-    b:      String,
-    nested: Bar,
+  fn fmt_diags(diags: &[Diagnostic]) -> String {
+    let mut lines = diags
+      .iter()
+      .map(|d| {
+        let level = match d.level {
+          DiagnosticLevel::Error => "error",
+          DiagnosticLevel::Warning => "warning",
+        };
+        format!("{level}: {}", d.title)
+      })
+      .collect::<Vec<_>>();
+    lines.sort();
+    lines.join("\n")
   }
 
-  #[derive(Default, Config)]
-  struct Bar {
-    c: i32,
+  fn render<T: std::fmt::Debug>(value: &T, diags: &[Diagnostic]) -> String {
+    let mut content = format!("{:#?}", value).replace("    ", "  ");
+    if !diags.is_empty() {
+      content.push_str("\n\n");
+      content.push_str(&fmt_diags(diags));
+    }
+
+    content.push('\n');
+
+    content
+  }
+
+  fn check_parse<T>(content: &str, expect: Expect)
+  where
+    T: Default + ParseTable + std::fmt::Debug,
+  {
+    let res = parse::<T>(content);
+    expect.assert_eq(&render(&res.value, &res.diagnostics));
+  }
+
+  fn check_parse_chain<T>(base: &str, overlay: &str, expect: Expect)
+  where
+    T: Default + ParseTable + std::fmt::Debug,
+  {
+    let mut res = parse::<T>(base);
+    let mut diagnostics = res.diagnostics;
+    diagnostics.extend(parse_into(&mut res.value, overlay));
+    expect.assert_eq(&render(&res.value, &diagnostics));
+  }
+
+  #[derive(Default, Debug, Config)]
+  struct Plain {
+    n:     i32,
+    label: String,
   }
 
   #[test]
-  fn foo() {
-    let res = parse::<Foo>("a = 1\nb = \"foo\"\n[nested]\nc = 3");
-    assert_eq!(res.value.a, 1);
-    assert_eq!(res.value.b, "foo");
-    assert_eq!(res.value.nested.c, 3);
+  fn parse_plain_happy() {
+    check_parse::<Plain>(
+      r#"
+      n = 2
+      label = "ok"
+      "#,
+      expect![@r#"
+        Plain {
+          n: 2,
+          label: "ok",
+        }
+      "#],
+    );
+  }
+
+  #[test]
+  fn parse_plain_missing_and_unknown() {
+    check_parse::<Plain>(
+      r#"
+      n = 1
+      extra = 7
+      "#,
+      expect![@r#"
+        Plain {
+          n: 1,
+          label: "",
+        }
+
+        error: missing key: 'label'
+        warning: unknown key: extra
+      "#],
+    );
+  }
+
+  #[derive(Default, Debug, Config)]
+  struct Doc {
+    leaf:  Leaf,
+    mode:  Mode,
+    node:  Node,
+    items: Vec<Item>,
+  }
+  #[allow(dead_code)]
+  #[derive(Default, Debug, Config)]
+  #[config(tag = "kind")]
+  enum Node {
+    #[default]
+    None,
+    Root,
+    Leaf(Leaf),
+  }
+  #[derive(Default, Debug, Config)]
+  struct Leaf {
+    size: u32,
+  }
+  #[derive(Default, Debug, Config)]
+  struct Item {
+    value: i32,
+  }
+  #[derive(Default, Debug, Config)]
+  enum Mode {
+    #[default]
+    Alpha,
+    Beta,
+  }
+
+  #[test]
+  fn parse_doc_happy() {
+    check_parse::<Doc>(
+      r#"
+      mode = "beta"
+
+      [leaf]
+      size = 4
+
+      [node]
+      kind = "root"
+
+      [[items]]
+      value = 1
+      "#,
+      expect![@r#"
+        Doc {
+          leaf: Leaf {
+            size: 4,
+          },
+          mode: Beta,
+          node: Root,
+          items: [
+            Item {
+              value: 1,
+            },
+          ],
+        }
+      "#],
+    );
+  }
+
+  #[test]
+  fn chain_overrides_and_partials() {
+    check_parse_chain::<Doc>(
+      r#"
+      mode = "alpha"
+
+      [leaf]
+      size = 3
+
+      [node]
+      kind = "none"
+
+      [[items]]
+      value = 10
+
+      [[items]]
+      value = 20
+      "#,
+      r#"
+      mode = "beta"
+
+      [node]
+      kind = "leaf"
+      size = 3
+
+      [leaf]
+      size = 9
+      "#,
+      expect![@r#"
+        Doc {
+          leaf: Leaf {
+            size: 9,
+          },
+          mode: Beta,
+          node: Leaf(
+            Leaf {
+              size: 3,
+            },
+          ),
+          items: [
+            Item {
+              value: 10,
+            },
+            Item {
+              value: 20,
+            },
+          ],
+        }
+      "#],
+    );
+  }
+
+  #[test]
+  fn chain_array_replaces() {
+    check_parse_chain::<Doc>(
+      r#"
+      mode = "alpha"
+
+      [leaf]
+      size = 3
+
+      [node]
+      kind = "none"
+
+      [[items]]
+      value = 10
+
+      [[items]]
+      value = 20
+      "#,
+      r#"
+      [[items]]
+      value = 99
+      "#,
+      expect![@r#"
+        Doc {
+          leaf: Leaf {
+            size: 3,
+          },
+          mode: Alpha,
+          node: None,
+          items: [
+            Item {
+              value: 99,
+            },
+          ],
+        }
+      "#],
+    );
+  }
+
+  #[derive(Default, Debug, Config)]
+  struct SingleNode {
+    node: Node,
+  }
+
+  #[test]
+  fn tagged_enum_paths() {
+    check_parse_chain::<SingleNode>(
+      r#"
+      [node]
+      kind = "none"
+      "#,
+      r#"
+      [node]
+      kind = "root"
+      unused = 1
+      "#,
+      expect![@r#"
+        SingleNode {
+          node: Root,
+        }
+
+        warning: unknown key for variant 'root'
+      "#],
+    );
+
+    check_parse_chain::<SingleNode>(
+      r#"
+      [node]
+      kind = "none"
+      "#,
+      r#"
+      [node]
+      kind = "leaf"
+      "#,
+      expect![@r#"
+        SingleNode {
+          node: Leaf(
+            Leaf {
+              size: 0,
+            },
+          ),
+        }
+
+        error: missing key: 'size'
+      "#],
+    );
+  }
+
+  #[test]
+  fn tagged_enum_errors_and_unknown_top_level() {
+    check_parse_chain::<SingleNode>(
+      r#"
+      [node]
+      kind = "none"
+      "#,
+      r#"
+      [node]
+      value = 1
+      "#,
+      expect![@r#"
+        SingleNode {
+          node: None,
+        }
+
+        error: missing key: 'kind'
+      "#],
+    );
+
+    check_parse_chain::<SingleNode>(
+      r#"
+      [node]
+      kind = "none"
+      "#,
+      r#"
+      [node]
+      kind = "wat"
+      "#,
+      expect![@r#"
+        SingleNode {
+          node: None,
+        }
+
+        error: unknown kind variant: 'wat'
+      "#],
+    );
+
+    check_parse_chain::<SingleNode>(
+      r#"
+      [node]
+      kind = "none"
+      "#,
+      r#"
+      mystery = 1
+      "#,
+      expect![@r#"
+        SingleNode {
+          node: None,
+        }
+
+        warning: unknown key: mystery
+      "#],
+    );
   }
 }
