@@ -3,15 +3,19 @@
 pub fn config(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   let input = syn::parse_macro_input!(input as syn::DeriveInput);
 
-  let syn::Data::Struct(s) = input.data else {
-    proc_macro_error::abort_call_site!("only structs are supported");
+  let stream = match input.data {
+    syn::Data::Struct(s) => struct_config(&input.ident, s),
+    syn::Data::Enum(e) => enum_config(&input.ident, e),
+    _ => proc_macro_error::abort_call_site!("only structs and enums are supported"),
   };
 
+  stream.into()
+}
+
+fn struct_config(ident: &syn::Ident, s: syn::DataStruct) -> proc_macro2::TokenStream {
   if s.fields.iter().any(|f| f.ident.is_none()) {
     proc_macro_error::abort_call_site!("fields must be named");
   }
-
-  let name = &input.ident;
 
   let required_keys = s.fields.iter().filter_map(|f| {
     let id = f.ident.as_ref().unwrap();
@@ -21,8 +25,8 @@ pub fn config(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   let key_ident = s.fields.iter().map(|f| f.ident.as_ref().unwrap());
   let key_str = key_ident.clone().map(|i| i.to_string());
 
-  let stream = quote::quote! {
-    impl ::be_config::parse::ParseTable for #name {
+  quote::quote! {
+    impl ::be_config::parse::ParseTable for #ident {
       fn required_keys() -> &'static [&'static str] {
         &[#(#required_keys),*]
       }
@@ -41,7 +45,9 @@ pub fn config(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         true
       }
     }
-  };
+  }
+}
 
-  stream.into()
+fn enum_config(input: &syn::Ident, e: syn::DataEnum) -> proc_macro2::TokenStream {
+  proc_macro_error::abort_call_site!("todo: enums");
 }
