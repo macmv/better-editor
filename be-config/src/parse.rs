@@ -140,13 +140,41 @@ impl fmt::Display for Diagnostic {
   }
 }
 
-impl ParseValue for i32 {
+macro_rules! int {
+  ($($ty:ty)*) => {
+    $(
+    impl ParseValue for $ty {
+      fn parse(value: DeValue, _de: &mut Parser) -> Result<Self, String> {
+        match value {
+          DeValue::Integer(i) => {
+            <$ty>::from_str_radix(i.as_str(), i.radix()).map_err(|_| "expected integer".to_string())
+          }
+          _ => Err("expected integer".to_string()),
+        }
+      }
+    }
+    )*
+  };
+}
+
+int!(i8 i16 i32 i64 u8 u16 u32 u64 isize usize);
+
+impl ParseValue for f32 {
   fn parse(value: DeValue, _de: &mut Parser) -> Result<Self, String> {
     match value {
-      DeValue::Integer(i) => {
-        i32::from_str_radix(i.as_str(), i.radix()).map_err(|_| "expected integer".to_string())
-      }
-      _ => Err("expected integer".to_string()),
+      DeValue::Integer(i) => i.as_str().parse().map_err(|_| "expected float".to_string()),
+      DeValue::Float(i) => i.as_str().parse().map_err(|_| "expected float".to_string()),
+      _ => Err("expected float".to_string()),
+    }
+  }
+}
+
+impl ParseValue for f64 {
+  fn parse(value: DeValue, _de: &mut Parser) -> Result<Self, String> {
+    match value {
+      DeValue::Integer(i) => i.as_str().parse().map_err(|_| "expected float".to_string()),
+      DeValue::Float(i) => i.as_str().parse().map_err(|_| "expected float".to_string()),
+      _ => Err("expected float".to_string()),
     }
   }
 }
@@ -155,7 +183,7 @@ impl ParseValue for String {
   fn parse(value: DeValue, _de: &mut Parser) -> Result<Self, String> {
     match value {
       DeValue::String(s) => Ok(s.into()),
-      _ => Err("expected integer".to_string()),
+      _ => Err("expected string".to_string()),
     }
   }
 }
