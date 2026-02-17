@@ -21,6 +21,7 @@ pub use diff::{Change, LineDiff, LineDiffSimilarity};
 pub struct Repo {
   root: PathBuf,
   git:  Option<GitRepo>,
+  head: Option<git::Oid>,
 
   files: HashMap<PathBuf, ChangedFile>,
 }
@@ -33,7 +34,19 @@ struct ChangedFile {
 impl Repo {
   pub fn open(root: &Path) -> Self {
     let root = root.canonicalize().unwrap();
-    Repo { git: GitRepo::open(&root).ok(), root, files: HashMap::new() }
+    Repo { git: GitRepo::open(&root).ok(), head: None, root, files: HashMap::new() }
+  }
+
+  pub fn update(&mut self) {
+    if let Some(git) = &self.git {
+      let head = git.head();
+      if self.head != Some(head) {
+        self.head = Some(head);
+        for (path, file) in &mut self.files {
+          file.original = git.lookup_in_head(&path).unwrap_or_else(|| Document::new());
+        }
+      }
+    }
   }
 
   pub fn open_file(&mut self, path: &Path) {

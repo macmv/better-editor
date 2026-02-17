@@ -115,6 +115,10 @@ impl EditorState {
       self.repo = Some(Repo::open(std::path::Path::new(".")));
     }
 
+    if let Some(repo) = &mut self.repo {
+      repo.update();
+    }
+
     self.lsp_update_diagnostics();
     self.lsp_update_goto_definition();
     self.lsp_update_completions();

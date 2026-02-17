@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use be_doc::Document;
 use git2::Repository;
 
+pub use git2::Oid;
+
 pub struct GitRepo {
   root: PathBuf,
   repo: Repository,
@@ -16,8 +18,12 @@ impl GitRepo {
     Ok(GitRepo { repo: Repository::open(&path)?, root: path })
   }
 
+  pub fn head(&self) -> git2::Oid {
+    self.repo.head().unwrap().peel_to_tree().unwrap().as_object().id()
+  }
+
   pub fn lookup_in_head(&self, path: &Path) -> Option<Document> {
-    let rel = path.strip_prefix(&self.root).ok()?;
+    let rel = if path.is_absolute() { path.strip_prefix(&self.root).ok()? } else { path };
 
     let head = self.repo.head().unwrap().peel_to_tree().unwrap();
     let entry = head.get_path(rel).ok()?;
