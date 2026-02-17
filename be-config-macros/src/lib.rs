@@ -1,11 +1,17 @@
 #[proc_macro_error::proc_macro_error]
-#[proc_macro_derive(Config)]
+#[proc_macro_derive(Config, attributes(config))]
 pub fn config(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   let input = syn::parse_macro_input!(input as syn::DeriveInput);
 
   let stream = match input.data {
     syn::Data::Struct(s) => struct_config(&input.ident, s),
-    syn::Data::Enum(e) => enum_config(&input.ident, e),
+    syn::Data::Enum(e) => {
+      if e.variants.iter().any(|v| !matches!(v.fields, syn::Fields::Unit)) {
+        tagged_enum_config(&input.ident, &input.attrs, e)
+      } else {
+        string_enum_config(&input.ident, e)
+      }
+    }
     _ => proc_macro_error::abort_call_site!("only structs and enums are supported"),
   };
 
@@ -48,8 +54,142 @@ fn struct_config(ident: &syn::Ident, s: syn::DataStruct) -> proc_macro2::TokenSt
   }
 }
 
-fn enum_config(input: &syn::Ident, e: syn::DataEnum) -> proc_macro2::TokenStream {
-  proc_macro_error::abort_call_site!("todo: enums");
+fn tagged_enum_config(
+  ident: &syn::Ident,
+  attrs: &[syn::Attribute],
+  e: syn::DataEnum,
+) -> proc_macro2::TokenStream {
+  let mut tag = None::<syn::LitStr>;
+  for attr in attrs {
+    if !attr.path().is_ident("config") {
+      continue;
+    }
+
+    if let Err(err) = attr.parse_nested_meta(|meta| {
+      if meta.path.is_ident("tag") {
+        tag = Some(meta.value()?.parse()?);
+        return Ok(());
+      }
+
+      Err(meta.error("unsupported config attribute; expected `tag = \"...\"`"))
+    }) {
+      proc_macro_error::abort!(attr, "{}", err);
+    }
+  }
+
+  let Some(tag) = tag else {
+    proc_macro_error::abort_call_site!("enum Config derives require #[config(tag = \"...\")]");
+  };
+
+  let mut variant_arms = vec![];
+  for variant in &e.variants {
+    if variant.discriminant.is_some() {
+      proc_macro_error::abort!(
+        variant,
+        "enum Config derives do not support variants with discriminants"
+      );
+    }
+
+    let variant_ident = &variant.ident;
+    let variant_tag = to_kebab_case(&variant_ident.to_string());
+    let variant_tag_lit = syn::LitStr::new(&variant_tag, variant_ident.span());
+
+    match &variant.fields {
+      syn::Fields::Unit => {
+        variant_arms.push(quote::quote! {
+          #variant_tag_lit => {
+            if !is_empty {
+              de.warn(format!("unknown key for variant '{}'", #variant_tag_lit), 0..0);
+            }
+            ::std::result::Result::Ok(#ident::#variant_ident)
+          }
+        });
+      }
+      syn::Fields::Unnamed(f) => {
+        if f.unnamed.len() != 1 {
+          proc_macro_error::abort!(variant, "enum Config derives only support a single value");
+        }
+
+        variant_arms.push(quote::quote! {
+          #variant_tag_lit => Ok(#ident::#variant_ident(de.value(rest)))
+        });
+      }
+      syn::Fields::Named(_) => {
+        proc_macro_error::abort!(variant, "enum Config derives do not support inline structs");
+      }
+    }
+  }
+
+  quote::quote! {
+    impl ::be_config::parse::ParseValue for #ident {
+      fn parse(
+        value: ::be_config::parse::DeValue,
+        de: &mut ::be_config::parse::Parser,
+      ) -> ::std::result::Result<Self, String> {
+        let ::be_config::parse::DeValue::Table(mut table) = value else {
+          return Err("expected table".to_string());
+        };
+
+        let tag_value = table
+          .remove(#tag)
+          .ok_or_else(|| format!("missing key: '{}'", #tag))?
+          .into_inner();
+        let ::be_config::parse::DeValue::String(tag) = tag_value else {
+          return Err(format!("expected '{}' to be a string", #tag));
+        };
+
+        let is_empty = table.is_empty();
+        let rest = ::be_config::parse::DeValue::Table(table);
+
+        match tag.as_ref() {
+          #(#variant_arms,)*
+          _ => Err(format!(
+            "unknown {} variant: '{}'",
+            #tag,
+            tag.as_ref()
+          )),
+        }
+      }
+    }
+  }
+}
+
+fn string_enum_config(ident: &syn::Ident, e: syn::DataEnum) -> proc_macro2::TokenStream {
+  let mut variant_arms = vec![];
+  for variant in &e.variants {
+    if variant.discriminant.is_some() {
+      proc_macro_error::abort!(
+        variant,
+        "enum Config derives do not support variants with discriminants"
+      );
+    }
+
+    let variant_ident = &variant.ident;
+    let variant_tag = to_kebab_case(&variant_ident.to_string());
+    let variant_tag_lit = syn::LitStr::new(&variant_tag, variant_ident.span());
+
+    variant_arms.push(quote::quote! {
+      #variant_tag_lit => Ok(#ident::#variant_ident)
+    });
+  }
+
+  quote::quote! {
+    impl ::be_config::parse::ParseValue for #ident {
+      fn parse(
+        value: ::be_config::parse::DeValue,
+        de: &mut ::be_config::parse::Parser,
+      ) -> ::std::result::Result<Self, String> {
+        let ::be_config::parse::DeValue::String(mut s) = value else {
+          return Err("expected string".to_string());
+        };
+
+        match &*s {
+          #(#variant_arms,)*
+          s => Err(format!("unknown variant: '{s}'")),
+        }
+      }
+    }
+  }
 }
 
 fn to_kebab_case(name: &str) -> String {

@@ -108,7 +108,7 @@ impl Parser {
     }
   }
 
-  fn error(&mut self, title: String, span: std::ops::Range<usize>) {
+  pub fn error(&mut self, title: String, span: std::ops::Range<usize>) {
     self.diagnostics.push(Diagnostic {
       title,
       line: span.start as u32,
@@ -116,7 +116,7 @@ impl Parser {
     })
   }
 
-  fn warn(&mut self, title: String, span: std::ops::Range<usize>) {
+  pub fn warn(&mut self, title: String, span: std::ops::Range<usize>) {
     self.diagnostics.push(Diagnostic {
       title,
       line: span.start as u32,
