@@ -232,11 +232,16 @@ impl winit::application::ApplicationHandler<Event> for App {
             init.app.texture.height() as f64 / init.scale,
           );
 
+          // This is 3x the line height (approximately).
+          const SCROLL_MULTIPLIER: f64 = 60.0;
+
           init.app.state.on_mouse(
             MouseEvent::Scroll {
               pos:   cursor,
               delta: match delta {
-                winit::event::MouseScrollDelta::LineDelta(x, y) => Vec2::new(x as f64, y as f64),
+                winit::event::MouseScrollDelta::LineDelta(x, y) => {
+                  Vec2::new(x as f64 * SCROLL_MULTIPLIER, y as f64 * SCROLL_MULTIPLIER)
+                }
                 winit::event::MouseScrollDelta::PixelDelta(pos) => Vec2::new(pos.x, pos.y),
               },
             },
