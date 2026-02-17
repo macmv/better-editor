@@ -49,6 +49,7 @@ pub struct EditorState {
   current_edit:     Option<Edit>,
   history_position: usize,
   history:          Vec<Edit>,
+  copied:           String,
 
   definition_history: Vec<(Cursor, PathBuf)>,
 

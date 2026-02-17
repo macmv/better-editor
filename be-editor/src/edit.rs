@@ -1,5 +1,8 @@
+use std::ops::Range;
+
 use be_doc::Change;
 use be_input::{Direction, Mode, Move, VerticalDirection};
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{CommandMode, EditorState};
 
@@ -60,25 +63,26 @@ impl EditorState {
           self.doc.byte_of_line(self.cursor.line + 1)
         };
 
-        self.change(Change::remove(self.doc.byte_of_line(self.cursor.line)..end));
+        self.delete_copy(self.doc.byte_of_line(self.cursor.line)..end);
         self.clamp_cursor();
       }
       Edit::CutLine => {
         self.set_mode(Mode::Insert);
-        self.change(Change::remove(
+        self.delete_copy(
           self.doc.byte_of_line(self.cursor.line)..self.doc.byte_of_line_end(self.cursor.line),
-        ));
+        );
         self.clamp_column();
 
         self.auto_indent(VerticalDirection::Up);
       }
       Edit::DeleteRestOfLine => {
-        self.change(Change::remove(
+        self.delete_copy(
           self.doc.cursor_offset(self.cursor)
             ..self.doc.offset_by_graphemes(self.doc.byte_of_line(self.cursor.line + 1), -1),
-        ));
+        );
         self.clamp_column();
       }
+      Edit::Paste { after } => self.paste(after),
       Edit::Backspace => {
         if self.doc.cursor_offset(self.cursor) > 0 {
           self.move_graphemes(-1);
@@ -113,8 +117,7 @@ impl EditorState {
     if matches!(m, Move::Single(Direction::Right)) {
       let range = self.doc.grapheme_slice(self.cursor, 1);
       if !self.doc.range(range.clone()).chars().any(|c| c == '\n') {
-        self.change(Change::remove(range));
-        self.clamp_column();
+        self.delete_copy(range);
       }
       return;
     }
@@ -133,7 +136,43 @@ impl EditorState {
 
     let change = Change::remove(start..end);
     self.keep_cursor_for_change(&change);
-    self.change(change);
+    self.delete_copy(start..end);
+  }
+
+  /// Copy the given range, then delete it, then fix the cursor. This is used
+  /// for all the 'd*' and 'c*' commands.
+  fn delete_copy(&mut self, range: Range<usize>) {
+    self.copy(range.clone());
+    self.change(Change::remove(range));
+    self.clamp_cursor();
+  }
+
+  fn copy(&mut self, range: Range<usize>) {
+    let text = self.doc.range(range);
+    self.copied = text.to_string();
+  }
+
+  fn paste(&mut self, after: bool) {
+    if self.copied.chars().any(|c| c == '\n') {
+      // Multiline copies are inserted at the end of the line.
+      let idx = if after {
+        self.doc.byte_of_line((self.cursor.line + 1).clamp(self.max_line()))
+      } else {
+        self.doc.byte_of_line(self.cursor.line)
+      };
+
+      self.change(Change::insert(idx, &self.copied));
+      if after {
+        self.move_line_rel(self.copied.chars().filter(|c| *c == '\n').count() as i32);
+      }
+    } else {
+      if after {
+        self.move_graphemes(1);
+      }
+
+      self.change(Change::insert(self.doc.cursor_offset(self.cursor), &self.copied));
+      self.move_graphemes(self.copied.graphemes(true).count().saturating_sub(1) as isize);
+    }
   }
 }
 

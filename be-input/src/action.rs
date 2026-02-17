@@ -58,6 +58,7 @@ pub enum Edit {
   DeleteLine,
   CutLine,
   DeleteRestOfLine,
+  Paste { after: bool },
   Backspace,
   Undo,
   Redo,
@@ -156,6 +157,8 @@ impl Action {
           k => parse_move(k, iter).map(|m| Action::Edit { e: Edit::Cut(m), count: None }),
         },
         (Mode::Normal, Key::Char('D')) => e!(DeleteRestOfLine),
+        (Mode::Normal, Key::Char('p')) => e!(Paste { after: true }),
+        (Mode::Normal, Key::Char('P')) => e!(Paste { after: false }),
         (Mode::Normal, Key::Char('u')) => e!(Undo),
         (Mode::Normal, Key::Char('r')) if key.control => e!(Redo),
 
