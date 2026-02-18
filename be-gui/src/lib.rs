@@ -182,14 +182,20 @@ impl State {
     layout.clipped(
       Rect::new(0.0, 0.0, layout.size().width, layout.size().height - 25.0),
       |layout| {
-        let tab = &mut self.tabs[self.active];
+        let mut tab = &mut self.tabs[self.active];
         if let Some(popup) = &mut tab.popup {
           popup.layout(layout);
         }
         tab.content.layout(&mut self.views.views, layout);
         if !layout.to_close.is_empty() {
           for to_close in layout.to_close.drain(..) {
-            tab.content.close(to_close, &mut self.views.views);
+            if matches!(tab.content, Pane::View(v) if v == to_close) {
+              self.tabs.remove(self.active);
+              self.active -= 1;
+              tab = &mut self.tabs[self.active];
+            } else {
+              tab.content.close(to_close, &mut self.views.views);
+            }
           }
 
           // Re-run layout after removing closed views.
