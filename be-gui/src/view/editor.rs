@@ -389,6 +389,14 @@ impl EditorView {
 
     let start_y = -(self.scroll.y % line_height);
 
+    if let Some(selection) = self.editor.selection() {
+      let anchor = selection.anchor();
+      render.fill(
+        &Rect::new(self.gutter_width(), start_y, self.gutter_width() + 20.0, start_y + 20.0),
+        render.theme().background_raised_outline,
+      );
+    }
+
     let mut y = start_y;
     for i in self.min_line.as_usize()..=self.max_line.as_usize() {
       if self.cached_layouts.get(&i).is_none() {

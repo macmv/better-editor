@@ -40,6 +40,8 @@ pub struct EditorState {
   cursor: Cursor,
   mode:   Mode,
 
+  selection: Option<Selection>,
+
   file:        Option<OpenedFile>,
   status:      Option<Status>,
   command:     Option<CommandState>,
@@ -62,6 +64,10 @@ pub struct EditorState {
   pub clipboard: SharedHandle<Clipboard>,
 
   pub changes: Option<LineDiffSimilarity>,
+}
+
+pub struct Selection {
+  anchor: Cursor,
 }
 
 #[derive(Debug)]
@@ -117,6 +123,7 @@ impl EditorState {
   pub fn is_damage_all(&self) -> bool { self.damage_all }
   pub fn damages(&self) -> impl Iterator<Item = &Line> { self.damages.iter() }
   pub fn progress(&self) -> Vec<String> { self.lsp.progress() }
+  pub fn selection(&self) -> Option<&Selection> { self.selection.as_ref() }
 
   pub fn clear_damage(&mut self) {
     self.damages.clear();
@@ -279,6 +286,12 @@ impl EditorState {
       self.command = Some(CommandState::default());
     } else {
       self.command = None;
+    }
+
+    if matches!(m, Mode::Visual(_)) {
+      self.selection = Some(Selection { anchor: self.cursor });
+    } else {
+      self.selection = None;
     }
 
     match m {
@@ -611,6 +624,10 @@ impl EditorState {
     self.damage_all = true;
     self.status = None;
   }
+}
+
+impl Selection {
+  pub fn anchor(&self) -> be_doc::Cursor { self.anchor }
 }
 
 impl IndentLevel {
