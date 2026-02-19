@@ -33,6 +33,7 @@ struct ChangedFile {
 
 impl Repo {
   pub fn open(root: &Path) -> Self {
+    // TODO: Handle `root` not existing
     let root = root.canonicalize().unwrap();
     Repo { git: GitRepo::open(&root).ok(), head: None, root, files: HashMap::new() }
   }
@@ -50,7 +51,7 @@ impl Repo {
   }
 
   pub fn open_file(&mut self, path: &Path) {
-    let path = path.canonicalize().unwrap();
+    let Ok(path) = path.canonicalize() else { return };
 
     if let Ok(rel) = path.strip_prefix(&self.root) {
       let file = if let Some(git) = &self.git {
@@ -67,7 +68,10 @@ impl Repo {
   }
 
   pub fn update_file(&mut self, path: &Path, doc: &Document) {
-    let path = path.canonicalize().unwrap();
+    let Ok(path) = path.canonicalize() else {
+      error!("unknown path: {}", path.display());
+      return;
+    };
 
     if let Ok(rel) = path.strip_prefix(&self.root) {
       if let Some(file) = self.files.get_mut(rel) {
@@ -81,7 +85,7 @@ impl Repo {
   }
 
   pub fn changes_in(&self, path: &Path) -> Option<LineDiffSimilarity> {
-    let path = path.canonicalize().unwrap();
+    let path = path.canonicalize().ok()?;
 
     if let Ok(rel) = path.strip_prefix(&self.root)
       && let Some(file) = self.files.get(rel)
