@@ -506,8 +506,16 @@ impl State {
               editor.clear_search();
             }
           }
-          "vs" => self.tabs[self.active].content.split(Axis::Vertical, &mut self.views, store),
-          "hs" => self.tabs[self.active].content.split(Axis::Horizontal, &mut self.views, store),
+          "vs" => {
+            let tab = &mut self.tabs[self.active];
+            let new_view = self.views.new_view(crate::view::EditorView::new(store));
+            tab.content.split(Axis::Vertical, &mut self.views.views, store, new_view);
+          }
+          "hs" => {
+            let tab = &mut self.tabs[self.active];
+            let new_view = self.views.new_view(crate::view::EditorView::new(store));
+            tab.content.split(Axis::Horizontal, &mut self.views.views, store, new_view);
+          }
 
           _ => {
             println!("unknown command: {}", cmd);

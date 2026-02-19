@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use be_input::Direction;
 use kurbo::{Axis, Point, Rect};
 
-use crate::{Distance, Layout, RenderStore, ViewCollection, ViewId, view::View};
+use crate::{Distance, Layout, RenderStore, ViewId, view::View};
 
 pub enum Pane {
   View(ViewId),
@@ -98,35 +98,36 @@ impl Pane {
     }
   }
 
-  pub fn split(&mut self, axis: Axis, views: &mut ViewCollection, store: &RenderStore) {
+  pub fn split(
+    &mut self,
+    axis: Axis,
+    views: &mut HashMap<ViewId, View>,
+    store: &RenderStore,
+    new_view: ViewId,
+  ) {
     match self {
       Pane::View(v) => {
-        let v2 = views.new_view(crate::view::EditorView::new(store));
-
-        views.views.get_mut(v).unwrap().on_focus(false);
-        views.views.get_mut(&v2).unwrap().on_focus(true);
+        views.get_mut(v).unwrap().on_focus(false);
+        views.get_mut(&new_view).unwrap().on_focus(true);
         *self = Pane::Split(Split {
           axis,
           active: 1,
-          items: vec![(0.5, Pane::View(*v)), (0.5, Pane::View(v2))],
+          items: vec![(0.5, Pane::View(*v)), (0.5, Pane::View(new_view))],
         });
       }
 
       Pane::Split(s) => match &mut s.items[s.active].1 {
-        active @ Pane::Split(_) => active.split(axis, views, store),
-        active @ Pane::View(_) if s.axis != axis => active.split(axis, views, store),
+        active @ Pane::Split(_) => active.split(axis, views, store, new_view),
+        active @ Pane::View(_) if s.axis != axis => active.split(axis, views, store, new_view),
         _ => {
           let fract = s.items.len() as f64 / (s.items.len() + 1) as f64;
           for p in &mut s.items {
             p.0 *= fract;
           }
-          s.items.insert(
-            s.active + 1,
-            (1.0 - fract, Pane::View(views.new_view(crate::view::EditorView::new(store)))),
-          );
-          views.views.get_mut(&s.items[s.active].1.active()).unwrap().on_focus(false);
+          s.items.insert(s.active + 1, (1.0 - fract, Pane::View(new_view)));
+          views.get_mut(&s.items[s.active].1.active()).unwrap().on_focus(false);
           s.active += 1;
-          views.views.get_mut(&s.items[s.active].1.active()).unwrap().on_focus(true);
+          views.get_mut(&s.items[s.active].1.active()).unwrap().on_focus(true);
         }
       },
     }
