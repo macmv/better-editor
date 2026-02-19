@@ -311,7 +311,7 @@ impl KeyState {
     let key = match key {
       WKey::Character(s) if s.len() == 1 => Some(Key::Char(s.chars().next()?)),
       WKey::Named(Escape) => Some(Key::Escape),
-      WKey::Named(Tab) => None, // TODO
+      WKey::Named(Tab) => Some(Key::Tab),
       WKey::Named(Enter) => Some(Key::Char('\n')),
       WKey::Named(Space) => Some(Key::Char(' ')),
       WKey::Named(Backspace) => Some(Key::Backspace),

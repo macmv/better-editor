@@ -344,6 +344,7 @@ impl EditorState {
       Action::MoveCompletion { next } => self.move_completion(next),
       Action::Navigate { nav } => error!("unhandled navigate passed to editor: {nav:?}"),
       Action::Control { .. } => {} // only really used for the terminal
+      Action::Tab => {}            // TODO
     }
   }
 
