@@ -66,6 +66,12 @@ impl EditorView {
     view
   }
 
+  pub fn split_from(&mut self, editor: &EditorView) {
+    if let Some(file) = editor.editor.file() {
+      let _ = self.editor.open(file);
+    }
+  }
+
   pub fn animated(&self) -> bool { self.progress_animation.is_running() }
 
   pub fn layout(&mut self, layout: &mut Layout) {

@@ -105,6 +105,7 @@ impl EditorState {
   pub fn mode(&self) -> Mode { self.mode }
   pub fn command(&self) -> Option<&CommandState> { self.command.as_ref() }
   pub fn status(&self) -> Option<&Status> { self.status.as_ref() }
+  pub fn file(&self) -> Option<&std::path::Path> { self.file.as_ref().map(|f| f.path()) }
   pub fn file_type(&self) -> Option<LanguageName> { self.filetype }
   pub fn take_damage_all(&mut self) -> bool { std::mem::take(&mut self.damage_all) }
   pub fn take_damages(&mut self) -> impl Iterator<Item = Line> { self.damages.drain() }

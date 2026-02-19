@@ -543,7 +543,11 @@ impl State {
 
   fn split_active_view(&mut self, store: &RenderStore) -> ViewId {
     match self.active_view().content {
-      ViewContent::Editor(_) => self.views.new_view(crate::view::EditorView::new(store)),
+      ViewContent::Editor(ref e) => {
+        let mut editor = crate::view::EditorView::new(store);
+        editor.split_from(e);
+        self.views.new_view(editor)
+      }
       ViewContent::FileTree(_) => {
         self.views.new_view(crate::view::FileTree::current_directory(store.notifier()))
       }
