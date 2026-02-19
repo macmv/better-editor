@@ -354,6 +354,9 @@ impl State {
       self.views.get(self.tabs[self.active].content.active()).unwrap().mode()
     }
   }
+  fn active_view(&self) -> &View {
+    self.views.get(self.tabs[self.active].content.active()).unwrap()
+  }
   fn active_view_mut(&mut self) -> &mut View {
     self.views.get_mut(self.tabs[self.active].content.active()).unwrap()
   }
@@ -507,14 +510,22 @@ impl State {
             }
           }
           "vs" => {
-            let tab = &mut self.tabs[self.active];
-            let new_view = self.views.new_view(crate::view::EditorView::new(store));
-            tab.content.split(Axis::Vertical, &mut self.views.views, store, new_view);
+            let new_view = self.split_active_view(store);
+            self.tabs[self.active].content.split(
+              Axis::Vertical,
+              &mut self.views.views,
+              store,
+              new_view,
+            );
           }
           "hs" => {
-            let tab = &mut self.tabs[self.active];
-            let new_view = self.views.new_view(crate::view::EditorView::new(store));
-            tab.content.split(Axis::Horizontal, &mut self.views.views, store, new_view);
+            let new_view = self.split_active_view(store);
+            self.tabs[self.active].content.split(
+              Axis::Horizontal,
+              &mut self.views.views,
+              store,
+              new_view,
+            );
           }
 
           _ => {
@@ -528,6 +539,16 @@ impl State {
     }
 
     false
+  }
+
+  fn split_active_view(&mut self, store: &RenderStore) -> ViewId {
+    match self.active_view().content {
+      ViewContent::Editor(_) => self.views.new_view(crate::view::EditorView::new(store)),
+      ViewContent::FileTree(_) => {
+        self.views.new_view(crate::view::FileTree::current_directory(store.notifier()))
+      }
+      ViewContent::Terminal(_) => self.views.new_view(crate::view::TerminalView::new()),
+    }
   }
 }
 
