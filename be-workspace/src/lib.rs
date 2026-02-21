@@ -24,7 +24,8 @@ pub struct Workspace {
   pub repo:    Option<Repo>,
   pub lsp:     Rc<RefCell<LanguageServerStore>>,
 
-  waker: Arc<Mutex<Box<dyn Fn() + Send>>>,
+  next_id: EditorId,
+  waker:   Arc<Mutex<Box<dyn Fn() + Send>>>,
 }
 
 pub struct WorkspaceEditor<'a> {
@@ -46,8 +47,22 @@ impl Workspace {
       repo: None,
       lsp: Rc::new(RefCell::new(lsp)),
 
+      next_id: EditorId(0),
       waker,
     }
+  }
+
+  pub fn new_editor(&mut self) -> EditorId {
+    let mut editor = EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n");
+
+    editor.config = self.config.clone();
+    editor.lsp.store = self.lsp.clone();
+    // editor.send = Some(Box::new(move |ev| notifier.editor_event(ev)));
+
+    let id = self.next_id;
+    self.editors.insert(id, editor);
+    self.next_id.0 += 1;
+    id
   }
 
   pub fn editor(&mut self, id: EditorId) -> WorkspaceEditor<'_> {
