@@ -29,8 +29,7 @@ pub enum Event {
 pub struct RenderStore {
   proxy: winit::event_loop::EventLoopProxy<Event>,
 
-  pub workspace: Rc<RefCell<Workspace>>,
-  pub lsp:       Rc<RefCell<be_lsp::LanguageServerStore>>,
+  pub workspace: Workspace,
   pub config:    Rc<RefCell<Config>>,
   pub text:      TextStore,
   pub theme:     Theme,
@@ -116,7 +115,6 @@ pub fn run() {
     }
     let config = Rc::new(RefCell::new(config.value));
 
-    let lsp_store = be_lsp::LanguageServerStore::default();
     let workspace = Workspace::new();
 
     {
@@ -126,8 +124,7 @@ pub fn run() {
 
     let store = RenderStore {
       proxy,
-      workspace: Rc::new(RefCell::new(workspace)),
-      lsp: Rc::new(RefCell::new(lsp_store)),
+      workspace,
       text: TextStore::new(&config),
       config,
       render: vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),

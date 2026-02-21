@@ -59,7 +59,7 @@ impl EditorView {
     view.progress_animation.set_repeat(true);
 
     view.editor.config = store.config.clone();
-    view.editor.lsp.store = store.lsp.clone();
+    view.editor.lsp.store = store.workspace.lsp.clone();
     let notifier = store.notifier();
     view.editor.send = Some(Box::new(move |ev| notifier.editor_event(ev)));
 

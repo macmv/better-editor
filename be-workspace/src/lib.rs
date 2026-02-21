@@ -1,7 +1,9 @@
 use std::{
+  cell::RefCell,
   collections::HashMap,
   ops::{Deref, DerefMut},
   path::PathBuf,
+  rc::Rc,
   sync::Arc,
 };
 
@@ -18,7 +20,7 @@ pub struct Workspace {
 
   pub editors: HashMap<EditorId, EditorState>,
   pub repo:    Option<Repo>,
-  pub lsp:     LanguageServerStore,
+  pub lsp:     Rc<RefCell<LanguageServerStore>>,
 
   waker: Arc<Mutex<Box<dyn Fn() + Send>>>,
 }
@@ -39,7 +41,7 @@ impl Workspace {
       root: std::env::current_dir().unwrap(),
       editors: HashMap::new(),
       repo: None,
-      lsp,
+      lsp: Rc::new(RefCell::new(lsp)),
 
       waker,
     }
