@@ -24,8 +24,8 @@ pub struct Workspace {
   pub repo:    Option<Repo>,
   pub lsp:     Rc<RefCell<LanguageServerStore>>,
 
-  next_id: EditorId,
-  waker:   Arc<Mutex<Box<dyn Fn(WorkspaceEvent) + Send>>>,
+  next_id:  EditorId,
+  notifier: Arc<Mutex<Box<dyn Fn(WorkspaceEvent) + Send>>>,
 }
 
 pub struct WorkspaceEditor<'a> {
@@ -41,12 +41,12 @@ pub enum WorkspaceEvent {
 
 impl Workspace {
   pub fn new(config: Rc<RefCell<Config>>) -> Self {
-    let waker: Arc<Mutex<Box<dyn Fn(WorkspaceEvent) + Send>>> =
+    let notifier: Arc<Mutex<Box<dyn Fn(WorkspaceEvent) + Send>>> =
       Arc::new(Mutex::new(Box::new(|_| {})));
 
     let mut lsp = LanguageServerStore::default();
     {
-      let waker = waker.clone();
+      let waker = notifier.clone();
       lsp.set_on_message(Arc::new(Mutex::new(Box::new(move || {
         (waker.lock())(WorkspaceEvent::Refresh);
       }))));
@@ -60,7 +60,7 @@ impl Workspace {
       lsp: Rc::new(RefCell::new(lsp)),
 
       next_id: EditorId(0),
-      waker,
+      notifier,
     }
   }
 
@@ -69,7 +69,10 @@ impl Workspace {
 
     editor.config = self.config.clone();
     editor.lsp.store = self.lsp.clone();
-    // editor.send = Some(Box::new(move |ev| notifier.editor_event(ev)));
+    editor.send = Some(Box::new({
+      let notifier = self.notifier.clone();
+      move |ev| (notifier.lock())(WorkspaceEvent::Editor(ev))
+    }));
 
     let id = self.next_id;
     self.editors.insert(id, editor);
@@ -82,7 +85,7 @@ impl Workspace {
   }
 
   pub fn set_waker(&self, wake: impl Fn(WorkspaceEvent) + Send + 'static) {
-    *self.waker.lock() = Box::new(wake);
+    *self.notifier.lock() = Box::new(wake);
   }
 }
 
