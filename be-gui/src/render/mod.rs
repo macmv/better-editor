@@ -116,14 +116,12 @@ pub fn run() {
     }
     let config = Rc::new(RefCell::new(config.value));
 
-    let mut lsp_store = be_lsp::LanguageServerStore::default();
+    let lsp_store = be_lsp::LanguageServerStore::default();
     let workspace = Workspace::new();
 
     {
       let notifier = Notify { proxy: proxy.clone() };
       workspace.set_waker(move || notifier.wake());
-      let notifier = Notify { proxy: proxy.clone() };
-      lsp_store.set_on_message(move || notifier.wake());
     }
 
     let store = RenderStore {

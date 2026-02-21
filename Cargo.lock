@@ -312,6 +312,7 @@ version = "0.1.0"
 dependencies = [
  "be-editor",
  "be-git",
+ "be-lsp",
  "parking_lot",
 ]
 

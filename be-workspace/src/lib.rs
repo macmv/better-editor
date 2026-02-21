@@ -7,15 +7,18 @@ use std::{
 
 use be_editor::EditorState;
 use be_git::Repo;
+use be_lsp::LanguageServerStore;
 use parking_lot::Mutex;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct EditorId(u32);
 
 pub struct Workspace {
-  pub root:    PathBuf,
+  pub root: PathBuf,
+
   pub editors: HashMap<EditorId, EditorState>,
   pub repo:    Option<Repo>,
+  pub lsp:     LanguageServerStore,
 
   waker: Arc<Mutex<Box<dyn Fn() + Send>>>,
 }
@@ -27,12 +30,18 @@ pub struct WorkspaceEditor<'a> {
 
 impl Workspace {
   pub fn new() -> Self {
-    Workspace {
-      root:    std::env::current_dir().unwrap(),
-      editors: HashMap::new(),
-      repo:    None,
+    let waker: Arc<Mutex<Box<dyn Fn() + Send>>> = Arc::new(Mutex::new(Box::new(|| {})));
 
-      waker: Arc::new(Mutex::new(Box::new(|| {}))),
+    let mut lsp = LanguageServerStore::default();
+    lsp.set_on_message(waker.clone());
+
+    Workspace {
+      root: std::env::current_dir().unwrap(),
+      editors: HashMap::new(),
+      repo: None,
+      lsp,
+
+      waker,
     }
   }
 

@@ -72,8 +72,8 @@ impl Default for LanguageServerStore {
 }
 
 impl LanguageServerStore {
-  pub fn set_on_message<F: Fn() + Send + 'static>(&mut self, f: F) {
-    *self.on_message.lock() = Box::new(f);
+  pub fn set_on_message(&mut self, waker: Arc<Mutex<Box<dyn Fn() + Send>>>) {
+    self.on_message = waker;
   }
 
   pub fn get(&self, key: &LanguageServerKey) -> Option<Weak<LanguageServerState>> {
