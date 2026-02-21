@@ -4,6 +4,7 @@ use std::{collections::HashMap, hash::Hash};
 
 use be_doc::Cursor;
 use be_input::{Action, KeyStroke, Navigation};
+use be_workspace::WorkspaceEvent;
 use kurbo::{Axis, Point, Rect, Size};
 pub use render::*;
 
@@ -477,12 +478,12 @@ impl State {
   /// Handles an event. Returns `true` if the app should close.
   fn on_event(&mut self, event: Event, store: &RenderStore) -> bool {
     match event {
-      Event::Refresh => {}
-      Event::Editor(be_editor::EditorEvent::OpenFile(path, cursor)) => {
+      Event::Workspace(WorkspaceEvent::Refresh) => {}
+      Event::Workspace(WorkspaceEvent::Editor(be_editor::EditorEvent::OpenFile(path, cursor))) => {
         self.tabs[self.active].popup = None;
         self.open(&path, cursor);
       }
-      Event::Editor(be_editor::EditorEvent::RunCommand(cmd)) => {
+      Event::Workspace(WorkspaceEvent::Editor(be_editor::EditorEvent::RunCommand(cmd))) => {
         let (cmd, args) = cmd.split_once(' ').unwrap_or((&cmd, ""));
 
         match cmd {

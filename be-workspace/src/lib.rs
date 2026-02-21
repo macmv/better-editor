@@ -8,7 +8,7 @@ use std::{
 };
 
 use be_config::Config;
-use be_editor::EditorState;
+use be_editor::{EditorEvent, EditorState};
 use be_git::Repo;
 use be_lsp::LanguageServerStore;
 use parking_lot::Mutex;
@@ -25,7 +25,7 @@ pub struct Workspace {
   pub lsp:     Rc<RefCell<LanguageServerStore>>,
 
   next_id: EditorId,
-  waker:   Arc<Mutex<Box<dyn Fn() + Send>>>,
+  waker:   Arc<Mutex<Box<dyn Fn(WorkspaceEvent) + Send>>>,
 }
 
 pub struct WorkspaceEditor<'a> {
@@ -33,12 +33,24 @@ pub struct WorkspaceEditor<'a> {
   id:        EditorId,
 }
 
+#[derive(Debug)]
+pub enum WorkspaceEvent {
+  Refresh,
+  Editor(EditorEvent),
+}
+
 impl Workspace {
   pub fn new(config: Rc<RefCell<Config>>) -> Self {
-    let waker: Arc<Mutex<Box<dyn Fn() + Send>>> = Arc::new(Mutex::new(Box::new(|| {})));
+    let waker: Arc<Mutex<Box<dyn Fn(WorkspaceEvent) + Send>>> =
+      Arc::new(Mutex::new(Box::new(|_| {})));
 
     let mut lsp = LanguageServerStore::default();
-    lsp.set_on_message(waker.clone());
+    {
+      let waker = waker.clone();
+      lsp.set_on_message(Arc::new(Mutex::new(Box::new(move || {
+        (waker.lock())(WorkspaceEvent::Refresh);
+      }))));
+    }
 
     Workspace {
       root: std::env::current_dir().unwrap(),
@@ -69,7 +81,9 @@ impl Workspace {
     WorkspaceEditor { workspace: self, id }
   }
 
-  pub fn set_waker(&self, wake: impl Fn() + Send + 'static) { *self.waker.lock() = Box::new(wake); }
+  pub fn set_waker(&self, wake: impl Fn(WorkspaceEvent) + Send + 'static) {
+    *self.waker.lock() = Box::new(wake);
+  }
 }
 
 impl Deref for WorkspaceEditor<'_> {

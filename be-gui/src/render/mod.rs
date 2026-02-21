@@ -2,7 +2,7 @@ use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Instant};
 
 use be_config::Config;
 use be_editor::EditorEvent;
-use be_workspace::Workspace;
+use be_workspace::{Workspace, WorkspaceEvent};
 use kurbo::{Affine, Axis, Point, Rect, Shape, Size, Stroke, Vec2};
 use peniko::{
   Gradient,
@@ -21,9 +21,8 @@ pub use text::TextLayout;
 
 #[derive(Debug)]
 pub enum Event {
-  Refresh,
   Exit,
-  Editor(EditorEvent),
+  Workspace(WorkspaceEvent),
 }
 
 pub struct RenderStore {
@@ -119,7 +118,7 @@ pub fn run() {
 
     {
       let notifier = Notify { proxy: proxy.clone() };
-      workspace.set_waker(move || notifier.wake());
+      workspace.set_waker(move |ev| notifier.workspace_event(ev));
     }
 
     let store = RenderStore {
@@ -390,15 +389,16 @@ impl<'a> Render<'a> {
 }
 
 impl Notify {
-  pub fn wake(&self) { self.proxy.send_event(Event::Refresh).unwrap(); }
+  pub fn open_file(&self, path: PathBuf) { self.editor_event(EditorEvent::OpenFile(path, None)); }
 
-  pub fn open_file(&self, path: PathBuf) {
-    self.proxy.send_event(Event::Editor(EditorEvent::OpenFile(path, None))).unwrap();
-  }
+  pub fn wake(&self) { self.workspace_event(WorkspaceEvent::Refresh); }
+  pub fn editor_event(&self, ev: EditorEvent) { self.workspace_event(WorkspaceEvent::Editor(ev)); }
 
   pub fn exit(&self) { self.proxy.send_event(Event::Exit).unwrap(); }
 
-  pub fn editor_event(&self, ev: EditorEvent) { self.proxy.send_event(Event::Editor(ev)).unwrap(); }
+  fn workspace_event(&self, ev: be_workspace::WorkspaceEvent) {
+    self.proxy.send_event(Event::Workspace(ev)).unwrap();
+  }
 }
 
 #[derive(Debug, Copy, Clone)]
