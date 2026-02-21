@@ -66,6 +66,9 @@ impl EditorView {
     view
   }
 
+  pub fn cursor(&self) -> Cursor { self.editor.cursor() }
+  pub fn doc(&self) -> &be_doc::Document { self.editor.doc() }
+
   pub fn split_from(&mut self, editor: &EditorView) {
     if let Some(file) = editor.editor.file() {
       let _ = self.editor.open(file);
@@ -153,9 +156,9 @@ impl EditorView {
         if pos.y >= size.height - line_height {
           // status bar
         } else {
-          let line = self.line_for_mouse(store, pos.y).unwrap_or_else(|| {
-            be_doc::Line(self.editor.doc().rope.lines().len().saturating_sub(1))
-          });
+          let line = self
+            .line_for_mouse(store, pos.y)
+            .unwrap_or_else(|| be_doc::Line(self.doc().rope.lines().len().saturating_sub(1)));
           let Some(layout) = self.cached_layouts.get(&line.0) else {
             return crate::CursorKind::Default;
           };
@@ -166,7 +169,7 @@ impl EditorView {
 
           if pos.x >= self.gutter_width() {
             let column_byte = layout.index(pos.x - self.gutter_width(), cursor_mode);
-            let column = self.editor.doc().line(line).byte_slice(..column_byte).graphemes().count();
+            let column = self.doc().line(line).byte_slice(..column_byte).graphemes().count();
 
             self.editor.move_to(Cursor {
               line,
@@ -191,9 +194,9 @@ impl EditorView {
           let max_fully_visible_row =
             ((self.scroll.y + size.height) / line_height).floor() as usize - 1 - scroll_offset;
 
-          if self.editor.cursor().line.as_usize() < min_fully_visible_row {
+          if self.cursor().line.as_usize() < min_fully_visible_row {
             self.editor.move_to_line(be_doc::Line(min_fully_visible_row));
-          } else if self.editor.cursor().line.as_usize() > max_fully_visible_row {
+          } else if self.cursor().line.as_usize() > max_fully_visible_row {
             self.editor.move_to_line(be_doc::Line(max_fully_visible_row));
           }
         }
@@ -210,7 +213,7 @@ impl EditorView {
 
     let line_region_y = self.scroll.y + y;
     let line = (line_region_y / line_height).floor() as usize;
-    if line < self.editor.doc().rope.lines().len() { Some(be_doc::Line(line)) } else { None }
+    if line < self.doc().rope.lines().len() { Some(be_doc::Line(line)) } else { None }
   }
 
   fn layout_editor(&mut self, layout: &mut Layout) {
@@ -221,42 +224,40 @@ impl EditorView {
     let max_fully_visible_row =
       ((self.scroll.y + layout.size().height) / line_height).floor() as usize - 1 - scroll_offset;
 
-    if self.editor.cursor().line.as_usize() < min_fully_visible_row {
+    if self.cursor().line.as_usize() < min_fully_visible_row {
       let target_line = self
-        .editor
         .cursor()
         .line
         .as_usize()
         .saturating_sub(scroll_offset)
-        .clamp(0, self.editor.doc().rope.lines().len());
+        .clamp(0, self.doc().rope.lines().len());
 
       self.scroll.y = target_line as f64 * line_height;
-    } else if self.editor.cursor().line.as_usize() > max_fully_visible_row {
+    } else if self.cursor().line.as_usize() > max_fully_visible_row {
       let target_line = self
-        .editor
         .cursor()
         .line
         .as_usize()
         .saturating_add(scroll_offset + 1)
-        .clamp(0, self.editor.doc().rope.lines().len());
+        .clamp(0, self.doc().rope.lines().len());
 
       self.scroll.y = (target_line as f64 * line_height) - layout.size().height;
     }
 
     self.min_line = be_doc::Line(
       ((self.scroll.y / line_height).floor() as usize)
-        .clamp(0, self.editor.doc().rope.lines().len().saturating_sub(1)),
+        .clamp(0, self.doc().rope.lines().len().saturating_sub(1)),
     );
     self.max_line = be_doc::Line(
       (((self.scroll.y + layout.size().height) / line_height).ceil() as usize)
-        .clamp(0, self.editor.doc().rope.lines().len().saturating_sub(1)),
+        .clamp(0, self.doc().rope.lines().len().saturating_sub(1)),
     );
 
-    let start = self.editor.doc().byte_of_line(self.min_line);
-    let end = if self.max_line.as_usize() >= self.editor.doc().len_lines() {
-      self.editor.doc().rope.byte_len()
+    let start = self.doc().byte_of_line(self.min_line);
+    let end = if self.max_line.as_usize() >= self.doc().len_lines() {
+      self.doc().rope.byte_len()
     } else {
-      self.editor.doc().byte_of_line(self.max_line + 1)
+      self.doc().byte_of_line(self.max_line + 1)
     };
 
     let mut index = start;
@@ -266,14 +267,14 @@ impl EditorView {
     // Layout the length line number by default. If `character_width` is wrong, then
     // we'll still take the `max()` below.
     self.line_number_width = layout.store.text.font_metrics().character_width
-      * ((self.editor.doc().len_lines() as f64).log10().floor() + 1.0);
+      * ((self.doc().len_lines() as f64).log10().floor() + 1.0);
 
     while index < end {
       if self.layout_line(layout, i, index).is_none() {
         break;
       };
 
-      let color = if self.focused && self.editor.cursor().line.as_usize() == i {
+      let color = if self.focused && self.cursor().line.as_usize() == i {
         layout.theme().text
       } else {
         layout.theme().text_dim
@@ -285,7 +286,7 @@ impl EditorView {
       self.line_numbers.push(layout);
 
       i += 1;
-      index += self.editor.doc().rope.byte_slice(index..).raw_lines().next().unwrap().byte_len();
+      index += self.doc().rope.byte_slice(index..).raw_lines().next().unwrap().byte_len();
     }
   }
 
@@ -332,11 +333,10 @@ impl EditorView {
     indent_guides.finish(render);
 
     if let Some(mode) = self.cursor_mode() {
-      let line = self.editor.cursor().line.as_usize();
+      let line = self.cursor().line.as_usize();
       let layout = &self.cached_layouts[&line];
 
-      let cursor = layout
-        .cursor(self.editor.doc().cursor_column_offset(self.editor.cursor()), mode)
+      let cursor = layout.cursor(self.doc().cursor_column_offset(self.cursor()), mode)
         + Vec2::new(
           self.gutter_width(),
           start_y + (line - self.min_line.as_usize()) as f64 * line_height,
@@ -428,7 +428,7 @@ impl EditorView {
 
   fn draw_trailing_spaces(&self, i: usize, end_of_line: f64, y: f64, render: &mut Render) {
     let mut shape = Circle::new((0.0, y + render.store.text.font_metrics().line_height / 2.0), 1.5);
-    for (i, c) in self.editor.doc().line(be_doc::Line(i)).chars().rev().enumerate() {
+    for (i, c) in self.doc().line(be_doc::Line(i)).chars().rev().enumerate() {
       if c == ' ' {
         shape.center.x = end_of_line
           - (i as f64 * render.store.text.font_metrics().character_width)
