@@ -2,6 +2,7 @@ use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Instant};
 
 use be_config::Config;
 use be_editor::EditorEvent;
+use be_workspace::Workspace;
 use kurbo::{Affine, Axis, Point, Rect, Shape, Size, Stroke, Vec2};
 use peniko::{
   Gradient,
@@ -28,10 +29,11 @@ pub enum Event {
 pub struct RenderStore {
   proxy: winit::event_loop::EventLoopProxy<Event>,
 
-  pub lsp:    Rc<RefCell<be_lsp::LanguageServerStore>>,
-  pub config: Rc<RefCell<Config>>,
-  pub text:   TextStore,
-  pub theme:  Theme,
+  pub workspace: Rc<RefCell<Workspace>>,
+  pub lsp:       Rc<RefCell<be_lsp::LanguageServerStore>>,
+  pub config:    Rc<RefCell<Config>>,
+  pub text:      TextStore,
+  pub theme:     Theme,
 
   render: vello::Renderer,
 }
@@ -115,14 +117,18 @@ pub fn run() {
     let config = Rc::new(RefCell::new(config.value));
 
     let mut lsp_store = be_lsp::LanguageServerStore::default();
+    let workspace = Workspace::new();
 
     {
+      let notifier = Notify { proxy: proxy.clone() };
+      workspace.set_waker(move || notifier.wake());
       let notifier = Notify { proxy: proxy.clone() };
       lsp_store.set_on_message(move || notifier.wake());
     }
 
     let store = RenderStore {
       proxy,
+      workspace: Rc::new(RefCell::new(workspace)),
       lsp: Rc::new(RefCell::new(lsp_store)),
       text: TextStore::new(&config),
       config,

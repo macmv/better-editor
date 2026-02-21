@@ -232,6 +232,7 @@ dependencies = [
  "be-input",
  "be-lsp",
  "be-terminal",
+ "be-workspace",
  "bytemuck",
  "chrono",
  "fern",
@@ -311,6 +312,7 @@ version = "0.1.0"
 dependencies = [
  "be-editor",
  "be-git",
+ "parking_lot",
 ]
 
 [[package]]
