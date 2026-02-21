@@ -310,6 +310,7 @@ dependencies = [
 name = "be-workspace"
 version = "0.1.0"
 dependencies = [
+ "be-config",
  "be-editor",
  "be-git",
  "be-lsp",

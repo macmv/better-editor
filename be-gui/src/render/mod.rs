@@ -115,7 +115,7 @@ pub fn run() {
     }
     let config = Rc::new(RefCell::new(config.value));
 
-    let workspace = Workspace::new();
+    let workspace = Workspace::new(config.clone());
 
     {
       let notifier = Notify { proxy: proxy.clone() };

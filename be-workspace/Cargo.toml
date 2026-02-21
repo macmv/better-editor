@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+be-config = { version = "0.1.0", path = "../be-config" }
 be-editor = { version = "0.1.0", path = "../be-editor" }
 be-git = { version = "0.1.0", path = "../be-git" }
 be-lsp = { version = "0.1.0", path = "../be-lsp" }

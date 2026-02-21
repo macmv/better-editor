@@ -7,6 +7,7 @@ use std::{
   sync::Arc,
 };
 
+use be_config::Config;
 use be_editor::EditorState;
 use be_git::Repo;
 use be_lsp::LanguageServerStore;
@@ -18,6 +19,7 @@ pub struct EditorId(u32);
 pub struct Workspace {
   pub root: PathBuf,
 
+  pub config:  Rc<RefCell<Config>>,
   pub editors: HashMap<EditorId, EditorState>,
   pub repo:    Option<Repo>,
   pub lsp:     Rc<RefCell<LanguageServerStore>>,
@@ -31,7 +33,7 @@ pub struct WorkspaceEditor<'a> {
 }
 
 impl Workspace {
-  pub fn new() -> Self {
+  pub fn new(config: Rc<RefCell<Config>>) -> Self {
     let waker: Arc<Mutex<Box<dyn Fn() + Send>>> = Arc::new(Mutex::new(Box::new(|| {})));
 
     let mut lsp = LanguageServerStore::default();
@@ -39,6 +41,7 @@ impl Workspace {
 
     Workspace {
       root: std::env::current_dir().unwrap(),
+      config,
       editors: HashMap::new(),
       repo: None,
       lsp: Rc::new(RefCell::new(lsp)),
