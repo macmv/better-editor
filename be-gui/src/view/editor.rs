@@ -66,9 +66,8 @@ impl EditorView {
   pub fn doc(&self) -> &be_doc::Document { self.editor.doc() }
 
   pub fn split_from(&mut self, editor: &EditorView) {
-    if let Some(file) = editor.editor.file() {
-      let _ = self.editor.open(file);
-    }
+    // TODO: Save if unsaved.
+    self.editor = editor.editor.clone();
   }
 
   pub fn animated(&self) -> bool { self.progress_animation.is_running() }
