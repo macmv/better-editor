@@ -40,11 +40,9 @@ const LINE_NUMBER_MARGIN_LEFT: f64 = 10.0;
 const LINE_NUMBER_MARGIN_RIGHT: f64 = 10.0;
 
 impl EditorView {
-  pub fn new(store: &RenderStore) -> Self {
+  pub fn new(store: &mut RenderStore) -> Self {
     let mut view = EditorView {
-      editor:              SharedHandle::new(EditorState::from(
-        "💖hello\n💖foobar\nsdjkhfl\nworld\n",
-      )),
+      editor:              store.workspace.new_editor(),
       scroll:              Point::ZERO,
       focused:             false,
       temporary_underline: false,
@@ -60,11 +58,6 @@ impl EditorView {
     };
 
     view.progress_animation.set_repeat(true);
-
-    view.editor.config = store.config.clone();
-    view.editor.lsp.store = store.workspace.lsp.clone();
-    let notifier = store.notifier();
-    view.editor.send = Some(Box::new(move |ev| notifier.editor_event(ev)));
 
     view
   }

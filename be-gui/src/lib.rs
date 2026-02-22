@@ -99,7 +99,7 @@ impl ViewId {
 }
 
 impl State {
-  pub fn new(store: &RenderStore) -> Self {
+  pub fn new(store: &mut RenderStore) -> Self {
     let mut state = State {
       keys:          vec![],
       active:        1,
@@ -112,7 +112,7 @@ impl State {
 
     let layout = store.config.borrow().settings.layout.clone();
 
-    fn build_view(state: &mut State, store: &RenderStore, tab: be_config::TabSettings) -> Pane {
+    fn build_view(state: &mut State, store: &mut RenderStore, tab: be_config::TabSettings) -> Pane {
       match tab {
         be_config::TabSettings::Split(split) => {
           if split.percent.len() != split.children.len().saturating_sub(1) {
@@ -476,7 +476,7 @@ impl State {
   }
 
   /// Handles an event. Returns `true` if the app should close.
-  fn on_event(&mut self, event: Event, store: &RenderStore) -> bool {
+  fn on_event(&mut self, event: Event, store: &mut RenderStore) -> bool {
     match event {
       Event::Workspace(WorkspaceEvent::Refresh) => {}
       Event::Workspace(WorkspaceEvent::Editor(be_editor::EditorEvent::OpenFile(path, cursor))) => {
@@ -542,7 +542,7 @@ impl State {
     false
   }
 
-  fn split_active_view(&mut self, store: &RenderStore) -> ViewId {
+  fn split_active_view(&mut self, store: &mut RenderStore) -> ViewId {
     match self.active_view().content {
       ViewContent::Editor(ref e) => {
         let mut editor = crate::view::EditorView::new(store);

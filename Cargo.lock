@@ -319,6 +319,7 @@ dependencies = [
  "be-editor",
  "be-git",
  "be-lsp",
+ "be-shared",
  "parking_lot",
 ]
 

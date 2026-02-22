@@ -1,16 +1,10 @@
-use std::{
-  cell::RefCell,
-  collections::HashMap,
-  ops::{Deref, DerefMut},
-  path::PathBuf,
-  rc::Rc,
-  sync::Arc,
-};
+use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc, sync::Arc};
 
 use be_config::Config;
 use be_editor::{EditorEvent, EditorState};
 use be_git::Repo;
 use be_lsp::LanguageServerStore;
+use be_shared::{SharedHandle, WeakHandle};
 use parking_lot::Mutex;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -20,17 +14,12 @@ pub struct Workspace {
   pub root: PathBuf,
 
   pub config:  Rc<RefCell<Config>>,
-  pub editors: HashMap<EditorId, EditorState>,
+  pub editors: HashMap<EditorId, WeakHandle<EditorState>>,
   pub repo:    Option<Repo>,
   pub lsp:     Rc<RefCell<LanguageServerStore>>,
 
   next_id:  EditorId,
   notifier: Arc<Mutex<Box<dyn Fn(WorkspaceEvent) + Send>>>,
-}
-
-pub struct WorkspaceEditor<'a> {
-  workspace: &'a mut Workspace,
-  id:        EditorId,
 }
 
 #[derive(Debug)]
@@ -64,7 +53,7 @@ impl Workspace {
     }
   }
 
-  pub fn new_editor(&mut self) -> EditorId {
+  pub fn new_editor(&mut self) -> SharedHandle<EditorState> {
     let mut editor = EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n");
 
     editor.config = self.config.clone();
@@ -74,27 +63,15 @@ impl Workspace {
       move |ev| (notifier.lock())(WorkspaceEvent::Editor(ev))
     }));
 
-    let id = self.next_id;
-    self.editors.insert(id, editor);
-    self.next_id.0 += 1;
-    id
-  }
+    let handle = SharedHandle::new(editor);
 
-  pub fn editor(&mut self, id: EditorId) -> WorkspaceEditor<'_> {
-    WorkspaceEditor { workspace: self, id }
+    let id = self.next_id;
+    self.editors.insert(id, SharedHandle::downgrade(&handle));
+    self.next_id.0 += 1;
+    handle
   }
 
   pub fn set_waker(&self, wake: impl Fn(WorkspaceEvent) + Send + 'static) {
     *self.notifier.lock() = Box::new(wake);
   }
-}
-
-impl Deref for WorkspaceEditor<'_> {
-  type Target = EditorState;
-
-  fn deref(&self) -> &Self::Target { &self.workspace.editors[&self.id] }
-}
-
-impl DerefMut for WorkspaceEditor<'_> {
-  fn deref_mut(&mut self) -> &mut Self::Target { self.workspace.editors.get_mut(&self.id).unwrap() }
 }
