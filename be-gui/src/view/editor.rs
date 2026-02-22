@@ -4,6 +4,7 @@ use be_animation::Animation;
 use be_doc::Cursor;
 use be_editor::{CommandMode, EditorState, IndentLevel};
 use be_input::Mode;
+use be_shared::SharedHandle;
 use kurbo::{Arc, Circle, Line, Point, Rect, RoundedRect, Size, Stroke, Triangle, Vec2};
 
 use crate::{
@@ -11,7 +12,7 @@ use crate::{
 };
 
 pub struct EditorView {
-  pub editor: EditorState,
+  pub editor: SharedHandle<EditorState>,
 
   scroll:  Point,
   focused: bool,
@@ -41,7 +42,9 @@ const LINE_NUMBER_MARGIN_RIGHT: f64 = 10.0;
 impl EditorView {
   pub fn new(store: &RenderStore) -> Self {
     let mut view = EditorView {
-      editor:              EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n"),
+      editor:              SharedHandle::new(EditorState::from(
+        "💖hello\n💖foobar\nsdjkhfl\nworld\n",
+      )),
       scroll:              Point::ZERO,
       focused:             false,
       temporary_underline: false,

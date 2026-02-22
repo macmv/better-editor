@@ -231,6 +231,7 @@ dependencies = [
  "be-editor",
  "be-input",
  "be-lsp",
+ "be-shared",
  "be-terminal",
  "be-workspace",
  "bytemuck",
