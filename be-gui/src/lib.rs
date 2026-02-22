@@ -180,6 +180,12 @@ impl State {
       },
     );
 
+    for editor in layout.store.workspace.editors.values() {
+      if let Some(mut editor) = editor.upgrade() {
+        editor.layout();
+      }
+    }
+
     layout.clipped(
       Rect::new(0.0, 0.0, layout.size().width, layout.size().height - 25.0),
       |layout| {
@@ -204,6 +210,12 @@ impl State {
         }
       },
     );
+
+    for editor in layout.store.workspace.editors.values() {
+      if let Some(mut editor) = editor.upgrade() {
+        editor.clear_damage();
+      }
+    }
   }
 
   fn hit_view(&self, pos: Point, size: kurbo::Size) -> Option<ViewId> {

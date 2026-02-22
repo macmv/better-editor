@@ -81,18 +81,16 @@ impl EditorView {
   pub fn layout(&mut self, layout: &mut Layout) {
     puffin::profile_function!();
 
-    self.editor.layout();
-
     if self.cached_scale != layout.scale() {
       self.cached_layouts.clear();
       self.cached_scale = layout.scale();
     }
 
-    if self.editor.take_damage_all() {
+    if self.editor.is_damage_all() {
       self.cached_layouts.clear();
     }
 
-    for line in self.editor.take_damages() {
+    for line in self.editor.damages() {
       self.cached_layouts.remove(&line.as_usize());
     }
 
