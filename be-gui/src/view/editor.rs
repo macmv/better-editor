@@ -1,10 +1,11 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, io};
 
 use be_animation::Animation;
 use be_doc::Cursor;
 use be_editor::{CommandMode, EditorState, IndentLevel};
 use be_input::Mode;
 use be_shared::SharedHandle;
+use be_workspace::Workspace;
 use kurbo::{Arc, Circle, Line, Point, Rect, RoundedRect, Size, Stroke, Triangle, Vec2};
 
 use crate::{
@@ -68,6 +69,11 @@ impl EditorView {
   pub fn split_from(&mut self, editor: &EditorView) {
     // TODO: Save if unsaved.
     self.editor = editor.editor.clone();
+  }
+
+  pub fn open(&mut self, path: &std::path::Path, workspace: &mut Workspace) -> io::Result<()> {
+    self.editor = workspace.new_editor();
+    self.editor.open(path)
   }
 
   pub fn animated(&self) -> bool { self.progress_animation.is_running() }

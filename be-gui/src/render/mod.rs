@@ -140,7 +140,7 @@ pub fn run() {
     };
 
     if let Some(path) = std::env::args().nth(1) {
-      app.state.open(std::path::Path::new(&path), None);
+      app.state.open(std::path::Path::new(&path), None, &mut app.store.workspace);
     }
 
     app

@@ -4,7 +4,7 @@ use std::{collections::HashMap, hash::Hash};
 
 use be_doc::Cursor;
 use be_input::{Action, KeyStroke, Navigation};
-use be_workspace::WorkspaceEvent;
+use be_workspace::{Workspace, WorkspaceEvent};
 use kurbo::{Axis, Point, Rect, Size};
 pub use render::*;
 
@@ -298,9 +298,9 @@ impl State {
     );
   }
 
-  fn open(&mut self, path: &std::path::Path, cursor: Option<Cursor>) {
+  fn open(&mut self, path: &std::path::Path, cursor: Option<Cursor>, workspace: &mut Workspace) {
     if let ViewContent::Editor(e) = &mut self.active_view_mut().content {
-      let res = e.editor.open(path);
+      let res = e.open(path, workspace);
       if let Some(cursor) = cursor
         && res.is_ok()
       {
@@ -316,7 +316,7 @@ impl State {
         _ => None,
       })
     {
-      let res = e.editor.open(path);
+      let res = e.open(path, workspace);
       if let Some(cursor) = cursor
         && res.is_ok()
       {
@@ -477,7 +477,7 @@ impl State {
       Event::Workspace(WorkspaceEvent::Refresh) => {}
       Event::Workspace(WorkspaceEvent::Editor(be_editor::EditorEvent::OpenFile(path, cursor))) => {
         self.tabs[self.active].popup = None;
-        self.open(&path, cursor);
+        self.open(&path, cursor, &mut store.workspace);
       }
       Event::Workspace(WorkspaceEvent::Editor(be_editor::EditorEvent::RunCommand(cmd))) => {
         let (cmd, args) = cmd.split_once(' ').unwrap_or((&cmd, ""));
@@ -494,7 +494,7 @@ impl State {
           }
           "e" => {
             if let Some(editor) = self.active_editor() {
-              let _ = editor.editor.open(std::path::Path::new(args));
+              let _ = editor.open(std::path::Path::new(args), &mut store.workspace);
               /*
               .map(|()| format!("{}: opened",
               self.file.as_ref().unwrap().path().display()));
