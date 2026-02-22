@@ -118,6 +118,8 @@ impl EditorView {
       |state, render| state.draw_editor(render),
       |state, render| state.draw_status(render),
     );
+
+    self.draw_progress(render);
   }
 
   pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
@@ -388,6 +390,10 @@ impl EditorView {
       );
       render.draw_text(&layout, (render.size().width - 50.0, render.size().height - line_height));
     }
+  }
+
+  fn draw_progress(&mut self, render: &mut Render) {
+    let line_height = render.store.text.font_metrics().line_height;
 
     let progress = self.editor.progress();
     if progress.is_empty() {
