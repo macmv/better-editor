@@ -12,7 +12,7 @@ use pane::Pane;
 use view::View;
 
 use crate::{
-  view::{FileTree, ViewContent},
+  view::{EditorView, FileTree, ViewContent},
   widget::{Align, Justify, WidgetCollection},
 };
 
@@ -467,12 +467,8 @@ impl State {
     self.tab_layout.draw(render);
   }
 
-  fn active_editor(&mut self) -> Option<&mut be_editor::EditorState> {
-    if let ViewContent::Editor(e) = &mut self.active_view_mut().content {
-      Some(&mut e.editor)
-    } else {
-      None
-    }
+  fn active_editor(&mut self) -> Option<&mut EditorView> {
+    if let ViewContent::Editor(e) = &mut self.active_view_mut().content { Some(e) } else { None }
   }
 
   /// Handles an event. Returns `true` if the app should close.
@@ -489,7 +485,7 @@ impl State {
         match cmd {
           "w" => {
             if let Some(editor) = self.active_editor() {
-              editor.begin_save();
+              editor.editor.begin_save();
             }
           }
           "q" => {
@@ -498,7 +494,7 @@ impl State {
           }
           "e" => {
             if let Some(editor) = self.active_editor() {
-              let _ = editor.open(std::path::Path::new(args));
+              let _ = editor.editor.open(std::path::Path::new(args));
               /*
               .map(|()| format!("{}: opened",
               self.file.as_ref().unwrap().path().display()));
@@ -507,7 +503,7 @@ impl State {
           }
           "noh" => {
             if let Some(editor) = self.active_editor() {
-              editor.clear_search();
+              editor.editor.clear_search();
             }
           }
           "vs" => {
