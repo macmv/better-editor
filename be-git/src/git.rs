@@ -32,6 +32,17 @@ impl GitRepo {
     Some(Document { rope: be_doc::crop::Rope::from(String::from_utf8_lossy(blob.content())) })
   }
 
+  pub fn is_ignored(&self, path: &Path) -> Result<bool, git2::Error> {
+    let rel = if path.is_absolute() {
+      let Ok(rel) = path.strip_prefix(&self.root) else { return Ok(false) };
+      rel
+    } else {
+      path
+    };
+
+    self.repo.status_should_ignore(rel)
+  }
+
   pub fn changes_in(&self, path: &Path) -> Option<Changes> {
     let path = path.canonicalize().unwrap();
     let Ok(rel) = path.strip_prefix(&self.root) else { return None };

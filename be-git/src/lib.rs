@@ -97,9 +97,7 @@ impl Repo {
   }
 
   pub fn is_modified(&self, path: &Path) -> bool {
-    let Some(path) = path.canonicalize().ok() else {
-      return false;
-    };
+    let Some(path) = path.canonicalize().ok() else { return false };
 
     if let Ok(rel) = path.strip_prefix(&self.root)
       && let Some(file) = self.files.get(rel)
@@ -108,6 +106,12 @@ impl Repo {
     }
 
     false
+  }
+
+  pub fn is_ignored(&self, path: &Path) -> bool {
+    let Some(git) = &self.git else { return false };
+
+    git.is_ignored(path).unwrap_or(false)
   }
 }
 
