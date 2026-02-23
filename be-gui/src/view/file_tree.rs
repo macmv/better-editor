@@ -1,8 +1,10 @@
 use std::{
   borrow::Cow,
+  ops::{BitOr, BitOrAssign},
   path::{Path, PathBuf},
 };
 
+use be_git::Repo;
 use be_input::{Action, Direction, Mode, Move};
 use be_shared::SharedHandle;
 use kurbo::{Point, Rect, Vec2};
@@ -39,12 +41,29 @@ struct Directory {
   path:     PathBuf,
   items:    Option<Vec<Item>>,
   expanded: bool,
+
+  status: FileStatus,
 }
 
 #[derive(Eq)]
 struct File {
   name: String,
   path: PathBuf,
+
+  status: FileStatus,
+}
+
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+enum FileStatus {
+  #[default]
+  Unchanged,
+
+  Created,
+  Modified,
+  Deleted,
+
+  Ignored,
 }
 
 impl PartialEq for File {
@@ -183,7 +202,9 @@ impl FileTree {
 }
 
 impl Directory {
-  fn new(path: PathBuf) -> Directory { Directory { path, items: None, expanded: false } }
+  fn new(path: PathBuf) -> Self {
+    Directory { path, items: None, expanded: false, status: FileStatus::default() }
+  }
 
   fn name(&self) -> Cow<'_, str> { self.path.file_name().unwrap().to_string_lossy() }
 
@@ -217,6 +238,7 @@ impl Directory {
         items.push(Item::File(File {
           name: path.file_name().unwrap().to_string_lossy().to_string(),
           path,
+          status: FileStatus::default(),
         }));
       }
     }
@@ -264,7 +286,9 @@ impl FileTree {
 
   pub fn layout(&mut self, _layout: &mut Layout) {
     let mut node = ItemMut::Directory(&mut self.tree);
-    node.populate_recursively();
+    if let Some(repo) = &*self.repo {
+      node.layout(&repo);
+    }
   }
 
   pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
@@ -297,7 +321,7 @@ impl Item {
 }
 
 impl ItemMut<'_> {
-  fn populate_recursively(&mut self) {
+  fn layout(&mut self, repo: &Repo) {
     match self {
       ItemMut::Directory(dir) => {
         if dir.expanded && dir.items.is_none() {
@@ -305,12 +329,36 @@ impl ItemMut<'_> {
         }
 
         if let Some(items) = &mut dir.items {
+          let mut status = FileStatus::default();
+
           for it in items {
-            it.as_mut().populate_recursively();
+            it.as_mut().layout(repo);
+            status |= it.status();
           }
+
+          dir.status = status;
         }
       }
-      ItemMut::File(_) => {}
+      ItemMut::File(file) => file.layout(repo),
+    }
+  }
+}
+
+impl Item {
+  fn status(&self) -> FileStatus {
+    match self {
+      Item::Directory(d) => d.status,
+      Item::File(f) => f.status,
+    }
+  }
+}
+
+impl File {
+  fn layout(&mut self, repo: &Repo) {
+    if repo.is_modified(&self.path) {
+      self.status = FileStatus::Modified;
+    } else {
+      self.status = FileStatus::Unchanged;
     }
   }
 }
@@ -370,4 +418,16 @@ impl TreeDraw {
     let text = render.layout_text(&file.name, render.theme().text);
     render.draw_text(&text, self.pos() + Vec2::new(self.indent_width, 0.0));
   }
+}
+
+impl BitOr for FileStatus {
+  type Output = Self;
+
+  fn bitor(self, rhs: Self) -> Self::Output {
+    if self == rhs { self } else { FileStatus::Modified }
+  }
+}
+
+impl BitOrAssign for FileStatus {
+  fn bitor_assign(&mut self, rhs: Self) { *self = *self | rhs; }
 }

@@ -95,6 +95,20 @@ impl Repo {
 
     None
   }
+
+  pub fn is_modified(&self, path: &Path) -> bool {
+    let Some(path) = path.canonicalize().ok() else {
+      return false;
+    };
+
+    if let Ok(rel) = path.strip_prefix(&self.root)
+      && let Some(file) = self.files.get(rel)
+    {
+      return file.is_modified();
+    }
+
+    false
+  }
 }
 
 impl ChangedFile {
@@ -105,4 +119,6 @@ impl ChangedFile {
   fn changes(&self) -> diff::LineDiffSimilarity {
     diff::line_diff_similarity(&self.original, &self.current)
   }
+
+  fn is_modified(&self) -> bool { self.changes().hunks().next().is_some() }
 }
