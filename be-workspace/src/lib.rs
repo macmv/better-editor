@@ -74,4 +74,6 @@ impl Workspace {
   pub fn set_waker(&self, wake: impl Fn(WorkspaceEvent) + Send + 'static) {
     *self.notifier.lock() = Box::new(wake);
   }
+
+  pub fn cleanup_editors(&mut self) { self.editors.retain(|_, v| v.can_upgrade()); }
 }

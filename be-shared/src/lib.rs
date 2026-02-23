@@ -64,6 +64,8 @@ impl<T> SharedHandle<T> {
 }
 
 impl<T> WeakHandle<T> {
+  pub fn can_upgrade(&self) -> bool { self.inner.strong_count() > 0 }
+
   pub fn upgrade(&self) -> Option<SharedHandle<T>> {
     self.inner.upgrade().map(|inner| SharedHandle { inner })
   }

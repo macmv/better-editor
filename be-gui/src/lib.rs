@@ -216,6 +216,8 @@ impl State {
         editor.clear_damage();
       }
     }
+
+    layout.store.workspace.cleanup_editors();
   }
 
   fn hit_view(&self, pos: Point, size: kurbo::Size) -> Option<ViewId> {
