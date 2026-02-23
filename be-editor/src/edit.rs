@@ -109,6 +109,18 @@ impl EditorState {
           self.clamp_cursor();
         }
       }
+      Edit::SwitchCase => {
+        let range = self.doc.grapheme_slice(self.cursor, 1);
+        if let Some(c @ ('a'..='z' | 'A'..='Z')) = self.doc.range(range.clone()).chars().next() {
+          let c = ((c as u8) ^ 0x20) as char;
+          let mut buf = [0; 4];
+          let s = c.encode_utf8(&mut buf);
+          self.change(Change::replace(range, s));
+        }
+
+        self.move_col_rel(1);
+        self.clamp_cursor();
+      }
     }
   }
 

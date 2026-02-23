@@ -64,6 +64,7 @@ pub enum Edit {
   Backspace,
   Undo,
   Redo,
+  SwitchCase,
 }
 
 pub enum ActionError {
@@ -165,6 +166,7 @@ impl Action {
         (Mode::Normal, Key::Char('P')) => e!(Paste { after: false }),
         (Mode::Normal, Key::Char('u')) => e!(Undo),
         (Mode::Normal, Key::Char('r')) if key.control => e!(Redo),
+        (Mode::Normal, Key::Char('~')) => e!(SwitchCase),
 
         // === modes ===
         (Mode::Normal, Key::Char('i')) => Ok(Action::SetMode { mode: Mode::Insert, delta: 0 }),
