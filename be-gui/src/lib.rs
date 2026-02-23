@@ -4,7 +4,7 @@ use std::{collections::HashMap, hash::Hash};
 
 use be_doc::Cursor;
 use be_input::{Action, KeyStroke, Navigation};
-use be_workspace::WorkspaceEvent;
+use be_workspace::{Workspace, WorkspaceEvent};
 use kurbo::{Axis, Point, Rect, Size};
 pub use render::*;
 
@@ -12,7 +12,7 @@ use pane::Pane;
 use view::View;
 
 use crate::{
-  view::{FileTree, ViewContent},
+  view::{EditorView, FileTree, ViewContent},
   widget::{Align, Justify, WidgetCollection},
 };
 
@@ -99,7 +99,7 @@ impl ViewId {
 }
 
 impl State {
-  pub fn new(store: &RenderStore) -> Self {
+  pub fn new(store: &mut RenderStore) -> Self {
     let mut state = State {
       keys:          vec![],
       active:        1,
@@ -112,7 +112,7 @@ impl State {
 
     let layout = store.config.borrow().settings.layout.clone();
 
-    fn build_view(state: &mut State, store: &RenderStore, tab: be_config::TabSettings) -> Pane {
+    fn build_view(state: &mut State, store: &mut RenderStore, tab: be_config::TabSettings) -> Pane {
       match tab {
         be_config::TabSettings::Split(split) => {
           if split.percent.len() != split.children.len().saturating_sub(1) {
@@ -180,6 +180,12 @@ impl State {
       },
     );
 
+    for editor in layout.store.workspace.editors.values() {
+      if let Some(mut editor) = editor.upgrade() {
+        editor.layout();
+      }
+    }
+
     layout.clipped(
       Rect::new(0.0, 0.0, layout.size().width, layout.size().height - 25.0),
       |layout| {
@@ -204,6 +210,14 @@ impl State {
         }
       },
     );
+
+    for editor in layout.store.workspace.editors.values() {
+      if let Some(mut editor) = editor.upgrade() {
+        editor.clear_damage();
+      }
+    }
+
+    layout.store.workspace.cleanup_editors();
   }
 
   fn hit_view(&self, pos: Point, size: kurbo::Size) -> Option<ViewId> {
@@ -298,9 +312,9 @@ impl State {
     );
   }
 
-  fn open(&mut self, path: &std::path::Path, cursor: Option<Cursor>) {
+  fn open(&mut self, path: &std::path::Path, cursor: Option<Cursor>, workspace: &mut Workspace) {
     if let ViewContent::Editor(e) = &mut self.active_view_mut().content {
-      let res = e.editor.open(path);
+      let res = e.open(path, workspace);
       if let Some(cursor) = cursor
         && res.is_ok()
       {
@@ -316,7 +330,7 @@ impl State {
         _ => None,
       })
     {
-      let res = e.editor.open(path);
+      let res = e.open(path, workspace);
       if let Some(cursor) = cursor
         && res.is_ok()
       {
@@ -467,21 +481,17 @@ impl State {
     self.tab_layout.draw(render);
   }
 
-  fn active_editor(&mut self) -> Option<&mut be_editor::EditorState> {
-    if let ViewContent::Editor(e) = &mut self.active_view_mut().content {
-      Some(&mut e.editor)
-    } else {
-      None
-    }
+  fn active_editor(&mut self) -> Option<&mut EditorView> {
+    if let ViewContent::Editor(e) = &mut self.active_view_mut().content { Some(e) } else { None }
   }
 
   /// Handles an event. Returns `true` if the app should close.
-  fn on_event(&mut self, event: Event, store: &RenderStore) -> bool {
+  fn on_event(&mut self, event: Event, store: &mut RenderStore) -> bool {
     match event {
       Event::Workspace(WorkspaceEvent::Refresh) => {}
       Event::Workspace(WorkspaceEvent::Editor(be_editor::EditorEvent::OpenFile(path, cursor))) => {
         self.tabs[self.active].popup = None;
-        self.open(&path, cursor);
+        self.open(&path, cursor, &mut store.workspace);
       }
       Event::Workspace(WorkspaceEvent::Editor(be_editor::EditorEvent::RunCommand(cmd))) => {
         let (cmd, args) = cmd.split_once(' ').unwrap_or((&cmd, ""));
@@ -489,7 +499,7 @@ impl State {
         match cmd {
           "w" => {
             if let Some(editor) = self.active_editor() {
-              editor.begin_save();
+              editor.editor.begin_save();
             }
           }
           "q" => {
@@ -498,7 +508,7 @@ impl State {
           }
           "e" => {
             if let Some(editor) = self.active_editor() {
-              let _ = editor.open(std::path::Path::new(args));
+              let _ = editor.open(std::path::Path::new(args), &mut store.workspace);
               /*
               .map(|()| format!("{}: opened",
               self.file.as_ref().unwrap().path().display()));
@@ -507,7 +517,7 @@ impl State {
           }
           "noh" => {
             if let Some(editor) = self.active_editor() {
-              editor.clear_search();
+              editor.editor.clear_search();
             }
           }
           "vs" => {
@@ -542,7 +552,7 @@ impl State {
     false
   }
 
-  fn split_active_view(&mut self, store: &RenderStore) -> ViewId {
+  fn split_active_view(&mut self, store: &mut RenderStore) -> ViewId {
     match self.active_view().content {
       ViewContent::Editor(ref e) => {
         let mut editor = crate::view::EditorView::new(store);

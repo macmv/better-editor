@@ -107,9 +107,14 @@ impl EditorState {
   pub fn status(&self) -> Option<&Status> { self.status.as_ref() }
   pub fn file(&self) -> Option<&std::path::Path> { self.file.as_ref().map(|f| f.path()) }
   pub fn file_type(&self) -> Option<LanguageName> { self.filetype }
-  pub fn take_damage_all(&mut self) -> bool { std::mem::take(&mut self.damage_all) }
-  pub fn take_damages(&mut self) -> impl Iterator<Item = Line> { self.damages.drain() }
+  pub fn is_damage_all(&self) -> bool { self.damage_all }
+  pub fn damages(&self) -> impl Iterator<Item = &Line> { self.damages.iter() }
   pub fn progress(&self) -> Vec<String> { self.lsp.progress() }
+
+  pub fn clear_damage(&mut self) {
+    self.damages.clear();
+    self.damage_all = false;
+  }
 
   pub fn layout(&mut self) {
     if self.repo.is_none() {

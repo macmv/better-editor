@@ -1,9 +1,11 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, io};
 
 use be_animation::Animation;
 use be_doc::Cursor;
 use be_editor::{CommandMode, EditorState, IndentLevel};
 use be_input::Mode;
+use be_shared::SharedHandle;
+use be_workspace::Workspace;
 use kurbo::{Arc, Circle, Line, Point, Rect, RoundedRect, Size, Stroke, Triangle, Vec2};
 
 use crate::{
@@ -11,10 +13,10 @@ use crate::{
 };
 
 pub struct EditorView {
-  pub editor: EditorState,
+  pub editor: SharedHandle<EditorState>,
 
-  scroll:  Point,
-  focused: bool,
+  scroll: Point,
+  focus:  Focus,
 
   // This is kinda hacky but ah well.
   pub(crate) temporary_underline: bool,
@@ -35,15 +37,20 @@ pub struct EditorView {
   progress_animation: Animation,
 }
 
+enum Focus {
+  Focused,
+  Unfocused { cursor: Cursor },
+}
+
 const LINE_NUMBER_MARGIN_LEFT: f64 = 10.0;
 const LINE_NUMBER_MARGIN_RIGHT: f64 = 10.0;
 
 impl EditorView {
-  pub fn new(store: &RenderStore) -> Self {
+  pub fn new(store: &mut RenderStore) -> Self {
     let mut view = EditorView {
-      editor:              EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n"),
+      editor:              store.workspace.new_editor(),
       scroll:              Point::ZERO,
-      focused:             false,
+      focus:               Focus::Unfocused { cursor: Cursor::default() },
       temporary_underline: false,
       cached_layouts:      HashMap::new(),
       cached_scale:        0.0,
@@ -58,21 +65,25 @@ impl EditorView {
 
     view.progress_animation.set_repeat(true);
 
-    view.editor.config = store.config.clone();
-    view.editor.lsp.store = store.workspace.lsp.clone();
-    let notifier = store.notifier();
-    view.editor.send = Some(Box::new(move |ev| notifier.editor_event(ev)));
-
     view
   }
 
-  pub fn cursor(&self) -> Cursor { self.editor.cursor() }
+  pub fn cursor(&self) -> Cursor {
+    match self.focus {
+      Focus::Focused => self.editor.cursor(),
+      Focus::Unfocused { cursor } => cursor,
+    }
+  }
   pub fn doc(&self) -> &be_doc::Document { self.editor.doc() }
 
   pub fn split_from(&mut self, editor: &EditorView) {
-    if let Some(file) = editor.editor.file() {
-      let _ = self.editor.open(file);
-    }
+    // TODO: Save if unsaved.
+    self.editor = editor.editor.clone();
+  }
+
+  pub fn open(&mut self, path: &std::path::Path, workspace: &mut Workspace) -> io::Result<()> {
+    self.editor = workspace.new_editor();
+    self.editor.open(path)
   }
 
   pub fn animated(&self) -> bool { self.progress_animation.is_running() }
@@ -80,18 +91,16 @@ impl EditorView {
   pub fn layout(&mut self, layout: &mut Layout) {
     puffin::profile_function!();
 
-    self.editor.layout();
-
     if self.cached_scale != layout.scale() {
       self.cached_layouts.clear();
       self.cached_scale = layout.scale();
     }
 
-    if self.editor.take_damage_all() {
+    if self.editor.is_damage_all() {
       self.cached_layouts.clear();
     }
 
-    for line in self.editor.take_damages() {
+    for line in self.editor.damages() {
       self.cached_layouts.remove(&line.as_usize());
     }
 
@@ -122,7 +131,19 @@ impl EditorView {
     self.draw_progress(render);
   }
 
-  pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
+  pub fn on_focus(&mut self, focus: bool) {
+    if focus {
+      if let Focus::Unfocused { cursor } = self.focus {
+        self.editor.move_to(cursor);
+      }
+
+      self.focus = Focus::Focused;
+    } else {
+      self.focus = Focus::Unfocused { cursor: self.editor.cursor() };
+    }
+  }
+
+  fn focused(&self) -> bool { matches!(self.focus, Focus::Focused) }
 
   pub fn on_mouse(
     &mut self,
@@ -190,16 +211,19 @@ impl EditorView {
 
           self.scroll.y = (self.scroll.y - delta.y).max(0.0);
 
-          let scroll_offset = self.editor.config.borrow().settings.editor.scroll_offset as usize;
+          if self.focused() {
+            let scroll_offset = self.editor.config.borrow().settings.editor.scroll_offset as usize;
 
-          let min_fully_visible_row = (self.scroll.y / line_height).ceil() as usize + scroll_offset;
-          let max_fully_visible_row =
-            ((self.scroll.y + size.height) / line_height).floor() as usize - 1 - scroll_offset;
+            let min_fully_visible_row =
+              (self.scroll.y / line_height).ceil() as usize + scroll_offset;
+            let max_fully_visible_row =
+              ((self.scroll.y + size.height) / line_height).floor() as usize - 1 - scroll_offset;
 
-          if self.cursor().line.as_usize() < min_fully_visible_row {
-            self.editor.move_to_line(be_doc::Line(min_fully_visible_row));
-          } else if self.cursor().line.as_usize() > max_fully_visible_row {
-            self.editor.move_to_line(be_doc::Line(max_fully_visible_row));
+            if self.cursor().line.as_usize() < min_fully_visible_row {
+              self.editor.move_to_line(be_doc::Line(min_fully_visible_row));
+            } else if self.cursor().line.as_usize() > max_fully_visible_row {
+              self.editor.move_to_line(be_doc::Line(max_fully_visible_row));
+            }
           }
         }
       }
@@ -222,28 +246,30 @@ impl EditorView {
     let line_height = layout.store.text.font_metrics().line_height;
     let scroll_offset = self.editor.config.borrow().settings.editor.scroll_offset as usize;
 
-    let min_fully_visible_row = (self.scroll.y / line_height).ceil() as usize + scroll_offset;
-    let max_fully_visible_row =
-      ((self.scroll.y + layout.size().height) / line_height).floor() as usize - 1 - scroll_offset;
+    if self.focused() {
+      let min_fully_visible_row = (self.scroll.y / line_height).ceil() as usize + scroll_offset;
+      let max_fully_visible_row =
+        ((self.scroll.y + layout.size().height) / line_height).floor() as usize - 1 - scroll_offset;
 
-    if self.cursor().line.as_usize() < min_fully_visible_row {
-      let target_line = self
-        .cursor()
-        .line
-        .as_usize()
-        .saturating_sub(scroll_offset)
-        .clamp(0, self.doc().rope.lines().len());
+      if self.cursor().line.as_usize() < min_fully_visible_row {
+        let target_line = self
+          .cursor()
+          .line
+          .as_usize()
+          .saturating_sub(scroll_offset)
+          .clamp(0, self.doc().rope.lines().len());
 
-      self.scroll.y = target_line as f64 * line_height;
-    } else if self.cursor().line.as_usize() > max_fully_visible_row {
-      let target_line = self
-        .cursor()
-        .line
-        .as_usize()
-        .saturating_add(scroll_offset + 1)
-        .clamp(0, self.doc().rope.lines().len());
+        self.scroll.y = target_line as f64 * line_height;
+      } else if self.cursor().line.as_usize() > max_fully_visible_row {
+        let target_line = self
+          .cursor()
+          .line
+          .as_usize()
+          .saturating_add(scroll_offset + 1)
+          .clamp(0, self.doc().rope.lines().len());
 
-      self.scroll.y = (target_line as f64 * line_height) - layout.size().height;
+        self.scroll.y = (target_line as f64 * line_height) - layout.size().height;
+      }
     }
 
     self.min_line = be_doc::Line(
@@ -276,7 +302,7 @@ impl EditorView {
         break;
       };
 
-      let color = if self.focused && self.cursor().line.as_usize() == i {
+      let color = if self.focused() && self.cursor().line.as_usize() == i {
         layout.theme().text
       } else {
         layout.theme().text_dim
@@ -338,18 +364,24 @@ impl EditorView {
       let line = self.cursor().line.as_usize();
       let layout = &self.cached_layouts[&line];
 
-      let cursor = layout.cursor(self.doc().cursor_column_offset(self.cursor()), mode)
-        + Vec2::new(
-          self.gutter_width(),
-          start_y + (line - self.min_line.as_usize()) as f64 * line_height,
-        );
-      if self.focused {
-        render.fill(&cursor.ceil(), render.theme().text);
-      } else {
-        render.stroke(&cursor.inset(-0.5 * render.scale()), render.theme().text, Stroke::new(1.0));
-      }
+      if line >= self.min_line.as_usize() && line <= self.max_line.as_usize() {
+        let cursor = layout.cursor(self.doc().cursor_column_offset(self.cursor()), mode)
+          + Vec2::new(
+            self.gutter_width(),
+            start_y + (line - self.min_line.as_usize()) as f64 * line_height,
+          );
+        if self.focused() {
+          render.fill(&cursor.ceil(), render.theme().text);
+        } else {
+          render.stroke(
+            &cursor.inset(-0.5 * render.scale()),
+            render.theme().text,
+            Stroke::new(1.0),
+          );
+        }
 
-      self.draw_completions(cursor, render);
+        self.draw_completions(cursor, render);
+      }
     }
   }
 
@@ -637,6 +669,10 @@ impl EditorView {
   }
 
   fn cursor_mode(&self) -> Option<CursorMode> {
+    if !self.focused() {
+      return Some(CursorMode::Block);
+    }
+
     match self.editor.mode() {
       Mode::Normal if self.temporary_underline => Some(CursorMode::Underline),
       Mode::Normal | Mode::Visual(_) => Some(CursorMode::Block),

@@ -231,6 +231,7 @@ dependencies = [
  "be-editor",
  "be-input",
  "be-lsp",
+ "be-shared",
  "be-terminal",
  "be-workspace",
  "bytemuck",
@@ -285,6 +286,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "be-shared"
+version = "0.1.0"
+
+[[package]]
 name = "be-task"
 version = "0.1.0"
 dependencies = [
@@ -314,6 +319,7 @@ dependencies = [
  "be-editor",
  "be-git",
  "be-lsp",
+ "be-shared",
  "parking_lot",
 ]
 

@@ -121,7 +121,7 @@ pub fn run() {
       workspace.set_waker(move |ev| notifier.workspace_event(ev));
     }
 
-    let store = RenderStore {
+    let mut store = RenderStore {
       proxy,
       workspace,
       text: TextStore::new(&config),
@@ -131,7 +131,7 @@ pub fn run() {
     };
 
     let mut app = App {
-      state: super::State::new(&store),
+      state: super::State::new(&mut store),
       store,
 
       texture,
@@ -140,7 +140,7 @@ pub fn run() {
     };
 
     if let Some(path) = std::env::args().nth(1) {
-      app.state.open(std::path::Path::new(&path), None);
+      app.state.open(std::path::Path::new(&path), None, &mut app.store.workspace);
     }
 
     app
