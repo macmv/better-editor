@@ -10,6 +10,7 @@ use crate::{Color, Render};
 // - chevron-right
 // - folder
 // - minus
+// - pen
 // - plus
 // !!ICON IMPORT END!!
 mod lucide;
