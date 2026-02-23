@@ -390,14 +390,14 @@ impl TreeDraw {
     let text = render.layout_text(&format!("{}", dir.name()), render.theme().text);
 
     let icon = if dir.expanded { &*icon::CHEVRON_DOWN } else { &*icon::CHEVRON_RIGHT };
-    icon.draw(
-      self.pos() + Vec2::new(self.indent_width - 16.0, text.size().height / 2.0 - 4.0),
-      8.0,
+    icon.stroke(
+      self.pos() + Vec2::new(self.indent_width - 16.0, text.size().height / 2.0 - 6.0),
+      12.0,
       render.theme().background_raised_outline,
       render,
     );
 
-    icon::FOLDER.draw(
+    icon::FOLDER.fill(
       self.pos() + Vec2::new(self.indent_width, text.size().height / 2.0 - 6.0),
       12.0,
       crate::oklch(0.7, 0.14, 240.0),
@@ -407,7 +407,7 @@ impl TreeDraw {
     render.draw_text(&text, self.pos() + Vec2::new(self.indent_width + 16.0, 0.0));
 
     if let Some(icon) = dir.status.icon() {
-      icon.draw(
+      icon.stroke(
         self.pos()
           + Vec2::new(
             self.indent_width + 16.0 + text.size().width + 4.0,
@@ -436,7 +436,7 @@ impl TreeDraw {
     render.draw_text(&text, self.pos() + Vec2::new(self.indent_width, 0.0));
 
     if let Some(icon) = file.status.icon() {
-      icon.draw(
+      icon.stroke(
         self.pos()
           + Vec2::new(self.indent_width + text.size().width + 4.0, text.size().height / 2.0 - 4.0),
         8.0,
@@ -450,7 +450,7 @@ impl TreeDraw {
 impl FileStatus {
   fn icon(&self) -> Option<LazyLock<Icon>> {
     match self {
-      FileStatus::Modified => Some(icon::TILDE),
+      // FileStatus::Modified => Some(icon::TILDE),
       FileStatus::Created => Some(icon::PLUS),
       FileStatus::Deleted => Some(icon::MINUS),
       _ => None,

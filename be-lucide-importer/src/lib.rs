@@ -12,7 +12,7 @@ pub fn import(path: &str) {
   println!("cargo::rerun-if-changed=src/icon.rs");
 
   let icon_src = std::fs::read_to_string("src/icon.rs").unwrap();
-  let icons_to_import = icon_src
+  let mut icons_to_import = icon_src
     .split_once("!!ICON IMPORT START!!")
     .expect("could not find icon import start comment")
     .1
@@ -38,7 +38,7 @@ pub fn import(path: &str) {
     }
 
     let name = path.file_stem().unwrap().to_string_lossy().into_owned();
-    if !icons_to_import.contains(&name.as_str()) {
+    if !icons_to_import.remove(name.as_str()) {
       continue;
     }
 
@@ -47,16 +47,21 @@ pub fn import(path: &str) {
     icons.push((name, source));
   }
 
+  for icon in icons_to_import {
+    panic!("icon '{}' not found", icon);
+  }
+
   icons.sort_by_key(|(name, _)| name.clone());
 
   let mut content = String::new();
 
   content.push_str("use std::sync::LazyLock;\n");
+  content.push_str("use super::Icon;\n");
   content.push_str("use kurbo::{BezPath, PathEl, Point};\n");
 
   for (name, source) in icons {
     content.push_str(&format!(
-      "pub const {}: LazyLock<BezPath> = LazyLock::new(|| BezPath::from_vec(vec![{}]));\n",
+      "pub const {}: LazyLock<Icon> = LazyLock::new(|| Icon {{ path: BezPath::from_vec(vec![{}]) }});\n",
       to_upper_snake(&name),
       source
     ));
