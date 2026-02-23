@@ -12,6 +12,7 @@ use crate::{Color, Render};
 // - minus
 // - plus
 // - square-dot
+// - square-slash
 // !!ICON IMPORT END!!
 mod lucide;
 

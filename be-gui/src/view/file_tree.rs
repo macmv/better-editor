@@ -333,6 +333,10 @@ impl ItemMut<'_> {
           dir.populate();
         }
 
+        if repo.is_ignored(&dir.path) {
+          dir.status = FileStatus::Ignored;
+        }
+
         if let Some(items) = &mut dir.items {
           let mut status = FileStatus::default();
 
@@ -360,7 +364,9 @@ impl Item {
 
 impl File {
   fn layout(&mut self, repo: &Repo) {
-    if repo.is_modified(&self.path) {
+    if repo.is_ignored(&self.path) {
+      self.status = FileStatus::Ignored;
+    } else if repo.is_modified(&self.path) {
       self.status = FileStatus::Modified;
     } else {
       self.status = FileStatus::Unchanged;
@@ -454,6 +460,9 @@ impl FileStatus {
       FileStatus::Modified => Some(icon::SQUARE_DOT),
       FileStatus::Created => Some(icon::PLUS),
       FileStatus::Deleted => Some(icon::MINUS),
+
+      FileStatus::Ignored => Some(icon::SQUARE_SLASH),
+
       _ => None,
     }
   }
@@ -464,6 +473,8 @@ impl FileStatus {
       FileStatus::Modified => theme.diff_change,
       FileStatus::Deleted => theme.diff_remove,
 
+      FileStatus::Ignored => theme.background_raised_outline,
+
       _ => theme.text,
     }
   }
@@ -473,7 +484,16 @@ impl BitOr for FileStatus {
   type Output = Self;
 
   fn bitor(self, rhs: Self) -> Self::Output {
-    if self == rhs { self } else { FileStatus::Modified }
+    match (self, rhs) {
+      (l, r) if l == r => l,
+      (_, FileStatus::Modified) => FileStatus::Modified,
+      (FileStatus::Modified, _) => FileStatus::Modified,
+
+      (_, FileStatus::Ignored) => FileStatus::Ignored,
+      (FileStatus::Ignored, _) => FileStatus::Ignored,
+
+      _ => FileStatus::Modified,
+    }
   }
 }
 
