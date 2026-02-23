@@ -38,7 +38,7 @@ pub fn import(path: &str) {
     }
 
     let name = path.file_stem().unwrap().to_string_lossy().into_owned();
-    if !icons_to_import.remove(name.as_str()) {
+    if !icons_to_import.remove(format!("lucide::{}", name).as_str()) {
       continue;
     }
 

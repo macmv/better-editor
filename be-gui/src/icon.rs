@@ -6,13 +6,13 @@ use crate::{Color, Render};
 // and imports the according icons.
 //
 // !!ICON IMPORT START!!
-// - chevron-down
-// - chevron-right
-// - folder
-// - minus
-// - square-dot
-// - square-plus
-// - square-slash
+// - lucide::chevron-down
+// - lucide::chevron-right
+// - lucide::folder
+// - lucide::minus
+// - lucide::square-dot
+// - lucide::square-plus
+// - lucide::square-slash
 // !!ICON IMPORT END!!
 mod generated;
 
