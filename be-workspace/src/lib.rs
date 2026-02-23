@@ -15,7 +15,7 @@ pub struct Workspace {
 
   pub config:  Rc<RefCell<Config>>,
   pub editors: HashMap<EditorId, WeakHandle<EditorState>>,
-  pub repo:    Option<Repo>,
+  pub repo:    Rc<RefCell<Option<Repo>>>,
   pub lsp:     Rc<RefCell<LanguageServerStore>>,
 
   next_id:  EditorId,
@@ -41,11 +41,14 @@ impl Workspace {
       }))));
     }
 
+    let root = std::env::current_dir().unwrap();
+    let repo = Repo::open(&root);
+
     Workspace {
-      root: std::env::current_dir().unwrap(),
+      root,
       config,
       editors: HashMap::new(),
-      repo: None,
+      repo: Rc::new(RefCell::new(Some(repo))),
       lsp: Rc::new(RefCell::new(lsp)),
 
       next_id: EditorId(0),
@@ -56,6 +59,7 @@ impl Workspace {
   pub fn new_editor(&mut self) -> SharedHandle<EditorState> {
     let mut editor = EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n");
 
+    editor.repo = self.repo.clone();
     editor.config = self.config.clone();
     editor.lsp.store = self.lsp.clone();
     editor.send = Some(Box::new({
