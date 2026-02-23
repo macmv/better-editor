@@ -3,6 +3,14 @@ use std::sync::LazyLock;
 
 use crate::{Color, Render};
 
+// See `be-lucide-importer` for details. It basically just finds these comments
+// and imports the according icons.
+//
+// !!ICON IMPORT START!!
+// - chevron-up
+// - chevron-down
+// - folder
+// !!ICON IMPORT END!!
 mod lucide;
 
 pub enum Icon {

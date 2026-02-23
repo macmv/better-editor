@@ -1,4 +1,5 @@
 use std::{
+  collections::HashSet,
   path::{Path, PathBuf},
   process::Command,
 };
@@ -8,6 +9,19 @@ const VERSION: &str = "0.575.0";
 
 pub fn import(path: &str) {
   println!("cargo::rerun-if-changed=build.rs");
+  println!("cargo::rerun-if-changed=src/icon.rs");
+
+  let icon_src = std::fs::read_to_string("src/icon.rs").unwrap();
+  let icons_to_import = icon_src
+    .split_once("!!ICON IMPORT START!!")
+    .expect("could not find icon import start comment")
+    .1
+    .split_once("!!ICON IMPORT END!!")
+    .expect("could not find icon import end comment")
+    .0
+    .lines()
+    .filter_map(|line| line.trim().strip_prefix("// - "))
+    .collect::<HashSet<_>>();
 
   let target_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
@@ -24,6 +38,10 @@ pub fn import(path: &str) {
     }
 
     let name = path.file_stem().unwrap().to_string_lossy().into_owned();
+    if !icons_to_import.contains(&name.as_str()) {
+      continue;
+    }
+
     let svg = std::fs::read_to_string(&path).unwrap();
     let source = import_svg(&svg);
     icons.push((name, source));
