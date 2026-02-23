@@ -138,7 +138,7 @@ impl ChangedFile {
 
   fn changes(&self) -> diff::LineDiffSimilarity {
     if let Some(original) = &self.original {
-      diff::line_diff_similarity(&self.current, original)
+      diff::line_diff_similarity(original, &self.current)
     } else {
       // NB: This kinda sucks. However, diffing is slow, so this probably doesn't
       // incur much cost. This should be cached at a higher level honestly.
