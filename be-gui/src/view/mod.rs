@@ -1,7 +1,7 @@
 use be_input::{Action, Mode};
 use kurbo::{Rect, Size};
 
-use crate::{Layout, Render, RenderStore, Widget};
+use crate::{Layout, Render, RenderStore};
 
 mod command;
 mod editor;
@@ -63,7 +63,7 @@ impl View {
   pub fn layout(&mut self, layout: &mut Layout) {
     match &mut self.content {
       ViewContent::Editor(editor) => editor.layout(layout),
-      ViewContent::FileTree(_) => {}
+      ViewContent::FileTree(tree) => tree.layout(layout),
       ViewContent::Terminal(terminal) => terminal.layout(layout),
     }
   }

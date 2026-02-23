@@ -6,7 +6,7 @@ use std::{
 use be_input::{Action, Direction, Mode, Move};
 use kurbo::{Point, Rect, Vec2};
 
-use crate::{Notify, Render, Widget, icon};
+use crate::{Layout, Notify, Render, icon};
 
 pub struct FileTree {
   tree:    Directory,
@@ -239,8 +239,8 @@ impl Item {
   }
 }
 
-impl Widget for FileTree {
-  fn draw(&mut self, render: &mut Render) {
+impl FileTree {
+  pub fn draw(&mut self, render: &mut Render) {
     puffin::profile_function!();
 
     render.fill(
@@ -258,7 +258,9 @@ impl Widget for FileTree {
     .draw_item(ItemRef::Directory(&self.tree), render);
   }
 
-  fn on_focus(&mut self, focus: bool) { self.focused = focus; }
+  pub fn layout(&mut self, _layout: &mut Layout) {}
+
+  pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
 }
 
 struct TreeDraw {
