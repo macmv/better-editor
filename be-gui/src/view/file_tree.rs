@@ -451,7 +451,7 @@ impl TreeDraw {
 impl FileStatus {
   fn icon(&self) -> Option<LazyLock<Icon>> {
     match self {
-      FileStatus::Modified => Some(icon::PEN),
+      FileStatus::Modified => Some(icon::SQUARE_DOT),
       FileStatus::Created => Some(icon::PLUS),
       FileStatus::Deleted => Some(icon::MINUS),
       _ => None,
