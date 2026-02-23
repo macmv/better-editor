@@ -412,9 +412,9 @@ impl TreeDraw {
         self.pos()
           + Vec2::new(
             self.indent_width + 16.0 + text.size().width + 4.0,
-            text.size().height / 2.0 - 4.0,
+            text.size().height / 2.0 - 6.0,
           ),
-        8.0,
+        12.0,
         dir.status.color(render.theme()),
         render,
       );
@@ -439,8 +439,8 @@ impl TreeDraw {
     if let Some(icon) = file.status.icon() {
       icon.stroke(
         self.pos()
-          + Vec2::new(self.indent_width + text.size().width + 4.0, text.size().height / 2.0 - 4.0),
-        8.0,
+          + Vec2::new(self.indent_width + text.size().width + 4.0, text.size().height / 2.0 - 6.0),
+        12.0,
         file.status.color(render.theme()),
         render,
       );
