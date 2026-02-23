@@ -27,6 +27,11 @@ enum ItemRef<'a> {
   File(&'a File),
 }
 
+enum ItemMut<'a> {
+  Directory(&'a mut Directory),
+  File(#[allow(unused)] &'a mut File),
+}
+
 #[derive(Eq)]
 struct Directory {
   path:     PathBuf,
@@ -194,12 +199,7 @@ impl Directory {
     }
   }
 
-  fn expand(&mut self) {
-    self.expanded = true;
-    if self.items.is_none() {
-      self.populate();
-    }
-  }
+  fn expand(&mut self) { self.expanded = true; }
 
   fn populate(&mut self) {
     let mut items = vec![];
@@ -258,7 +258,10 @@ impl FileTree {
     .draw_item(ItemRef::Directory(&self.tree), render);
   }
 
-  pub fn layout(&mut self, _layout: &mut Layout) {}
+  pub fn layout(&mut self, _layout: &mut Layout) {
+    let mut node = ItemMut::Directory(&mut self.tree);
+    node.populate_recursively();
+  }
 
   pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
 }
@@ -278,6 +281,32 @@ impl Item {
     match self {
       Item::File(f) => ItemRef::File(f),
       Item::Directory(d) => ItemRef::Directory(d),
+    }
+  }
+
+  fn as_mut(&mut self) -> ItemMut<'_> {
+    match self {
+      Item::File(f) => ItemMut::File(f),
+      Item::Directory(d) => ItemMut::Directory(d),
+    }
+  }
+}
+
+impl ItemMut<'_> {
+  fn populate_recursively(&mut self) {
+    match self {
+      ItemMut::Directory(dir) => {
+        if dir.expanded && dir.items.is_none() {
+          dir.populate();
+        }
+
+        if let Some(items) = &mut dir.items {
+          for it in items {
+            it.as_mut().populate_recursively();
+          }
+        }
+      }
+      ItemMut::File(_) => {}
     }
   }
 }
