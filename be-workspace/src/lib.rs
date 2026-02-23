@@ -1,4 +1,11 @@
-use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc, sync::Arc};
+use std::{
+  cell::RefCell,
+  collections::HashMap,
+  io,
+  path::{Path, PathBuf},
+  rc::Rc,
+  sync::Arc,
+};
 
 use be_config::Config;
 use be_editor::{EditorEvent, EditorState};
@@ -20,6 +27,8 @@ pub struct Workspace {
 
   next_id:  EditorId,
   notifier: Arc<Mutex<Box<dyn Fn(WorkspaceEvent) + Send>>>,
+
+  editors_by_path: HashMap<PathBuf, WeakHandle<EditorState>>,
 }
 
 #[derive(Debug)]
@@ -53,6 +62,8 @@ impl Workspace {
 
       next_id: EditorId(0),
       notifier,
+
+      editors_by_path: HashMap::new(),
     }
   }
 
@@ -73,6 +84,21 @@ impl Workspace {
     self.editors.insert(id, SharedHandle::downgrade(&handle));
     self.next_id.0 += 1;
     handle
+  }
+
+  pub fn open_file(&mut self, path: &Path) -> io::Result<SharedHandle<EditorState>> {
+    let canon = path.canonicalize()?;
+
+    if let Some(handle) = self.editors_by_path.get(&canon)
+      && let Some(handle) = handle.upgrade()
+    {
+      Ok(handle)
+    } else {
+      let mut editor = self.new_editor();
+      editor.open(&canon)?;
+      self.editors_by_path.insert(canon, SharedHandle::downgrade(&editor));
+      Ok(editor)
+    }
   }
 
   pub fn set_waker(&self, wake: impl Fn(WorkspaceEvent) + Send + 'static) {
