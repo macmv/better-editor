@@ -3,6 +3,8 @@ use std::sync::LazyLock;
 
 use crate::{Color, Render};
 
+mod lucide;
+
 pub enum Icon {
   Stroke(BezPath),
   Fill(BezPath),

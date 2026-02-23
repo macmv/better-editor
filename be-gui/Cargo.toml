@@ -39,3 +39,6 @@ be-git = { version = "0.1.0", path = "../be-git" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.3"
+
+[build-dependencies]
+be-lucide-importer = { version = "0.1.0", path = "../be-lucide-importer" }

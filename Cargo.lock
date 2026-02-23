@@ -239,6 +239,7 @@ dependencies = [
  "be-git",
  "be-input",
  "be-lsp",
+ "be-lucide-importer",
  "be-shared",
  "be-terminal",
  "be-workspace",
