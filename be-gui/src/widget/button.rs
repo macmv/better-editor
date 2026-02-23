@@ -23,7 +23,7 @@ impl Button {
 }
 
 const BORDER_WIDTH: f64 = 1.0;
-const BORDER_RADIUS: f64 = 5.0;
+const BORDER_RADIUS: f64 = 4.0;
 const HORIZONTAL_PADDING: f64 = 5.0;
 
 impl Widget for Button {
@@ -49,7 +49,11 @@ impl Widget for Button {
         radius:  super::Corners::all(BORDER_RADIUS),
       };
 
-      border.draw_border(render);
+      super::border::Border {
+        borders: super::Borders::all(0.0),
+        radius:  super::Corners::all(BORDER_RADIUS),
+      }
+      .draw_inside(render, render.theme().background_raised);
       if self.hover {
         border.draw_inside(render, render.theme().background_raised_outline);
       }
