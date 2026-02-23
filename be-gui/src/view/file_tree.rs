@@ -2,6 +2,7 @@ use std::{
   borrow::Cow,
   ops::{BitOr, BitOrAssign},
   path::{Path, PathBuf},
+  sync::LazyLock,
 };
 
 use be_git::Repo;
@@ -9,7 +10,10 @@ use be_input::{Action, Direction, Mode, Move};
 use be_shared::SharedHandle;
 use kurbo::{Point, Rect, Vec2};
 
-use crate::{Layout, Notify, Render, icon};
+use crate::{
+  Layout, Notify, Render,
+  icon::{self, Icon},
+};
 
 pub struct FileTree {
   tree:    Directory,
@@ -402,6 +406,19 @@ impl TreeDraw {
 
     render.draw_text(&text, self.pos() + Vec2::new(self.indent_width + 16.0, 0.0));
 
+    if let Some(icon) = dir.status.icon() {
+      icon.draw(
+        self.pos()
+          + Vec2::new(
+            self.indent_width + 16.0 + text.size().width + 4.0,
+            text.size().height / 2.0 - 4.0,
+          ),
+        8.0,
+        render.theme().background_raised_outline,
+        render,
+      );
+    }
+
     if dir.expanded
       && let Some(items) = &dir.items
     {
@@ -417,6 +434,27 @@ impl TreeDraw {
   fn draw_file(&self, file: &File, render: &mut Render) {
     let text = render.layout_text(&file.name, render.theme().text);
     render.draw_text(&text, self.pos() + Vec2::new(self.indent_width, 0.0));
+
+    if let Some(icon) = file.status.icon() {
+      icon.draw(
+        self.pos()
+          + Vec2::new(self.indent_width + text.size().width + 4.0, text.size().height / 2.0 - 4.0),
+        8.0,
+        render.theme().background_raised_outline,
+        render,
+      );
+    }
+  }
+}
+
+impl FileStatus {
+  fn icon(&self) -> Option<LazyLock<Icon>> {
+    match self {
+      FileStatus::Modified => Some(icon::TILDE),
+      FileStatus::Created => Some(icon::PLUS),
+      FileStatus::Deleted => Some(icon::MINUS),
+      _ => None,
+    }
   }
 }
 
