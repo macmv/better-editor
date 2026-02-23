@@ -335,6 +335,12 @@ impl ItemMut<'_> {
 
         if repo.is_ignored(&dir.path) {
           dir.status = FileStatus::Ignored;
+        } else if repo.is_added(&dir.path) {
+          dir.status = FileStatus::Created;
+        } else if repo.is_modified(&dir.path) {
+          dir.status = FileStatus::Modified;
+        } else {
+          dir.status = FileStatus::Unchanged;
         }
 
         if let Some(items) = &mut dir.items {
