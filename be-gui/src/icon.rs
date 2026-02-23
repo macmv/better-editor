@@ -18,22 +18,20 @@ mod generated;
 
 pub use generated::*;
 
-// All lucide icons are 24x24.
-const SIZE_BASE: f64 = 24.0;
-
 pub struct Icon {
   path: BezPath,
+  size: f64,
 }
 
 impl Icon {
   pub fn stroke(&self, pos: Point, size: f64, color: Color, render: &mut Render) {
-    let transform = Affine::translate(pos.to_vec2()) * Affine::scale(size / SIZE_BASE);
+    let transform = Affine::translate(pos.to_vec2()) * Affine::scale(size / self.size);
 
     render.stroke_transform(&self.path, transform, color, Stroke::new(2.0));
   }
 
   pub fn fill(&self, pos: Point, size: f64, color: Color, render: &mut Render) {
-    let transform = Affine::translate(pos.to_vec2()) * Affine::scale(size / SIZE_BASE);
+    let transform = Affine::translate(pos.to_vec2()) * Affine::scale(size / self.size);
 
     render.fill_transform(&self.path, transform, color);
   }

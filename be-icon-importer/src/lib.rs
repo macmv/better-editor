@@ -44,14 +44,14 @@ pub fn import(path: &str) {
 
     let svg = std::fs::read_to_string(&path).unwrap();
     let source = import_svg(&svg);
-    icons.push((name, source));
+    icons.push((name, source, 24.0));
   }
 
   for icon in icons_to_import {
     panic!("icon '{}' not found", icon);
   }
 
-  icons.sort_by_key(|(name, _)| name.clone());
+  icons.sort_by_key(|(name, _, _)| name.clone());
 
   let mut content = String::new();
 
@@ -59,11 +59,14 @@ pub fn import(path: &str) {
   content.push_str("use super::Icon;\n");
   content.push_str("use kurbo::{BezPath, PathEl, Point};\n");
 
-  for (name, source) in icons {
+  for (name, source, size) in icons {
     content.push_str(&format!(
-      "pub const {}: LazyLock<Icon> = LazyLock::new(|| Icon {{ path: BezPath::from_vec(vec![{}]) }});\n",
+      "pub const {}: LazyLock<Icon> = LazyLock::new(|| Icon {{
+        path: BezPath::from_vec(vec![{source}]),
+        size: {size},
+      }});\n",
       to_upper_snake(&name),
-      source
+      size = format!("{size:.1}")
     ));
   }
 
