@@ -71,6 +71,39 @@ enum FileStatus {
   Ignored,
 }
 
+// TODO: Fix git calls to be:
+//
+// 1. On repo/workspace init:
+//
+// - store HEAD
+//
+// 2. On status refresh trigger (file save, fs notify debounce, manual refresh,
+//    branch switch):
+//
+// - repo.statuses(Some(&mut opts)) with:
+//   - include_untracked(true)
+//   - recurse_untracked_dirs(true)
+//   - include_unmodified(false)
+// - Build file_status: HashMap<PathBuf, Status>.
+// - Build dir_status: HashMap<PathBuf, AggregatedStatus> by folding each file
+//   status up its parent dirs.
+// - Render uses only these maps.
+// - Maybe build a sum tree?
+//
+// 3. On file open (need HEAD state/content):
+//
+// - Check cache head_entry_cache[path].
+// - If missing for current head_tree_oid:
+//   - tree.get_path(rel) to know if it exists in HEAD (added/new vs tracked).
+//   - If you need actual HEAD text, then find_blob(entry.id()) once and cache.
+//
+// 4. On HEAD change:
+//
+// - Detect by comparing new HEAD to cached.
+// - Invalidate only HEAD-related caches (head_entry_cache, opened-file original
+//   docs).
+// - Recompute statuses once.
+
 impl PartialEq for File {
   fn eq(&self, other: &Self) -> bool { self.name == other.name }
 }
