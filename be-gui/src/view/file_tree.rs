@@ -33,7 +33,7 @@ enum ItemRef<'a> {
 
 enum ItemMut<'a> {
   Directory(&'a mut Directory),
-  File(#[allow(unused)] &'a mut File),
+  File(&'a mut File),
 }
 
 #[derive(Eq)]
