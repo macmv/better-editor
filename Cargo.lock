@@ -281,6 +281,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "be-lucide-importer"
+version = "0.1.0"
+
+[[package]]
 name = "be-macros"
 version = "0.1.0"
 dependencies = [
