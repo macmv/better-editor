@@ -366,6 +366,8 @@ impl File {
   fn layout(&mut self, repo: &Repo) {
     if repo.is_ignored(&self.path) {
       self.status = FileStatus::Ignored;
+    } else if repo.is_added(&self.path) {
+      self.status = FileStatus::Created;
     } else if repo.is_modified(&self.path) {
       self.status = FileStatus::Modified;
     } else {
@@ -458,7 +460,7 @@ impl FileStatus {
   fn icon(&self) -> Option<LazyLock<Icon>> {
     match self {
       FileStatus::Modified => Some(icon::SQUARE_DOT),
-      FileStatus::Created => Some(icon::PLUS),
+      FileStatus::Created => Some(icon::SQUARE_PLUS),
       FileStatus::Deleted => Some(icon::MINUS),
 
       FileStatus::Ignored => Some(icon::SQUARE_SLASH),

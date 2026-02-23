@@ -10,8 +10,8 @@ use crate::{Color, Render};
 // - chevron-right
 // - folder
 // - minus
-// - plus
 // - square-dot
+// - square-plus
 // - square-slash
 // !!ICON IMPORT END!!
 mod lucide;
