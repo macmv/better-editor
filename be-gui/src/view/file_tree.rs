@@ -491,6 +491,9 @@ impl BitOr for FileStatus {
       (_, FileStatus::Modified) => FileStatus::Modified,
       (FileStatus::Modified, _) => FileStatus::Modified,
 
+      (FileStatus::Unchanged, FileStatus::Ignored) => FileStatus::Unchanged,
+      (FileStatus::Ignored, FileStatus::Unchanged) => FileStatus::Unchanged,
+
       (_, FileStatus::Ignored) => FileStatus::Ignored,
       (FileStatus::Ignored, _) => FileStatus::Ignored,
 
