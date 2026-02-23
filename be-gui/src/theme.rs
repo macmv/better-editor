@@ -75,9 +75,9 @@ impl Theme {
       background:                oklch(0.23, 0.03, 288.0),
       background_lower:          oklch(0.20, 0.03, 288.0),
       background_raised_outline: oklch(0.40, 0.03, 288.0),
-      diff_add:                  oklch(0.6, 0.1, 135.0),
-      diff_remove:               oklch(0.65, 0.1, 10.0),
-      diff_change:               oklch(0.65, 0.1, 70.0),
+      diff_add:                  oklch(0.7, 0.15, 135.0),
+      diff_remove:               oklch(0.75, 0.15, 10.0),
+      diff_change:               oklch(0.75, 0.15, 70.0),
       search_matched:            oklch(0.7, 0.12, 220.0),
 
       syntax: SyntaxTheme::from([
