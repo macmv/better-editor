@@ -35,6 +35,7 @@ puffin_http = "0.16.1"
 nucleo = "0.5.0"
 ignore = "0.4.25"
 smol_str = "0.3.5"
+be-git = { version = "0.1.0", path = "../be-git" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.3"

@@ -4,6 +4,7 @@ use be_config::{Config, LanguageName};
 use be_doc::{Change, Column, Cursor, Document, Edit, Line, crop::RopeSlice};
 use be_git::{LineDiffSimilarity, Repo};
 use be_input::{Action, Direction, Mode, Move, VerticalDirection};
+use be_shared::SharedHandle;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{fs::OpenedFile, status::Status};
@@ -54,7 +55,7 @@ pub struct EditorState {
   definition_history: Vec<(Cursor, PathBuf)>,
 
   pub config: Rc<RefCell<Config>>,
-  pub repo:   Rc<RefCell<Option<Repo>>>,
+  pub repo:   SharedHandle<Option<Repo>>,
   pub lsp:    lsp::LspState,
   pub send:   Option<Box<dyn Fn(EditorEvent)>>,
 
@@ -116,7 +117,7 @@ impl EditorState {
   }
 
   pub fn layout(&mut self) {
-    if let Some(repo) = &mut *self.repo.borrow_mut() {
+    if let Some(repo) = &mut *self.repo {
       repo.update();
     }
 
@@ -125,7 +126,7 @@ impl EditorState {
     self.lsp_update_completions();
     self.update_save_task();
 
-    if let Some(repo) = &*self.repo.borrow() {
+    if let Some(repo) = &*self.repo {
       if let Some(file) = &self.file.as_ref() {
         if let Some(diff) = repo.changes_in(file.path()) {
           self.changes = Some(diff);
@@ -144,7 +145,7 @@ impl EditorState {
     self.on_open_file_highlight();
     self.connect_to_lsp();
 
-    if let Some(repo) = &mut *self.repo.borrow_mut() {
+    if let Some(repo) = &mut *self.repo {
       repo.open_file(self.file.as_ref().unwrap().path());
     }
   }
@@ -392,7 +393,7 @@ impl EditorState {
 
     self.on_change_highlight(&change, start_pos, end_pos);
 
-    if let Some(repo) = &mut *self.repo.borrow_mut() {
+    if let Some(repo) = &mut *self.repo {
       if let Some(file) = &self.file.as_ref() {
         repo.update_file(file.path(), &self.doc);
       }

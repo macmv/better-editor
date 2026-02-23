@@ -18,7 +18,7 @@ pub struct Workspace {
   pub root: PathBuf,
 
   pub config: Rc<RefCell<Config>>,
-  pub repo:   Rc<RefCell<Option<Repo>>>,
+  pub repo:   SharedHandle<Option<Repo>>,
   pub lsp:    Rc<RefCell<LanguageServerStore>>,
 
   notifier: Arc<Mutex<Box<dyn Fn(WorkspaceEvent) + Send>>>,
@@ -53,7 +53,7 @@ impl Workspace {
     Workspace {
       root,
       config,
-      repo: Rc::new(RefCell::new(Some(repo))),
+      repo: SharedHandle::new(Some(repo)),
       lsp: Rc::new(RefCell::new(lsp)),
 
       notifier,
