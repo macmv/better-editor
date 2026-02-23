@@ -142,9 +142,11 @@ impl State {
         be_config::TabSettings::Editor => {
           Pane::View(state.views.new_view(view::EditorView::new(store)))
         }
-        be_config::TabSettings::FileTree => {
-          Pane::View(state.views.new_view(view::FileTree::current_directory(store.notifier())))
-        }
+        be_config::TabSettings::FileTree => Pane::View(
+          state
+            .views
+            .new_view(view::FileTree::current_directory(store.notifier(), &store.workspace)),
+        ),
       }
     }
 
@@ -555,9 +557,9 @@ impl State {
         editor.split_from(e);
         self.views.new_view(editor)
       }
-      ViewContent::FileTree(_) => {
-        self.views.new_view(crate::view::FileTree::current_directory(store.notifier()))
-      }
+      ViewContent::FileTree(_) => self
+        .views
+        .new_view(crate::view::FileTree::current_directory(store.notifier(), &store.workspace)),
       ViewContent::Terminal(_) => self.views.new_view(crate::view::TerminalView::new()),
     }
   }

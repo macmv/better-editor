@@ -4,6 +4,7 @@ use std::{
 };
 
 use be_input::{Action, Direction, Mode, Move};
+use be_shared::SharedHandle;
 use kurbo::{Point, Rect, Vec2};
 
 use crate::{Layout, Notify, Render, icon};
@@ -14,6 +15,7 @@ pub struct FileTree {
   active:  usize,
 
   notify: Notify,
+  repo:   SharedHandle<Option<be_git::Repo>>,
 }
 
 #[derive(PartialOrd, PartialEq, Eq, Ord)]
@@ -70,14 +72,16 @@ impl Ord for Directory {
 }
 
 impl FileTree {
-  pub fn current_directory(notify: Notify) -> Self { FileTree::new(Path::new("."), notify) }
+  pub fn current_directory(notify: Notify, workspace: &be_workspace::Workspace) -> Self {
+    FileTree::new(Path::new("."), notify, workspace)
+  }
 
-  pub fn new(path: &Path, notify: Notify) -> Self {
+  pub fn new(path: &Path, notify: Notify, workspace: &be_workspace::Workspace) -> Self {
     let path = path.canonicalize().unwrap();
     let mut tree = Directory::new(path);
     tree.expand();
 
-    FileTree { tree, focused: false, active: 0, notify }
+    FileTree { tree, focused: false, active: 0, notify, repo: workspace.repo.clone() }
   }
 
   fn active_mut(&mut self) -> Option<&mut Item> {
