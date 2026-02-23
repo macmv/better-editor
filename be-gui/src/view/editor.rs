@@ -669,6 +669,10 @@ impl EditorView {
   }
 
   fn cursor_mode(&self) -> Option<CursorMode> {
+    if !self.focused() {
+      return Some(CursorMode::Block);
+    }
+
     match self.editor.mode() {
       Mode::Normal if self.temporary_underline => Some(CursorMode::Underline),
       Mode::Normal | Mode::Visual(_) => Some(CursorMode::Block),
