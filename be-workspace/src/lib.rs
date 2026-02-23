@@ -14,20 +14,17 @@ use be_lsp::LanguageServerStore;
 use be_shared::{SharedHandle, WeakHandle};
 use parking_lot::Mutex;
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct EditorId(u32);
-
 pub struct Workspace {
   pub root: PathBuf,
 
-  pub config:  Rc<RefCell<Config>>,
-  pub editors: HashMap<EditorId, WeakHandle<EditorState>>,
-  pub repo:    Rc<RefCell<Option<Repo>>>,
-  pub lsp:     Rc<RefCell<LanguageServerStore>>,
+  pub config: Rc<RefCell<Config>>,
+  pub repo:   Rc<RefCell<Option<Repo>>>,
+  pub lsp:    Rc<RefCell<LanguageServerStore>>,
 
-  next_id:  EditorId,
   notifier: Arc<Mutex<Box<dyn Fn(WorkspaceEvent) + Send>>>,
 
+  next_editor:     u32,
+  editors:         HashMap<u32, WeakHandle<EditorState>>,
   editors_by_path: HashMap<PathBuf, WeakHandle<EditorState>>,
 }
 
@@ -56,13 +53,13 @@ impl Workspace {
     Workspace {
       root,
       config,
-      editors: HashMap::new(),
       repo: Rc::new(RefCell::new(Some(repo))),
       lsp: Rc::new(RefCell::new(lsp)),
 
-      next_id: EditorId(0),
       notifier,
 
+      next_editor: 0,
+      editors: HashMap::new(),
       editors_by_path: HashMap::new(),
     }
   }
@@ -80,9 +77,9 @@ impl Workspace {
 
     let handle = SharedHandle::new(editor);
 
-    let id = self.next_id;
+    let id = self.next_editor;
     self.editors.insert(id, SharedHandle::downgrade(&handle));
-    self.next_id.0 += 1;
+    self.next_editor += 1;
     handle
   }
 
@@ -106,4 +103,8 @@ impl Workspace {
   }
 
   pub fn cleanup_editors(&mut self) { self.editors.retain(|_, v| v.can_upgrade()); }
+
+  pub fn editors(&self) -> impl Iterator<Item = SharedHandle<EditorState>> {
+    self.editors.values().filter_map(|v| v.upgrade())
+  }
 }

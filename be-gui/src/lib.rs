@@ -180,10 +180,8 @@ impl State {
       },
     );
 
-    for editor in layout.store.workspace.editors.values() {
-      if let Some(mut editor) = editor.upgrade() {
-        editor.layout();
-      }
+    for mut editor in layout.store.workspace.editors() {
+      editor.layout();
     }
 
     layout.clipped(
@@ -211,10 +209,8 @@ impl State {
       },
     );
 
-    for editor in layout.store.workspace.editors.values() {
-      if let Some(mut editor) = editor.upgrade() {
-        editor.clear_damage();
-      }
+    for mut editor in layout.store.workspace.editors() {
+      editor.clear_damage();
     }
 
     layout.store.workspace.cleanup_editors();
