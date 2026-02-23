@@ -379,14 +379,10 @@ impl ItemMut<'_> {
         }
 
         if let Some(items) = &mut dir.items {
-          let mut status = FileStatus::default();
-
           for it in items {
             it.as_mut().layout(repo);
-            status |= it.status();
+            dir.status |= it.status();
           }
-
-          dir.status = status;
         }
       }
       ItemMut::File(file) => file.layout(repo),
