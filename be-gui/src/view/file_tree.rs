@@ -11,8 +11,9 @@ use be_shared::SharedHandle;
 use kurbo::{Point, Rect, Vec2};
 
 use crate::{
-  Layout, Notify, Render,
+  Color, Layout, Notify, Render,
   icon::{self, Icon},
+  theme::Theme,
 };
 
 pub struct FileTree {
@@ -414,7 +415,7 @@ impl TreeDraw {
             text.size().height / 2.0 - 4.0,
           ),
         8.0,
-        render.theme().background_raised_outline,
+        dir.status.color(render.theme()),
         render,
       );
     }
@@ -440,7 +441,7 @@ impl TreeDraw {
         self.pos()
           + Vec2::new(self.indent_width + text.size().width + 4.0, text.size().height / 2.0 - 4.0),
         8.0,
-        render.theme().background_raised_outline,
+        file.status.color(render.theme()),
         render,
       );
     }
@@ -454,6 +455,16 @@ impl FileStatus {
       FileStatus::Created => Some(icon::PLUS),
       FileStatus::Deleted => Some(icon::MINUS),
       _ => None,
+    }
+  }
+
+  fn color(&self, theme: &Theme) -> Color {
+    match self {
+      FileStatus::Created => theme.diff_add,
+      FileStatus::Modified => theme.diff_change,
+      FileStatus::Deleted => theme.diff_remove,
+
+      _ => theme.text,
     }
   }
 }
