@@ -41,4 +41,4 @@ be-git = { version = "0.1.0", path = "../be-git" }
 objc2 = "0.6.3"
 
 [build-dependencies]
-be-lucide-importer = { version = "0.1.0", path = "../be-lucide-importer" }
+be-icon-importer = { version = "0.1.0", path = "../be-icon-importer" }

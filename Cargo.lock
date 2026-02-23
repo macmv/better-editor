@@ -237,9 +237,9 @@ dependencies = [
  "be-doc",
  "be-editor",
  "be-git",
+ "be-icon-importer",
  "be-input",
  "be-lsp",
- "be-lucide-importer",
  "be-shared",
  "be-terminal",
  "be-workspace",
@@ -266,6 +266,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "be-icon-importer"
+version = "0.1.0"
+dependencies = [
+ "usvg",
+]
+
+[[package]]
 name = "be-input"
 version = "0.1.0"
 
@@ -285,13 +292,6 @@ dependencies = [
  "polling",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "be-lucide-importer"
-version = "0.1.0"
-dependencies = [
- "usvg",
 ]
 
 [[package]]

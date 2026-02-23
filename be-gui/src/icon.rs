@@ -14,9 +14,9 @@ use crate::{Color, Render};
 // - square-plus
 // - square-slash
 // !!ICON IMPORT END!!
-mod lucide;
+mod generated;
 
-pub use lucide::*;
+pub use generated::*;
 
 // All lucide icons are 24x24.
 const SIZE_BASE: f64 = 24.0;
