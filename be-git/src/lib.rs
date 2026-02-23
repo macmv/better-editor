@@ -27,7 +27,7 @@ pub struct Repo {
 }
 
 struct ChangedFile {
-  original: Document,
+  original: Option<Document>,
   current:  Document,
 }
 
@@ -44,7 +44,7 @@ impl Repo {
       if self.head != Some(head) {
         self.head = Some(head);
         for (path, file) in &mut self.files {
-          file.original = git.lookup_in_head(&path).unwrap_or_else(|| Document::new());
+          file.original = git.lookup_in_head(&path);
         }
       }
     }
@@ -56,7 +56,7 @@ impl Repo {
     if let Ok(rel) = path.strip_prefix(&self.root) {
       let file = if let Some(git) = &self.git {
         ChangedFile {
-          original: git.lookup_in_head(&path).unwrap_or_else(|| Document::new()),
+          original: git.lookup_in_head(&path),
           current:  Document::read(&path).unwrap(),
         }
       } else {
@@ -96,6 +96,18 @@ impl Repo {
     None
   }
 
+  pub fn is_added(&self, path: &Path) -> bool {
+    let Some(path) = path.canonicalize().ok() else { return false };
+
+    if let Ok(rel) = path.strip_prefix(&self.root)
+      && let Some(file) = self.files.get(rel)
+    {
+      return file.is_added();
+    }
+
+    false
+  }
+
   pub fn is_modified(&self, path: &Path) -> bool {
     let Some(path) = path.canonicalize().ok() else { return false };
 
@@ -117,12 +129,19 @@ impl Repo {
 
 impl ChangedFile {
   fn new(doc: Document) -> Self {
-    ChangedFile { original: be_doc::Document { rope: doc.rope.clone() }, current: doc }
+    ChangedFile { original: Some(be_doc::Document { rope: doc.rope.clone() }), current: doc }
   }
 
   fn changes(&self) -> diff::LineDiffSimilarity {
-    diff::line_diff_similarity(&self.original, &self.current)
+    if let Some(original) = &self.original {
+      diff::line_diff_similarity(&self.current, original)
+    } else {
+      // NB: This kinda sucks. However, diffing is slow, so this probably doesn't
+      // incur much cost. This should be cached at a higher level honestly.
+      diff::line_diff_similarity(&be_doc::Document::new(), &self.current)
+    }
   }
 
   fn is_modified(&self) -> bool { self.changes().hunks().next().is_some() }
+  fn is_added(&self) -> bool { self.original.is_none() }
 }
