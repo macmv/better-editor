@@ -29,7 +29,6 @@ pub struct RenderStore {
   proxy: winit::event_loop::EventLoopProxy<Event>,
 
   pub workspace: Workspace,
-  pub config:    Rc<RefCell<Config>>,
   pub text:      TextStore,
   pub theme:     Theme,
 
@@ -125,7 +124,6 @@ pub fn run() {
       proxy,
       workspace,
       text: TextStore::new(&config),
-      config,
       render: vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),
       theme: Theme::default_theme(),
     };

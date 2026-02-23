@@ -110,7 +110,7 @@ impl State {
       current_hover: None,
     };
 
-    let layout = store.config.borrow().settings.layout.clone();
+    let layout = store.workspace.config.borrow().settings.layout.clone();
 
     fn build_view(state: &mut State, store: &mut RenderStore, tab: be_config::TabSettings) -> Pane {
       match tab {
