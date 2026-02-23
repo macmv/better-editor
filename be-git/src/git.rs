@@ -43,6 +43,41 @@ impl GitRepo {
     self.repo.status_should_ignore(rel)
   }
 
+  pub fn is_added(&self, path: &Path) -> Result<bool, git2::Error> {
+    let rel = if path.is_absolute() {
+      let Ok(rel) = path.strip_prefix(&self.root) else { return Ok(false) };
+      rel
+    } else {
+      path
+    };
+
+    self.has_status_in_path(rel, git2::Status::INDEX_NEW | git2::Status::WT_NEW)
+  }
+
+  pub fn is_modified(&self, path: &Path) -> Result<bool, git2::Error> {
+    let rel = if path.is_absolute() {
+      let Ok(rel) = path.strip_prefix(&self.root) else { return Ok(false) };
+      rel
+    } else {
+      path
+    };
+
+    self.has_status_in_path(rel, git2::Status::INDEX_MODIFIED | git2::Status::WT_MODIFIED)
+  }
+
+  fn has_status_in_path(&self, rel: &Path, mask: git2::Status) -> Result<bool, git2::Error> {
+    let mut opts = git2::StatusOptions::new();
+    opts
+      .include_untracked(true)
+      .recurse_untracked_dirs(true)
+      .include_ignored(false)
+      .include_unmodified(false)
+      .pathspec(rel);
+
+    let statuses = self.repo.statuses(Some(&mut opts))?;
+    Ok(statuses.iter().any(|entry| entry.status().intersects(mask)))
+  }
+
   pub fn changes_in(&self, path: &Path) -> Option<Changes> {
     let path = path.canonicalize().unwrap();
     let Ok(rel) = path.strip_prefix(&self.root) else { return None };

@@ -99,10 +99,12 @@ impl Repo {
   pub fn is_added(&self, path: &Path) -> bool {
     let Some(path) = path.canonicalize().ok() else { return false };
 
-    if let Ok(rel) = path.strip_prefix(&self.root)
-      && let Some(file) = self.files.get(rel)
-    {
-      return file.is_added();
+    if let Ok(rel) = path.strip_prefix(&self.root) {
+      if let Some(file) = self.files.get(rel) {
+        return file.is_added();
+      } else if let Some(git) = &self.git {
+        return git.is_added(&path).unwrap_or(false);
+      }
     }
 
     false
@@ -111,10 +113,12 @@ impl Repo {
   pub fn is_modified(&self, path: &Path) -> bool {
     let Some(path) = path.canonicalize().ok() else { return false };
 
-    if let Ok(rel) = path.strip_prefix(&self.root)
-      && let Some(file) = self.files.get(rel)
-    {
-      return file.is_modified();
+    if let Ok(rel) = path.strip_prefix(&self.root) {
+      if let Some(file) = self.files.get(rel) {
+        return file.is_modified();
+      } else if let Some(git) = &self.git {
+        return git.is_modified(&path).unwrap_or(false);
+      }
     }
 
     false
