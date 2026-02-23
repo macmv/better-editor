@@ -55,6 +55,10 @@ impl<T> From<T> for SharedHandle<T> {
   fn from(value: T) -> Self { SharedHandle::new(value) }
 }
 
+impl<T: Default> Default for SharedHandle<T> {
+  fn default() -> Self { SharedHandle::new(Default::default()) }
+}
+
 impl<T> SharedHandle<T> {
   pub fn new(value: T) -> Self { SharedHandle { inner: Rc::new(UnsafeCell::new(value)) } }
 
