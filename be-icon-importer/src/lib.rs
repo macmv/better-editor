@@ -5,6 +5,7 @@ use std::{
 };
 use usvg::{Node, Tree, tiny_skia_path::Point};
 
+mod devicons;
 mod lucide;
 
 pub fn import(path: &str) {
@@ -45,6 +46,19 @@ pub fn import(path: &str) {
     let svg = std::fs::read_to_string(&path).unwrap();
     let source = import_svg(&svg);
     icons.push((name, source, 24.0));
+  }
+
+  let mut devicons =
+    icons_to_import.iter().filter_map(|name| name.strip_prefix("devicons::")).collect::<Vec<_>>();
+  devicons.sort_unstable();
+
+  for name in devicons {
+    let path = devicons::download(&target_dir, name);
+    let svg = std::fs::read_to_string(&path).unwrap();
+    let source = import_svg(&svg);
+    icons.push((name.to_string(), source, 128.0));
+
+    icons_to_import.remove(format!("devicons::{}", name).as_str());
   }
 
   for icon in icons_to_import {
