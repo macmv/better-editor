@@ -221,6 +221,8 @@ impl FileTree {
         Move::Single(Direction::Down) => {
           self.active = self.active.saturating_add(1).min(self.tree.len_visible().saturating_sub(1))
         }
+        Move::FileStart => self.active = 0,
+        Move::FileEnd => self.active = self.tree.len_visible().saturating_sub(1),
         _ => (),
       },
       Action::Append { .. } | Action::SetMode { mode: Mode::Insert, .. } => {
