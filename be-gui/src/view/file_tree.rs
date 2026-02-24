@@ -194,6 +194,7 @@ impl FileTree {
             Item::Directory(dir) => {
               curr = dir;
               curr.expand();
+              curr.populate();
             }
             Item::File(_) => {
               // If we're done with the path, then break and update `active`. Otherwise, we
