@@ -13,6 +13,7 @@ use crate::{Color, Render};
 // - lucide::square-dot
 // - lucide::square-plus
 // - lucide::square-slash
+// - devicons::rust
 // !!ICON IMPORT END!!
 mod generated;
 
