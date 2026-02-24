@@ -22,6 +22,7 @@ pub struct LanguageName {
 pub struct Language {
   pub display_name: String,
   pub extensions:   Vec<String>,
+  pub icon:         Option<String>,
   pub tree_sitter:  Option<TreeSitterSettings>,
   pub lsp:          Option<LspSettings>,
 }

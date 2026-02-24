@@ -482,12 +482,37 @@ impl TreeDraw {
   fn draw_file(&self, file: &File, render: &mut Render) {
     let text = render.layout_text(&file.name, render.theme().text);
 
-    icon::RUST.fill(
-      self.pos() + Vec2::new(self.indent_width, text.size().height / 2.0 - 6.0),
-      12.0,
-      crate::oklch(0.6534, 0.216925, 37.3651),
-      render,
-    );
+    let (icon, fill, color) = match render
+      .store
+      .workspace
+      .config
+      .borrow()
+      .language_for_filename(&file.name)
+      .map(|lang| (lang, render.store.workspace.config.borrow()))
+      .as_ref()
+      .and_then(|(lang, config)| config.languages[&lang].icon.as_deref())
+    {
+      Some("rust") => (icon::RUST, true, crate::oklch(0.6534, 0.216925, 37.3651)),
+      Some("markdown") => (icon::MARKDOWN, true, crate::oklch(1.0, 0.0, 0.0)),
+
+      _ => (icon::TEXT_ALIGN_START, false, crate::oklch(1.0, 0.0, 0.0)),
+    };
+
+    if fill {
+      icon.fill(
+        self.pos() + Vec2::new(self.indent_width, text.size().height / 2.0 - 6.0),
+        12.0,
+        color,
+        render,
+      );
+    } else {
+      icon.stroke(
+        self.pos() + Vec2::new(self.indent_width, text.size().height / 2.0 - 6.0),
+        12.0,
+        color,
+        render,
+      );
+    }
 
     render.draw_text(&text, self.pos() + Vec2::new(self.indent_width + 16.0, 0.0));
 

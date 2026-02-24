@@ -6,6 +6,8 @@ use crate::{Color, Render};
 // and imports the according icons.
 //
 // !!ICON IMPORT START!!
+// - devicons::markdown
+// - devicons::rust
 // - lucide::chevron-down
 // - lucide::chevron-right
 // - lucide::folder
@@ -13,7 +15,7 @@ use crate::{Color, Render};
 // - lucide::square-dot
 // - lucide::square-plus
 // - lucide::square-slash
-// - devicons::rust
+// - lucide::text-align-start
 // !!ICON IMPORT END!!
 mod generated;
 
