@@ -495,6 +495,9 @@ impl TreeDraw {
       Some("rust") => (icon::RUST, true, crate::oklch(0.6534, 0.216925, 37.3651)),
       Some("markdown") => (icon::MARKDOWN, true, crate::oklch(1.0, 0.0, 0.0)),
 
+      // TODO: Filetypes based on entire filename.
+      _ if file.name == ".gitignore" => (icon::GIT, true, crate::oklch(0.6516, 0.2066, 34.17)),
+
       _ => (icon::TEXT_ALIGN_START, false, crate::oklch(1.0, 0.0, 0.0)),
     };
 

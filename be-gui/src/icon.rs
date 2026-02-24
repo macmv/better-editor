@@ -6,6 +6,7 @@ use crate::{Color, Render};
 // and imports the according icons.
 //
 // !!ICON IMPORT START!!
+// - devicons::git
 // - devicons::markdown
 // - devicons::rust
 // - lucide::chevron-down
