@@ -175,6 +175,8 @@ impl State {
   }
 
   fn layout(&mut self, layout: &mut Layout) {
+    puffin::profile_function!();
+
     layout.clipped(
       Rect::new(0.0, layout.size().height - 25.0, layout.size().width, layout.size().height),
       |layout| {
@@ -183,6 +185,7 @@ impl State {
     );
 
     for mut editor in layout.store.workspace.editors() {
+      puffin::profile_scope!("layout editor");
       editor.layout();
     }
 
@@ -193,7 +196,10 @@ impl State {
         if let Some(popup) = &mut tab.popup {
           popup.layout(layout);
         }
-        tab.content.layout(&mut self.views.views, layout);
+        {
+          puffin::profile_scope!("layout views");
+          tab.content.layout(&mut self.views.views, layout);
+        }
         if !layout.to_close.is_empty() {
           for to_close in layout.to_close.drain(..) {
             if matches!(tab.content, Pane::View(v) if v == to_close) {
@@ -206,7 +212,10 @@ impl State {
           }
 
           // Re-run layout after removing closed views.
-          tab.content.layout(&mut self.views.views, layout);
+          {
+            puffin::profile_scope!("layout views after close");
+            tab.content.layout(&mut self.views.views, layout);
+          }
         }
       },
     );

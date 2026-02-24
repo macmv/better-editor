@@ -55,6 +55,8 @@ impl TerminalView {
   }
 
   pub fn layout(&mut self, layout: &mut Layout) {
+    puffin::profile_function!();
+
     if self.terminal.update() {
       layout.close_view();
     }

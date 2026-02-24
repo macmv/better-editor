@@ -325,6 +325,8 @@ impl FileTree {
   }
 
   pub fn layout(&mut self, _layout: &mut Layout) {
+    puffin::profile_function!();
+
     let mut node = ItemMut::Directory(&mut self.tree);
     if let Some(repo) = &*self.repo {
       node.layout(&repo);
