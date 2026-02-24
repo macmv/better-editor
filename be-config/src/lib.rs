@@ -51,4 +51,18 @@ impl Config {
   fn load_default() -> Config {
     Config { settings: Settings::parse_default(), languages: Language::builtin() }
   }
+
+  pub fn language_for_filename(&self, filename: &str) -> Option<LanguageName> {
+    let extension = filename.rsplit_once('.')?.1;
+
+    for (&ft, language) in &self.languages {
+      for ext in &language.extensions {
+        if ext == extension {
+          return Some(ft);
+        }
+      }
+    }
+
+    None
+  }
 }
