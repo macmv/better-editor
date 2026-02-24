@@ -391,10 +391,43 @@ impl EditorView {
 
     if let Some(selection) = self.editor.selection() {
       let anchor = selection.anchor();
-      render.fill(
-        &Rect::new(self.gutter_width(), start_y, self.gutter_width() + 20.0, start_y + 20.0),
-        render.theme().background_raised_outline,
-      );
+      let cursor = self.editor.cursor();
+
+      let (start, end) = if cursor.line > anchor.line {
+        (anchor, cursor)
+      } else if cursor.line < anchor.line {
+        (cursor, anchor)
+      } else if cursor.column > anchor.column {
+        (anchor, cursor)
+      } else {
+        (cursor, anchor)
+      };
+
+      for line in start.line.as_usize()..=end.line.as_usize() {
+        let layout = &self.cached_layouts[&line];
+
+        if line >= self.min_line.as_usize() && line <= self.max_line.as_usize() {
+          let start_column =
+            if line == start.line.as_usize() { self.doc().cursor_column_offset(start) } else { 0 };
+          let end_column = if line == end.line.as_usize() {
+            self.doc().cursor_column_offset(end)
+          } else {
+            self.doc().line(be_doc::Line(line)).byte_len().saturating_sub(1)
+          };
+
+          let start_x = layout.cursor(start_column, CursorMode::Block).x0;
+          let end_x = layout.cursor(end_column, CursorMode::Block).x1;
+          render.fill(
+            &Rect::new(
+              self.gutter_width() + start_x,
+              start_y + line as f64 * line_height,
+              self.gutter_width() + end_x,
+              start_y + (line + 1) as f64 * line_height,
+            ),
+            render.theme().background_raised_outline,
+          );
+        }
+      }
     }
 
     let mut y = start_y;
