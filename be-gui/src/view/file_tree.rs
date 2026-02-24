@@ -47,7 +47,7 @@ struct Directory {
   items:    Option<Vec<Item>>,
   expanded: bool,
 
-  status: FileStatus,
+  status: Option<FileStatus>,
 }
 
 #[derive(Eq)]
@@ -55,7 +55,7 @@ struct File {
   name: String,
   path: PathBuf,
 
-  status: FileStatus,
+  status: Option<FileStatus>,
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
@@ -242,9 +242,7 @@ impl FileTree {
 }
 
 impl Directory {
-  fn new(path: PathBuf) -> Self {
-    Directory { path, items: None, expanded: false, status: FileStatus::default() }
-  }
+  fn new(path: PathBuf) -> Self { Directory { path, items: None, expanded: false, status: None } }
 
   fn name(&self) -> Cow<'_, str> { self.path.file_name().unwrap().to_string_lossy() }
 
@@ -278,7 +276,7 @@ impl Directory {
         items.push(Item::File(File {
           name: path.file_name().unwrap().to_string_lossy().to_string(),
           path,
-          status: FileStatus::default(),
+          status: None,
         }));
       }
     }
@@ -370,20 +368,26 @@ impl ItemMut<'_> {
           dir.populate();
         }
 
-        if repo.is_ignored(&dir.path) {
-          dir.status = FileStatus::Ignored;
-        } else if repo.is_added(&dir.path) {
-          dir.status = FileStatus::Created;
-        } else if repo.is_modified(&dir.path) {
-          dir.status = FileStatus::Modified;
-        } else {
-          dir.status = FileStatus::Unchanged;
+        // TODO: Move the caching to repo? It's somewhat nice to have it here. We just
+        // need some sense of 'staleness'.
+        if dir.status.is_none() {
+          if repo.is_ignored(&dir.path) {
+            dir.status = Some(FileStatus::Ignored);
+          } else if repo.is_added(&dir.path) {
+            dir.status = Some(FileStatus::Created);
+          } else if repo.is_modified(&dir.path) {
+            dir.status = Some(FileStatus::Modified);
+          } else {
+            dir.status = Some(FileStatus::Unchanged);
+          }
         }
 
         if let Some(items) = &mut dir.items {
           for it in items {
             it.as_mut().layout(repo);
-            dir.status |= it.status();
+            if let Some(stat) = &mut dir.status {
+              *stat |= it.status();
+            }
           }
         }
       }
@@ -395,22 +399,24 @@ impl ItemMut<'_> {
 impl Item {
   fn status(&self) -> FileStatus {
     match self {
-      Item::Directory(d) => d.status,
-      Item::File(f) => f.status,
+      Item::Directory(d) => d.status.unwrap_or(FileStatus::default()),
+      Item::File(f) => f.status.unwrap_or(FileStatus::default()),
     }
   }
 }
 
 impl File {
   fn layout(&mut self, repo: &Repo) {
-    if repo.is_ignored(&self.path) {
-      self.status = FileStatus::Ignored;
-    } else if repo.is_added(&self.path) {
-      self.status = FileStatus::Created;
-    } else if repo.is_modified(&self.path) {
-      self.status = FileStatus::Modified;
-    } else {
-      self.status = FileStatus::Unchanged;
+    if self.status.is_none() {
+      if repo.is_ignored(&self.path) {
+        self.status = Some(FileStatus::Ignored);
+      } else if repo.is_added(&self.path) {
+        self.status = Some(FileStatus::Created);
+      } else if repo.is_modified(&self.path) {
+        self.status = Some(FileStatus::Modified);
+      } else {
+        self.status = Some(FileStatus::Unchanged);
+      }
     }
   }
 }
@@ -454,7 +460,9 @@ impl TreeDraw {
 
     render.draw_text(&text, self.pos() + Vec2::new(self.indent_width + 16.0, 0.0));
 
-    if let Some(icon) = dir.status.icon() {
+    if let Some(status) = dir.status
+      && let Some(icon) = status.icon()
+    {
       icon.stroke(
         self.pos()
           + Vec2::new(
@@ -462,7 +470,7 @@ impl TreeDraw {
             text.size().height / 2.0 - 6.0,
           ),
         12.0,
-        dir.status.color(render.theme()),
+        status.color(render.theme()),
         render,
       );
     }
@@ -519,7 +527,9 @@ impl TreeDraw {
 
     render.draw_text(&text, self.pos() + Vec2::new(self.indent_width + 16.0, 0.0));
 
-    if let Some(icon) = file.status.icon() {
+    if let Some(status) = file.status
+      && let Some(icon) = status.icon()
+    {
       icon.stroke(
         self.pos()
           + Vec2::new(
@@ -527,7 +537,7 @@ impl TreeDraw {
             text.size().height / 2.0 - 6.0,
           ),
         12.0,
-        file.status.color(render.theme()),
+        status.color(render.theme()),
         render,
       );
     }
