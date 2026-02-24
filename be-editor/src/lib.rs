@@ -52,8 +52,6 @@ pub struct EditorState {
   history:          Vec<Edit>,
   copied:           String,
 
-  definition_history: Vec<(Cursor, PathBuf)>,
-
   pub config: Rc<RefCell<Config>>,
   pub repo:   SharedHandle<Option<Repo>>,
   pub lsp:    lsp::LspState,
@@ -66,6 +64,10 @@ pub struct EditorState {
 pub enum EditorEvent {
   RunCommand(String),
   OpenFile(PathBuf, Option<Cursor>),
+  // NB: This is moderately dumb. Ideally, we'd pick the 'goto definition' even up in
+  // `EditorView::layout` and do it directly in there. But also, this nicely only affects the
+  // active view, so maybe it's fine as-is.
+  RecordDefinition(PathBuf, Cursor),
 }
 
 #[derive(Default)]

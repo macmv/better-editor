@@ -1,9 +1,9 @@
-use std::{collections::HashMap, io};
+use std::{collections::HashMap, io, path::PathBuf};
 
 use be_animation::Animation;
 use be_doc::Cursor;
-use be_editor::{CommandMode, EditorState, IndentLevel};
-use be_input::Mode;
+use be_editor::{CommandMode, EditorEvent, EditorState, IndentLevel};
+use be_input::{Action, Mode};
 use be_shared::SharedHandle;
 use be_workspace::Workspace;
 use kurbo::{Arc, Circle, Line, Point, Rect, RoundedRect, Size, Stroke, Triangle, Vec2};
@@ -34,6 +34,8 @@ pub struct EditorView {
   /// partially visible.
   max_line: be_doc::Line,
 
+  definition_history: Vec<(Cursor, PathBuf)>,
+
   progress_animation: Animation,
 }
 
@@ -59,6 +61,8 @@ impl EditorView {
       max_line:          be_doc::Line(0),
       line_numbers:      vec![],
       line_number_width: 0.0,
+
+      definition_history: vec![],
 
       progress_animation: Animation::linear(2.0),
     };
@@ -144,6 +148,30 @@ impl EditorView {
   }
 
   fn focused(&self) -> bool { matches!(self.focus, Focus::Focused) }
+
+  pub fn perform_action(&mut self, action: Action) {
+    match action {
+      Action::Move { count: _, m: be_input::Move::BackDefinition } => {
+        if let Some((cursor, path)) = self.definition_history.pop() {
+          if let Some(file) = self.editor.file()
+            && *file == path
+          {
+            self.editor.move_to(cursor);
+          } else {
+            if let Some(send) = &self.editor.send {
+              send(EditorEvent::OpenFile(path, Some(cursor)));
+            }
+          }
+        }
+      }
+
+      _ => self.editor.perform_action(action),
+    }
+  }
+
+  pub fn record_definition(&mut self, path: PathBuf, cursor: Cursor) {
+    self.definition_history.push((cursor, path));
+  }
 
   pub fn on_mouse(
     &mut self,

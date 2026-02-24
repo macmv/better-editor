@@ -217,20 +217,7 @@ impl EditorState {
         }
       }
 
-      Move::BackDefinition => {
-        if let Some((cursor, path)) = self.definition_history.pop() {
-          if let Some(file) = &self.file
-            && file.path() == path
-          {
-            self.move_to_line(cursor.line);
-            self.move_to_col(cursor.column);
-          } else {
-            if let Some(send) = &self.send {
-              send(crate::EditorEvent::OpenFile(path, Some(cursor)));
-            }
-          }
-        }
-      }
+      Move::BackDefinition => unreachable!("handled in editor view"),
 
       _ => {}
     }

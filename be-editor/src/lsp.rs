@@ -118,8 +118,10 @@ impl EditorState {
     let Some(def_path) = uri.to_file_path() else { return };
 
     let cursor = self.doc.offset_to_cursor(pos);
-    if let Some(file) = &self.file {
-      self.definition_history.push((self.cursor, file.path().to_path_buf()));
+    if let Some(file) = &self.file
+      && let Some(send) = &self.send
+    {
+      send(crate::EditorEvent::RecordDefinition(file.path().to_path_buf(), self.cursor));
     }
 
     if let Some(file) = &self.file

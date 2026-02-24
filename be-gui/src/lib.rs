@@ -491,6 +491,14 @@ impl State {
         self.tabs[self.active].popup = None;
         self.open(&path, cursor, &mut store.workspace);
       }
+      Event::Workspace(WorkspaceEvent::Editor(be_editor::EditorEvent::RecordDefinition(
+        path,
+        cursor,
+      ))) => {
+        if let Some(editor) = self.active_editor() {
+          editor.record_definition(path, cursor);
+        }
+      }
       Event::Workspace(WorkspaceEvent::Editor(be_editor::EditorEvent::RunCommand(cmd))) => {
         let (cmd, args) = cmd.split_once(' ').unwrap_or((&cmd, ""));
 

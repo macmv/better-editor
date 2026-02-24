@@ -90,7 +90,7 @@ impl View {
 
   pub fn perform_action(&mut self, action: Action) {
     match &mut self.content {
-      ViewContent::Editor(editor) => editor.editor.perform_action(action),
+      ViewContent::Editor(editor) => editor.perform_action(action),
       ViewContent::FileTree(file_tree) => file_tree.perform_action(action),
       ViewContent::Terminal(terminal) => terminal.perform_action(action),
     }
