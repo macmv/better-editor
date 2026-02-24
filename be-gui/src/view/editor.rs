@@ -87,7 +87,7 @@ impl EditorView {
 
   pub fn open(&mut self, path: &std::path::Path, workspace: &mut Workspace) -> io::Result<()> {
     self.editor = workspace.open_file(path)?;
-    self.editor.open(path)
+    Ok(())
   }
 
   pub fn animated(&self) -> bool { self.progress_animation.is_running() }
