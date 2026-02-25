@@ -400,11 +400,11 @@ impl EditorView {
             render,
           );
 
-          render.draw_text(&layout, Point::new(-self.scroll.x, y))
+          render.draw_text(&layout, Point::new(-self.scroll.x, y));
+
+          self.draw_trailing_spaces(i, layout.size().width - self.scroll.x, y, render);
         },
       );
-
-      self.draw_trailing_spaces(i, self.gutter_width() + layout.size().width, y, render);
 
       y += line_height;
     }
