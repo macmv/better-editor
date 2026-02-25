@@ -378,16 +378,12 @@ impl EditorView {
     let mut y = start_y;
     let mut indent_guides = IndentGuides::new(
       self.editor.config.borrow().settings.editor.indent_width as usize,
-      start_y,
-      self.gutter_width(),
+      Vec2::new(-self.scroll.x, start_y),
     );
     for i in self.min_line.as_usize()..=self.max_line.as_usize() {
       if self.cached_layouts.get(&i).is_none() {
         break;
       }
-
-      indent_guides
-        .visit(self.editor.guess_indent(be_doc::Line(i), be_input::VerticalDirection::Up), render);
 
       let layout = &self.line_numbers[i - self.min_line.as_usize()];
       render.draw_text(
@@ -398,7 +394,14 @@ impl EditorView {
       let layout = self.cached_layouts.get(&i).unwrap();
       render.clipped(
         Rect::new(self.gutter_width(), 0.0, render.size().width, render.size().height),
-        |render| render.draw_text(&layout, Point::new(-self.scroll.x, y)),
+        |render| {
+          indent_guides.visit(
+            self.editor.guess_indent(be_doc::Line(i), be_input::VerticalDirection::Up),
+            render,
+          );
+
+          render.draw_text(&layout, Point::new(-self.scroll.x, y))
+        },
       );
 
       self.draw_trailing_spaces(i, self.gutter_width() + layout.size().width, y, render);
@@ -738,16 +741,15 @@ impl EditorView {
 
 struct IndentGuides {
   indent_width:  usize,
-  scroll_offset: f64,
-  margin:        f64,
+  scroll_offset: Vec2,
 
   starts:       Vec<usize>,
   current_line: usize,
 }
 
 impl IndentGuides {
-  pub fn new(indent_width: usize, scroll_offset: f64, margin: f64) -> Self {
-    IndentGuides { indent_width, scroll_offset, margin, starts: vec![], current_line: 0 }
+  pub fn new(indent_width: usize, scroll_offset: Vec2) -> Self {
+    IndentGuides { indent_width, scroll_offset, starts: vec![], current_line: 0 }
   }
 
   pub fn visit(&mut self, level: IndentLevel, render: &mut Render) {
@@ -778,16 +780,15 @@ impl IndentGuides {
       * render.store.text.font_metrics().character_width
       * self.indent_width as f64)
       .round()
-      + self.margin
       + INDENT_GUIDE_WIDTH / 2.0;
     let min_y = start as f64 * render.store.text.font_metrics().line_height
-      + self.scroll_offset
+      + self.scroll_offset.y
       + INDENT_GUIDE_START_OFFSET;
-    let max_y = end as f64 * render.store.text.font_metrics().line_height + self.scroll_offset
+    let max_y = end as f64 * render.store.text.font_metrics().line_height + self.scroll_offset.y
       - INDENT_GUIDE_END_OFFSET;
 
     render.stroke(
-      &Line::new((x, min_y), (x, max_y)),
+      &Line::new((x + self.scroll_offset.x, min_y), (x + self.scroll_offset.x, max_y)),
       render.theme().background_raised,
       Stroke::new(INDENT_GUIDE_WIDTH),
     );
