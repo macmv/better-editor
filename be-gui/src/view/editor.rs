@@ -337,12 +337,25 @@ impl EditorView {
       };
 
       let line_number_text = (i + 1).to_string();
-      let layout = layout.layout_text(&line_number_text, color);
-      self.line_number_width = self.line_number_width.max(layout.size().width);
-      self.line_numbers.push(layout);
+      let number_layout = layout.layout_text(&line_number_text, color);
+      self.line_number_width = self.line_number_width.max(number_layout.size().width);
+      self.line_numbers.push(number_layout);
 
       i += 1;
       index += self.doc().rope.byte_slice(index..).raw_lines().next().unwrap().byte_len();
+    }
+
+    if self.focused()
+      && let Some(mode) = self.cursor_mode()
+      && let Some(line_layout) = self.cached_layouts.get(&self.cursor().line.as_usize())
+    {
+      let cursor = line_layout.cursor(self.doc().cursor_column_offset(self.cursor()), mode);
+      if cursor.x0 - self.scroll.x <= 0.0 {
+        self.scroll.x = cursor.x0;
+      }
+      if cursor.x1 - self.scroll.x >= layout.size().width - self.gutter_width() {
+        self.scroll.x = cursor.x1 - (layout.size().width - self.gutter_width());
+      }
     }
   }
 
@@ -377,7 +390,10 @@ impl EditorView {
       );
 
       let layout = self.cached_layouts.get(&i).unwrap();
-      render.draw_text(&layout, Point::new(self.gutter_width(), y));
+      render.clipped(
+        Rect::new(self.gutter_width(), 0.0, render.size().width, render.size().height),
+        |render| render.draw_text(&layout, Point::new(-self.scroll.x, y)),
+      );
 
       self.draw_trailing_spaces(i, self.gutter_width() + layout.size().width, y, render);
 
@@ -395,7 +411,7 @@ impl EditorView {
       if line >= self.min_line.as_usize() && line <= self.max_line.as_usize() {
         let cursor = layout.cursor(self.doc().cursor_column_offset(self.cursor()), mode)
           + Vec2::new(
-            self.gutter_width(),
+            self.gutter_width() - self.scroll.x,
             start_y + (line - self.min_line.as_usize()) as f64 * line_height,
           );
         if self.focused() {
