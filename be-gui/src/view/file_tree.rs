@@ -25,7 +25,7 @@ pub struct FileTree {
   repo:   SharedHandle<Option<be_git::Repo>>,
 }
 
-#[derive(PartialOrd, PartialEq, Eq, Ord)]
+#[derive(Debug, PartialOrd, PartialEq, Eq, Ord)]
 enum Item {
   Directory(Directory),
   File(File),
@@ -41,7 +41,7 @@ enum ItemMut<'a> {
   File(&'a mut File),
 }
 
-#[derive(Eq)]
+#[derive(Debug, Eq)]
 struct Directory {
   path:     PathBuf,
   items:    Option<Vec<Item>>,
@@ -50,7 +50,7 @@ struct Directory {
   status: Option<FileStatus>,
 }
 
-#[derive(Eq)]
+#[derive(Debug, Eq)]
 struct File {
   name: String,
   path: PathBuf,
@@ -58,7 +58,7 @@ struct File {
   status: Option<FileStatus>,
 }
 
-#[derive(Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
 enum FileStatus {
   #[default]
@@ -187,16 +187,22 @@ impl FileTree {
       match component {
         std::path::Component::Normal(name) => {
           let Some(items) = curr.items.as_mut() else { return };
-          let Some(i) = items.iter().position(|i| *i.name() == *name) else { return };
-          new_active += i + 1;
 
-          match &mut items[i] {
-            Item::Directory(dir) => {
+          match items.iter_mut().find(|it| {
+            let found = *it.name() == *name;
+            if found {
+              new_active += 1;
+            } else {
+              new_active += it.visible_len();
+            }
+            found
+          }) {
+            Some(Item::Directory(dir)) => {
               curr = dir;
               curr.expand();
               curr.populate();
             }
-            Item::File(_) => {
+            Some(Item::File(_)) => {
               // If we're done with the path, then break and update `active`. Otherwise, we
               // found a file early, and the path is invalid.
               if components.peek().is_none() {
@@ -205,6 +211,8 @@ impl FileTree {
                 return;
               }
             }
+            // Item wasn't found; bail
+            None => return,
           }
         }
 
