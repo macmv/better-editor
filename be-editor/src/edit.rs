@@ -315,8 +315,21 @@ mod tests {
     let mut editor = editor("foo bar\n");
     editor.perform_move(Move::LineEnd);
     editor.perform_edit(Edit::Delete(Move::PrevWord));
+    // TODO: Make this inclusive
     editor.check(expect![@r#"
       foo ⟦r⟧
+    "#]);
+  }
+
+  #[test]
+  fn delete_up_line() {
+    let mut editor = editor("foo\nbar\nbaz\n");
+    editor.perform_move(Move::FileEnd);
+    editor.perform_edit(Edit::Delete(Move::Single(Direction::Up)));
+    // TODO: Make this delete both lines correctly
+    editor.check(expect![@r#"
+      foo
+      ⟦b⟧az
     "#]);
   }
 }
