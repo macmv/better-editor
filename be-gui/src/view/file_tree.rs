@@ -244,6 +244,12 @@ impl FileTree {
         }
         _ => (),
       },
+      // 'a'
+      Action::SetMode { mode: Mode::Insert, delta: 1 } => {
+        // TODO: Add file
+      }
+
+      // 'o'/'i'
       Action::Append { .. } | Action::SetMode { mode: Mode::Insert, .. } => {
         match self.active_mut() {
           Some(Item::Directory(dir)) => dir.toggle_expanded(),
