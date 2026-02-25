@@ -411,7 +411,10 @@ impl EditorView {
 
     self.draw_change_gutter(start_y, render);
 
-    indent_guides.finish(render);
+    render.clipped(
+      Rect::new(self.gutter_width(), 0.0, render.size().width, render.size().height),
+      |render| indent_guides.finish(render),
+    );
 
     if let Some(mode) = self.cursor_mode() {
       let line = self.cursor().line.as_usize();
