@@ -400,6 +400,7 @@ impl EditorView {
           );
         if self.focused() {
           render.fill(&cursor.ceil(), render.theme().text);
+          self.draw_completions(cursor, render);
         } else {
           render.stroke(
             &cursor.inset(-0.5 * render.scale()),
@@ -407,8 +408,6 @@ impl EditorView {
             Stroke::new(1.0),
           );
         }
-
-        self.draw_completions(cursor, render);
       }
     }
   }
