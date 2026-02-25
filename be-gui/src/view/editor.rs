@@ -237,6 +237,12 @@ impl EditorView {
         } else {
           let size = Size::new(size.width, size.height - line_height);
 
+          // TODO: Horizontal scrolling? The current behavior of keeping the cursor
+          // onscreen leads to shifting the view all the way to the left anytime
+          // scrolling vertically moves the cursor to a blank line.
+          //
+          // Other editors solve this by not requiring the cursor to be in view, but I
+          // like keeping the cursor nice and obvious.
           self.scroll.y = (self.scroll.y - delta.y).max(0.0);
 
           if self.focused() {
