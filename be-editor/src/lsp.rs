@@ -76,9 +76,18 @@ impl EditorState {
   }
 
   pub(crate) fn lsp_update_diagnostics(&mut self) {
-    let Some(file) = &self.file else { return };
+    if self.file.is_none() {
+      return;
+    }
 
+    // TODO: Use drain()
+    for range in self.lsp.diagnostics.iter().map(|d| d.range.clone()).collect::<Vec<_>>() {
+      self.damage_range(range);
+    }
     self.lsp.diagnostics.clear();
+
+    let file = self.file.as_ref().unwrap();
+
     self.lsp.client.servers(|state| {
       if let Some(file) = state.files.get(file.path()) {
         self.lsp.diagnostics.extend(file.diagnostics.iter().map(|d| Diagnostic {
@@ -93,6 +102,7 @@ impl EditorState {
       }
     });
 
+    // TODO: Get rid of this collect()
     for range in self.lsp.diagnostics.iter().map(|d| d.range.clone()).collect::<Vec<_>>() {
       self.damage_range(range);
     }
