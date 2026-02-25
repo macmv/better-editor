@@ -376,10 +376,6 @@ impl EditorView {
     let start_y = -(self.scroll.y % line_height);
 
     let mut y = start_y;
-    let mut indent_guides = IndentGuides::new(
-      self.editor.config.borrow().settings.editor.indent_width as usize,
-      Vec2::new(-self.scroll.x, start_y),
-    );
     for i in self.min_line.as_usize()..=self.max_line.as_usize() {
       if self.cached_layouts.get(&i).is_none() {
         break;
@@ -391,10 +387,25 @@ impl EditorView {
         Point::new(LINE_NUMBER_MARGIN_LEFT + self.line_number_width - layout.size().width, y),
       );
 
-      let layout = self.cached_layouts.get(&i).unwrap();
-      render.clipped(
-        Rect::new(self.gutter_width(), 0.0, render.size().width, render.size().height),
-        |render| {
+      y += line_height;
+    }
+
+    self.draw_change_gutter(start_y, render);
+
+    render.clipped(
+      Rect::new(self.gutter_width(), 0.0, render.size().width, render.size().height),
+      |render| {
+        let mut y = start_y;
+        let mut indent_guides = IndentGuides::new(
+          self.editor.config.borrow().settings.editor.indent_width as usize,
+          Vec2::new(-self.scroll.x, start_y),
+        );
+        for i in self.min_line.as_usize()..=self.max_line.as_usize() {
+          if self.cached_layouts.get(&i).is_none() {
+            break;
+          }
+
+          let layout = self.cached_layouts.get(&i).unwrap();
           indent_guides.visit(
             self.editor.guess_indent(be_doc::Line(i), be_input::VerticalDirection::Up),
             render,
@@ -403,17 +414,12 @@ impl EditorView {
           render.draw_text(&layout, Point::new(-self.scroll.x, y));
 
           self.draw_trailing_spaces(i, layout.size().width - self.scroll.x, y, render);
-        },
-      );
 
-      y += line_height;
-    }
+          y += line_height;
+        }
 
-    self.draw_change_gutter(start_y, render);
-
-    render.clipped(
-      Rect::new(self.gutter_width(), 0.0, render.size().width, render.size().height),
-      |render| indent_guides.finish(render),
+        indent_guides.finish(render)
+      },
     );
 
     if let Some(mode) = self.cursor_mode() {
