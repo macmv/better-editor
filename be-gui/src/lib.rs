@@ -209,6 +209,9 @@ impl State {
             } else {
               tab.content.close(to_close, &mut self.views.views);
             }
+
+            // FIXME: Deduplicate with ':q'
+            self.views.views.remove(&to_close);
           }
 
           // Re-run layout after removing closed views.
@@ -519,7 +522,10 @@ impl State {
           }
           "q" => {
             let tab = &mut self.tabs[self.active];
-            tab.content.close(tab.content.active(), &mut self.views.views);
+            let active_view = tab.content.active();
+            tab.content.close(active_view, &mut self.views.views);
+            // FIXME: Deduplicate layouts closing themselves (ie, terminal exit).
+            self.views.views.remove(&active_view);
           }
           "e" => {
             if let Some(editor) = self.active_editor() {

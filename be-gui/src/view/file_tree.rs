@@ -6,7 +6,7 @@ use std::{
 };
 
 use be_git::Repo;
-use be_input::{Action, Direction, Mode, Move};
+use be_input::{Action, ChangeDirection, Direction, Mode, Move};
 use be_shared::SharedHandle;
 use kurbo::{Point, Rect, Vec2};
 
@@ -224,6 +224,16 @@ impl FileTree {
         }
         Move::FileStart => self.active = 0,
         Move::FileEnd => self.active = self.tree.len_visible().saturating_sub(1),
+        Move::Change(dir) => {
+          self.move_until(dir, |s| {
+            s.active_mut().map_or(false, |it| {
+              matches!(
+                it.status(),
+                FileStatus::Created | FileStatus::Modified | FileStatus::Deleted
+              )
+            })
+          });
+        }
         _ => (),
       },
       Action::Append { .. } | Action::SetMode { mode: Mode::Insert, .. } => {
@@ -238,6 +248,29 @@ impl FileTree {
       }
 
       _ => {}
+    }
+  }
+
+  fn move_until(&mut self, dir: ChangeDirection, cond: impl Fn(&mut Self) -> bool) {
+    loop {
+      match dir {
+        ChangeDirection::Next => {
+          if self.active == self.tree.len_visible().saturating_sub(1) {
+            break;
+          }
+          self.active += 1;
+        }
+        ChangeDirection::Prev => {
+          if self.active == 0 {
+            break;
+          }
+          self.active -= 1;
+        }
+      }
+
+      if cond(self) {
+        break;
+      }
     }
   }
 }
