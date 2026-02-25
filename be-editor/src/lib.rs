@@ -31,6 +31,9 @@ extern crate log;
 #[macro_use]
 extern crate expect_test;
 
+#[macro_use]
+extern crate be_macros;
+
 #[derive(Default)]
 pub struct EditorState {
   doc:    Document,
@@ -237,7 +240,12 @@ impl EditorState {
     Column(max_col)
   }
 
+  #[track_caller]
   fn keep_cursor_for_change(&mut self, change: &Change) {
+    if change.range.end < change.range.start {
+      fatal!("invalid change: end is before start {change:?}");
+    }
+
     let current_offset = self.doc.cursor_offset(self.cursor);
     if current_offset >= change.range.end {
       let line_delta = change.text.chars().filter(|c| *c == '\n').count() as isize

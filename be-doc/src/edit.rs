@@ -8,7 +8,7 @@ pub struct Edit {
   backward: Vec<Change>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Change {
   pub range: Range<usize>,
   pub text:  String,
