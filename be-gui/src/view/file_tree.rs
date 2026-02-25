@@ -318,7 +318,8 @@ impl FileTree {
       indent:       0,
       indent_width: 12.0,
       line_height:  render.store.text.font_metrics().line_height,
-      active:       if self.focused { Some(self.active) } else { None },
+      active:       self.active,
+      focused:      self.focused,
     }
     .draw_item(ItemRef::Directory(&self.tree), render);
   }
@@ -342,7 +343,8 @@ struct TreeDraw {
   indent_width: f64,
   line_height:  f64,
 
-  active: Option<usize>,
+  active:  usize,
+  focused: bool,
 }
 
 impl Item {
@@ -428,11 +430,19 @@ impl TreeDraw {
   }
 
   fn draw_item(&mut self, item: ItemRef, render: &mut Render) {
-    if self.active == Some(self.line) {
-      render.fill(
-        &Rect::new(0.0, self.pos().y, render.size().width, self.pos().y + self.line_height),
-        render.theme().background_raised,
-      );
+    if self.active == self.line {
+      if self.focused {
+        render.fill(
+          &Rect::new(0.0, self.pos().y, render.size().width, self.pos().y + self.line_height),
+          render.theme().background_raised,
+        );
+      } else {
+        render.stroke(
+          &Rect::new(0.0, self.pos().y, render.size().width, self.pos().y + self.line_height),
+          render.theme().background_raised,
+          kurbo::Stroke::new(1.0),
+        );
+      }
     }
 
     match item {
