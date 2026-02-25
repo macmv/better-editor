@@ -139,12 +139,14 @@ impl EditorState {
       _ => false,
     };
 
-    let start = self.doc.cursor_offset(self.cursor);
+    let before = self.doc.cursor_offset(self.cursor);
     self.perform_move(m);
     if inclusive {
       self.move_graphemes(1);
     }
-    let end = self.doc.cursor_offset(self.cursor);
+    let after = self.doc.cursor_offset(self.cursor);
+    let start = before.min(after);
+    let end = before.max(after);
 
     let change = Change::remove(start..end);
     self.keep_cursor_for_change(&change);
@@ -306,5 +308,15 @@ mod tests {
         "#],
       ],
     );
+  }
+
+  #[test]
+  fn delete_back() {
+    let mut editor = editor("foo bar\n");
+    editor.perform_move(Move::LineEnd);
+    editor.perform_edit(Edit::Delete(Move::PrevWord));
+    editor.check(expect![@r#"
+      foo ⟦r⟧
+    "#]);
   }
 }
