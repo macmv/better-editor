@@ -6,6 +6,7 @@ pub trait ResultExt<T, E> {
 }
 
 impl<T, E: std::fmt::Display> ResultExt<T, E> for Result<T, E> {
+  #[track_caller]
   fn fatal(self) -> Option<T> {
     match self {
       Ok(t) => Some(t),
