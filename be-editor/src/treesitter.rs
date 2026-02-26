@@ -1,4 +1,9 @@
-use std::{ffi::CString, mem::ManuallyDrop, ops::Range, path::PathBuf};
+use std::{
+  ffi::CString,
+  mem::ManuallyDrop,
+  ops::Range,
+  path::{Path, PathBuf},
+};
 
 use be_config::{Config, LanguageName};
 use be_doc::Document;
@@ -42,7 +47,12 @@ pub fn load_grammar(config: &Config, ft: LanguageName) -> Option<Highlighter> {
   #[cfg(target_os = "macos")]
   let so_name = "libtree-sitter.dylib";
 
-  let grammar_path = install_grammar(ft, &settings.repo, so_name)?;
+  let grammar_path = install_grammar(
+    ft,
+    &settings.repo,
+    Path::new(settings.path.as_deref().unwrap_or(".")),
+    so_name,
+  )?;
 
   let spec = std::fs::read_to_string(grammar_path.join("tree-sitter.json")).fatal()?;
   let spec = serde_json::from_str::<TreeSitterSpec>(&spec).fatal()?;
@@ -185,7 +195,12 @@ impl<'a> Iterator for CapturesIter<'a> {
   }
 }
 
-fn install_grammar(ft: LanguageName, repo: &str, so_name: &str) -> Option<PathBuf> {
+fn install_grammar(
+  ft: LanguageName,
+  repo: &str,
+  inner_path: &Path,
+  so_name: &str,
+) -> Option<PathBuf> {
   let language_path = PathBuf::new()
     .join(std::env::home_dir().unwrap())
     .join(".local")
@@ -209,10 +224,20 @@ fn install_grammar(ft: LanguageName, repo: &str, so_name: &str) -> Option<PathBu
   }
 
   let so_path = grammar_path.join(so_name);
+  let source_path = grammar_path.join(inner_path).join("src");
   if !so_path.exists() {
     check_status(
       std::process::Command::new("cc")
-        .args(["-Isrc", "-std=c11", "-fPIC", "-O3", "-c", "-o", "src/parser.o", "src/parser.c"])
+        .args([
+          "-Isrc",
+          "-std=c11",
+          "-fPIC",
+          "-O3",
+          "-c",
+          "-o",
+          source_path.join("parser.o").to_str().unwrap(),
+          source_path.join("parser.c").to_str().unwrap(),
+        ])
         .current_dir(&grammar_path)
         .status()
         .unwrap(),
@@ -220,37 +245,50 @@ fn install_grammar(ft: LanguageName, repo: &str, so_name: &str) -> Option<PathBu
     .fatal()?;
     check_status(
       std::process::Command::new("cc")
-        .args(["-Isrc", "-std=c11", "-fPIC", "-O3", "-c", "-o", "src/scanner.o", "src/scanner.c"])
+        .args([
+          "-Isrc",
+          "-std=c11",
+          "-fPIC",
+          "-O3",
+          "-c",
+          "-o",
+          source_path.join("scanner.o").to_str().unwrap(),
+          source_path.join("scanner.c").to_str().unwrap(),
+        ])
         .current_dir(&grammar_path)
         .status()
         .unwrap(),
     )
     .fatal()?;
 
-    #[cfg(target_os = "linux")]
-    let args = [
-      "-O3",
-      "-shared",
-      "-Wl,-soname,libtree-sitter.so",
-      "src/parser.o",
-      "src/scanner.o",
-      "-o",
-      so_name,
-    ];
-    #[cfg(target_os = "macos")]
-    let args = [
-      "-O3",
-      "-dynamiclib",
-      "-Wl,-install_name,libtree-sitter.dylib",
-      "src/parser.o",
-      "src/scanner.o",
-      "-o",
-      so_name,
-    ];
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     compile_error!("tree sitter not setup for target os");
 
-    std::process::Command::new("cc").args(args).current_dir(&grammar_path).status().unwrap();
+    let mut cmd = std::process::Command::new("cc");
+
+    #[cfg(target_os = "linux")]
+    cmd.args([
+      "-O3",
+      "-shared",
+      "-Wl,-soname,libtree-sitter.so",
+      source_path.join("parser.o").to_str().unwrap(),
+      source_path.join("scanner.o").to_str().unwrap(),
+      "-o",
+      so_name,
+    ]);
+
+    #[cfg(target_os = "macos")]
+    cmd.args([
+      "-O3",
+      "-dynamiclib",
+      "-Wl,-install_name,libtree-sitter.dylib",
+      source_path.join("parser.o").to_str().unwrap(),
+      source_path.join("scanner.o").to_str().unwrap(),
+      "-o",
+      so_name,
+    ]);
+
+    cmd.current_dir(&grammar_path).status().unwrap();
   }
 
   Some(grammar_path)

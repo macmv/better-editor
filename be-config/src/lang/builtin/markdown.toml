@@ -2,5 +2,6 @@ display-name = "Markdown"
 extensions = ["md"]
 icon = "markdown"
 
-#[tree-sitter]
-#repo = "https://github.com/tree-sitter-grammars/tree-sitter-markdown"
+[tree-sitter]
+repo = "https://github.com/tree-sitter-grammars/tree-sitter-markdown"
+path = "tree-sitter-markdown"
