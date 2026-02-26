@@ -210,16 +210,22 @@ fn install_grammar(ft: LanguageName, repo: &str, so_name: &str) -> Option<PathBu
 
   let so_path = grammar_path.join(so_name);
   if !so_path.exists() {
-    std::process::Command::new("cc")
-      .args(["-Isrc", "-std=c11", "-fPIC", "-O3", "-c", "-o", "src/parser.o", "src/parser.c"])
-      .current_dir(&grammar_path)
-      .status()
-      .unwrap();
-    std::process::Command::new("cc")
-      .args(["-Isrc", "-std=c11", "-fPIC", "-O3", "-c", "-o", "src/scanner.o", "src/scanner.c"])
-      .current_dir(&grammar_path)
-      .status()
-      .unwrap();
+    check_status(
+      std::process::Command::new("cc")
+        .args(["-Isrc", "-std=c11", "-fPIC", "-O3", "-c", "-o", "src/parser.o", "src/parser.c"])
+        .current_dir(&grammar_path)
+        .status()
+        .unwrap(),
+    )
+    .fatal()?;
+    check_status(
+      std::process::Command::new("cc")
+        .args(["-Isrc", "-std=c11", "-fPIC", "-O3", "-c", "-o", "src/scanner.o", "src/scanner.c"])
+        .current_dir(&grammar_path)
+        .status()
+        .unwrap(),
+    )
+    .fatal()?;
 
     #[cfg(target_os = "linux")]
     let args = [
@@ -248,6 +254,14 @@ fn install_grammar(ft: LanguageName, repo: &str, so_name: &str) -> Option<PathBu
   }
 
   Some(grammar_path)
+}
+
+fn check_status(status: std::process::ExitStatus) -> Result<(), String> {
+  if status.success() {
+    Ok(())
+  } else {
+    Err(format!("command failed with non-zero exit code: {status}"))
+  }
 }
 
 impl LoadedLanguage {
