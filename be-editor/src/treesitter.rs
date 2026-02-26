@@ -31,7 +31,14 @@ struct TreeSitterSpec {
 #[derive(serde::Deserialize)]
 struct GrammarSpec {
   name:       String,
-  highlights: Vec<String>,
+  highlights: StringOrStrings,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum StringOrStrings {
+  String(String),
+  Vec(Vec<String>),
 }
 
 struct LoadedLanguage {
@@ -71,7 +78,7 @@ pub fn load_grammar(config: &Config, ft: LanguageName) -> Option<Highlighter> {
 
   let highlights_query = Query::new(
     &language.language,
-    &std::fs::read_to_string(grammar_path.join(&grammar.highlights[0])).fatal()?,
+    &std::fs::read_to_string(grammar_path.join(&grammar.highlights.first())).fatal()?,
   )
   .fatal()?;
 
@@ -332,6 +339,15 @@ impl Drop for LoadedLanguage {
     unsafe {
       ManuallyDrop::drop(&mut self.language);
       libc::dlclose(self.object);
+    }
+  }
+}
+
+impl StringOrStrings {
+  fn first(&self) -> &str {
+    match self {
+      StringOrStrings::String(s) => s,
+      StringOrStrings::Vec(v) => &v[0],
     }
   }
 }
