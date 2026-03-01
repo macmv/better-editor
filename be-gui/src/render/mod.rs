@@ -12,6 +12,7 @@ use peniko::{
 use crate::{Layout, render::text::TextStore, theme::Theme};
 
 mod blitter;
+mod clipboard;
 mod cursor;
 mod text;
 mod window;

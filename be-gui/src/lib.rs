@@ -26,6 +26,9 @@ mod widget;
 pub use layout::Layout;
 pub use widget::{Widget, WidgetStore};
 
+#[macro_use]
+extern crate log;
+
 struct State {
   keys:   Vec<KeyStroke>,
   active: usize,

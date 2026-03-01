@@ -30,6 +30,8 @@ struct Init {
   config:  wgpu::SurfaceConfiguration,
   scale:   f64,
 
+  clipboard: super::clipboard::Clipboard,
+
   // SAFETY: Keep this field last so we don't segfault on exit.
   window: winit::window::Window,
 }
@@ -47,6 +49,8 @@ impl winit::application::ApplicationHandler<Event> for App {
     let window = event_loop
       .create_window(winit::window::WindowAttributes::default().with_title("Better Editor"))
       .unwrap();
+
+    let clipboard = super::clipboard::Clipboard::new(&window);
 
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
       flags: wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL, // disable validation.
@@ -94,6 +98,7 @@ impl winit::application::ApplicationHandler<Event> for App {
       queue,
       config,
       scale: window.scale_factor(),
+      clipboard,
       window,
     });
   }
