@@ -119,7 +119,7 @@ impl View {
     match &mut self.content {
       ViewContent::Editor(editor) => Some(editor.on_mouse(ev, size, store)),
       ViewContent::FileTree(_) => None,
-      ViewContent::Terminal(_) => None,
+      ViewContent::Terminal(terminal) => Some(terminal.on_mouse(ev, size, store)),
     }
   }
 }

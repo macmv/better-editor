@@ -1,12 +1,14 @@
 use be_input::{Action, Clipboard, Direction, Edit, Mode, Move};
 use be_shared::SharedHandle;
-use be_terminal::{StyleFlags, Terminal, TerminalColor};
+use be_terminal::{Position, StyleFlags, Terminal, TerminalColor};
 use be_workspace::Workspace;
-use kurbo::{Rect, Stroke};
+use kurbo::{Point, Rect, Size, Stroke};
 use parley::FontWeight;
 use peniko::color::AlphaColor;
 
-use crate::{Color, Layout, Render, TextLayout, oklch, theme::Theme};
+use crate::{
+  Color, Layout, MouseButton, MouseEvent, Render, RenderStore, TextLayout, oklch, theme::Theme,
+};
 
 pub struct TerminalView {
   terminal:  Terminal,
@@ -20,6 +22,9 @@ pub struct TerminalView {
   cached_scale:   f64,
 
   clipboard: SharedHandle<Clipboard>,
+
+  drag_start: Option<Point>,
+  selection:  Option<(Position, Position)>,
 }
 
 struct LineLayout {
@@ -38,6 +43,8 @@ impl TerminalView {
       cached_layouts: vec![],
       cached_scale:   0.0,
       clipboard:      workspace.clipboard.clone(),
+      drag_start:     None,
+      selection:      None,
     }
   }
 
@@ -59,6 +66,45 @@ impl TerminalView {
 
       _ => {}
     }
+
+    self.selection = None;
+  }
+
+  pub fn on_mouse(
+    &mut self,
+    ev: &crate::MouseEvent,
+    _size: Size,
+    _store: &RenderStore,
+  ) -> crate::CursorKind {
+    match ev {
+      MouseEvent::Move { pos } => {
+        if let Some(start) = self.drag_start {
+          let anchor = self.mouse_to_pos(start);
+          let mouse = self.mouse_to_pos(*pos);
+
+          if anchor != mouse {
+            self.selection = Some((
+              Position { row: anchor.row.min(mouse.row), col: anchor.col.min(mouse.col) },
+              Position { row: anchor.row.max(mouse.row), col: anchor.col.max(mouse.col) },
+            ));
+          }
+        }
+      }
+
+      MouseEvent::Button { pos, pressed: true, button: MouseButton::Left } => {
+        self.drag_start = Some(*pos);
+        self.selection = None;
+      }
+
+      MouseEvent::Button { pos: _, pressed: false, button: MouseButton::Left } => {
+        self.drag_start = None;
+      }
+      MouseEvent::Leave => self.drag_start = None,
+
+      _ => {}
+    }
+
+    crate::CursorKind::Beam
   }
 
   pub fn layout(&mut self, layout: &mut Layout) {
@@ -201,6 +247,13 @@ impl TerminalView {
     }
 
     Some(&mut self.cached_layouts[i])
+  }
+
+  fn mouse_to_pos(&self, mouse: Point) -> Position {
+    Position {
+      row: (mouse.y / self.character_size.height) as usize,
+      col: (mouse.x / self.character_size.width).round() as usize,
+    }
   }
 }
 
