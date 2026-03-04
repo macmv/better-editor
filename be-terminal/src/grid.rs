@@ -8,7 +8,7 @@ pub struct Grid {
 }
 
 #[derive(Clone, Copy)]
-struct Cell {
+pub struct Cell {
   c:     char,
   style: Style,
 }
@@ -129,14 +129,19 @@ impl<'a> LineMut<'a> {
 }
 
 impl Line<'_> {
-  pub fn to_string(&self) -> String {
-    let mut line = String::new();
-    for c in self.line {
+  pub fn to_string(&self) -> String { self.slice_to_string(..) }
+
+  pub fn slice_to_string<R>(&self, range: R) -> String
+  where
+    R: std::slice::SliceIndex<[crate::grid::Cell], Output = [crate::grid::Cell]>,
+  {
+    let mut slice = String::new();
+    for c in &self.line[range] {
       if c.c != '\0' {
-        line.push(c.c);
+        slice.push(c.c);
       }
     }
-    line
+    slice
   }
 
   pub fn styles(&self) -> StyleIter<'_> {

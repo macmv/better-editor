@@ -62,6 +62,10 @@ impl TerminalView {
       Action::SetMode { mode: Mode::Normal, .. } => self.terminal.perform_escape(),
       Action::Tab => self.terminal.perform_tab(),
 
+      Action::Copy => {
+        self.copy();
+        return; // Don't clear the selection.
+      }
       Action::Paste => self.terminal.perform_paste(&self.clipboard.paste()),
 
       _ => {}
@@ -297,6 +301,31 @@ impl TerminalView {
     } else {
       false
     }
+  }
+
+  fn copy(&self) {
+    let Some((start, end)) = self.selection else { return };
+    let mut buf = String::new();
+
+    for row in start.row..=end.row {
+      let Some(line) = self.terminal.line(row) else { continue };
+      let slice = if row == start.row && row == end.row {
+        line.slice_to_string(start.col..end.col)
+      } else if row == start.row {
+        line.slice_to_string(start.col..)
+      } else if row == end.row {
+        line.slice_to_string(..end.col)
+      } else {
+        line.slice_to_string(..)
+      };
+
+      if !buf.is_empty() {
+        buf.push('\n');
+      }
+      buf.push_str(slice.trim_end());
+    }
+
+    self.clipboard.copy(&buf);
   }
 }
 
