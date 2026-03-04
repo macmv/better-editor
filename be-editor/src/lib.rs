@@ -357,6 +357,8 @@ impl EditorState {
       Action::Navigate { nav } => error!("unhandled navigate passed to editor: {nav:?}"),
       Action::Control { .. } => {} // only really used for the terminal
       Action::Tab => {}            // TODO
+
+      Action::Copy | Action::Paste => {} // TODO: Get at clipboard
     }
   }
 
