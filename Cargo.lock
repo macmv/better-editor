@@ -335,6 +335,7 @@ dependencies = [
  "be-config",
  "be-editor",
  "be-git",
+ "be-input",
  "be-lsp",
  "be-shared",
  "parking_lot",

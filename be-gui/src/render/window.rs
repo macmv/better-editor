@@ -1,15 +1,20 @@
-use be_input::{Clipboard, Key, KeyStroke};
+use be_input::{Key, KeyStroke};
 use kurbo::{Point, Vec2};
 use winit::{
   event::WindowEvent,
   event_loop::{self, ActiveEventLoop},
   keyboard::NamedKey,
+  window::Window,
 };
 
 use crate::{Event, MouseEvent, render::cursor::CursorKind};
 
-type AppBuilder =
-  fn(&wgpu::Device, &wgpu::SurfaceConfiguration, event_loop::EventLoopProxy<Event>) -> super::App;
+type AppBuilder = fn(
+  &wgpu::Device,
+  &wgpu::SurfaceConfiguration,
+  &Window,
+  event_loop::EventLoopProxy<Event>,
+) -> super::App;
 
 struct App {
   builder: AppBuilder,
@@ -30,8 +35,6 @@ struct Init {
   config:  wgpu::SurfaceConfiguration,
   scale:   f64,
 
-  clipboard: Clipboard,
-
   // SAFETY: Keep this field last so we don't segfault on exit.
   window: winit::window::Window,
 }
@@ -49,8 +52,6 @@ impl winit::application::ApplicationHandler<Event> for App {
     let window = event_loop
       .create_window(winit::window::WindowAttributes::default().with_title("Better Editor"))
       .unwrap();
-
-    let clipboard = super::clipboard::create(&window);
 
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
       flags: wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL, // disable validation.
@@ -89,7 +90,7 @@ impl winit::application::ApplicationHandler<Event> for App {
     surface.configure(&device, &config);
 
     self.init = Some(Init {
-      app: (self.builder)(&device, &config, self.proxy.clone()),
+      app: (self.builder)(&device, &config, &window, self.proxy.clone()),
       keys: Default::default(),
       cursor: None,
       cursor_kind: CursorKind::Default,
@@ -98,7 +99,6 @@ impl winit::application::ApplicationHandler<Event> for App {
       queue,
       config,
       scale: window.scale_factor(),
-      clipboard,
       window,
     });
   }

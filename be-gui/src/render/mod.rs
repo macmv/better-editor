@@ -2,6 +2,7 @@ use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Instant};
 
 use be_config::Config;
 use be_editor::EditorEvent;
+use be_shared::SharedHandle;
 use be_workspace::{Workspace, WorkspaceEvent};
 use kurbo::{Affine, Axis, Point, Rect, Shape, Size, Stroke, Vec2};
 use peniko::{
@@ -91,7 +92,7 @@ pub fn encode_color(color: Color) -> AlphaColor<Srgb> {
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 pub fn run() {
-  window::run(|device, surface, proxy| {
+  window::run(|device, surface, window, proxy| {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
       label:           None,
       size:            wgpu::Extent3d {
@@ -114,7 +115,8 @@ pub fn run() {
     }
     let config = Rc::new(RefCell::new(config.value));
 
-    let workspace = Workspace::new(config.clone());
+    let mut workspace = Workspace::new(config.clone());
+    workspace.clipboard = SharedHandle::new(clipboard::create(&window));
 
     {
       let notifier = Notify { proxy: proxy.clone() };

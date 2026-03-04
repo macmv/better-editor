@@ -4,6 +4,10 @@ pub struct Clipboard {
 
 struct DummyClipboard;
 
+impl Default for Clipboard {
+  fn default() -> Self { Clipboard::dummy() }
+}
+
 impl Clipboard {
   pub fn new(imp: impl ClipboardBackend + 'static) -> Self { Clipboard { imp: Box::new(imp) } }
   pub fn dummy() -> Self { Clipboard { imp: Box::new(DummyClipboard) } }
