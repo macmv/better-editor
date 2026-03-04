@@ -97,6 +97,8 @@ impl TerminalView {
             };
 
             self.selection = Some((min, max));
+          } else {
+            self.selection = None;
           }
         }
       }
