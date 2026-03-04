@@ -145,7 +145,7 @@ impl Line<'_> {
 
   pub fn specific_styles<T, F>(&self, f: F) -> SpecificStyleIter<'_, F, T>
   where
-    F: Fn(Style) -> T,
+    F: Fn(usize, Style) -> T,
   {
     SpecificStyleIter {
       line:   self.line,
@@ -185,7 +185,7 @@ impl Iterator for StyleIter<'_> {
 
 impl<T, F> Iterator for SpecificStyleIter<'_, F, T>
 where
-  F: Fn(Style) -> T,
+  F: Fn(usize, Style) -> T,
   T: Clone + PartialEq,
 {
   type Item = (T, usize);
@@ -205,11 +205,11 @@ where
       self.offset += cell.c.len_utf8();
 
       if self.index == 1 {
-        self.prev = Some((self.func)(cell.style));
+        self.prev = Some((self.func)(self.index - 1, cell.style));
         continue;
       }
 
-      let v = (self.func)(cell.style);
+      let v = (self.func)(self.index - 1, cell.style);
       if self.prev.as_ref() != Some(&v) {
         let ret = self.prev.clone();
         self.prev = Some(v);

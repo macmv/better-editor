@@ -212,9 +212,16 @@ impl TerminalView {
       render.store.text.layout_builder(&line_string, render.theme().text, render.scale());
 
     let mut prev = 0;
-    for (style, i) in line.styles() {
-      if let Some(color) = terminal_color(theme, style.foreground) {
-        layout.color_range(prev..i, color);
+    for ((foreground, style), i) in line.specific_styles(|j, s| {
+      let foreground = if self.inverted_at(i, j) {
+        Some(terminal_color(theme, s.background).unwrap_or(theme.background))
+      } else {
+        terminal_color(theme, s.foreground)
+      };
+      (foreground, s)
+    }) {
+      if let Some(foreground) = foreground {
+        layout.color_range(prev..i, foreground);
       }
       if style.flags.contains(StyleFlags::BOLD) {
         layout.apply(prev..i, parley::StyleProperty::FontWeight(FontWeight::BLACK));
@@ -230,9 +237,15 @@ impl TerminalView {
 
     let mut background = vec![];
     let mut prev = 0.0;
-    for (b, i) in line.specific_styles(|s| s.background) {
+    for (color, i) in line.specific_styles(|j, s| {
+      if self.inverted_at(i, j) {
+        Some(terminal_color(&render.store.theme, s.foreground).unwrap_or(render.store.theme.text))
+      } else {
+        terminal_color(&render.store.theme, s.background)
+      }
+    }) {
       let x = layout.cursor(i, crate::CursorMode::Line).x0;
-      if let Some(color) = terminal_color(&render.store.theme, b) {
+      if let Some(color) = color {
         background.push((prev, x, color));
       }
       prev = x;
@@ -253,6 +266,24 @@ impl TerminalView {
     Position {
       row: (mouse.y / self.character_size.height) as usize,
       col: (mouse.x / self.character_size.width).round() as usize,
+    }
+  }
+
+  fn inverted_at(&self, row: usize, col: usize) -> bool {
+    if let Some((start, end)) = self.selection {
+      if row < start.row || row > end.row {
+        false
+      } else if row == start.row && row == end.row {
+        col >= start.col && col < end.col
+      } else if row == start.row {
+        col >= start.col
+      } else if row == end.row {
+        col < end.col
+      } else {
+        true
+      }
+    } else {
+      false
     }
   }
 }
