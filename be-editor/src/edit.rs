@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{num::NonZero, ops::Range};
 
 use be_doc::Change;
 use be_input::{Direction, Mode, Move, VerticalDirection};
@@ -47,10 +47,11 @@ impl EditorState {
         let s = c.encode_utf8(&mut bytes);
         self.change(Change::replace(self.doc.grapheme_slice(self.cursor, 1), s));
       }
-      Edit::Delete(m) => self.perform_delete_move(m),
+      // TODO: Parse counts before these moves
+      Edit::Delete(m) => self.perform_delete_move(m, None),
       Edit::Cut(m) => {
         self.set_mode(Mode::Insert);
-        self.perform_delete_move(m);
+        self.perform_delete_move(m, None);
       }
       Edit::DeleteLine => {
         let end = if self.cursor.line == self.max_line() {
@@ -125,7 +126,7 @@ impl EditorState {
   }
 
   // Perform the move after 'd' or 'c'.
-  fn perform_delete_move(&mut self, m: Move) {
+  fn perform_delete_move(&mut self, m: Move, count: Option<NonZero<u32>>) {
     if matches!(m, Move::Single(Direction::Right)) {
       let range = self.doc.grapheme_slice(self.cursor, 1);
       if !self.doc.range(range.clone()).chars().any(|c| c == '\n') {
@@ -140,7 +141,7 @@ impl EditorState {
     };
 
     let before = self.doc.cursor_offset(self.cursor);
-    self.perform_move(m);
+    self.perform_move(m, count);
     if inclusive {
       self.move_graphemes(1);
     }
@@ -200,7 +201,7 @@ mod tests {
   fn delete_wont_remove_newline() {
     let mut editor = editor("foo\nbar\n");
 
-    editor.perform_move(Move::LineEnd);
+    editor.perform_move(Move::LineEnd, None);
 
     editor.check_repeated(
       |e| e.perform_edit(Edit::Delete(Move::Single(Direction::Right))),
@@ -228,7 +229,7 @@ mod tests {
       ],
     );
 
-    editor.perform_move(Move::Single(Direction::Down));
+    editor.perform_move(Move::Single(Direction::Down), None);
 
     editor.check_repeated(
       |e| e.perform_edit(Edit::Delete(Move::Single(Direction::Right))),
@@ -260,7 +261,7 @@ mod tests {
   #[test]
   fn backspace_stops_at_start() {
     let mut editor = editor("foo\nbar\n");
-    editor.perform_move(Move::LineEnd);
+    editor.perform_move(Move::LineEnd, None);
     editor.perform_action(be_input::Action::SetMode { mode: be_input::Mode::Insert, delta: 1 });
     editor.check_repeated(
       |e| e.perform_edit(Edit::Backspace),
@@ -292,7 +293,7 @@ mod tests {
   #[test]
   fn delete_line_at_end() {
     let mut editor = editor("foo\nbar\n");
-    editor.perform_move(Move::FileEnd);
+    editor.perform_move(Move::FileEnd, None);
     editor.check_repeated(
       |e| e.perform_edit(Edit::DeleteLine),
       &[
@@ -313,7 +314,7 @@ mod tests {
   #[test]
   fn delete_back() {
     let mut editor = editor("foo bar\n");
-    editor.perform_move(Move::LineEnd);
+    editor.perform_move(Move::LineEnd, None);
     editor.perform_edit(Edit::Delete(Move::PrevWord));
     // TODO: Make this inclusive
     editor.check(expect![@r#"
@@ -324,7 +325,7 @@ mod tests {
   #[test]
   fn delete_up_line() {
     let mut editor = editor("foo\nbar\nbaz\n");
-    editor.perform_move(Move::FileEnd);
+    editor.perform_move(Move::FileEnd, None);
     editor.perform_edit(Edit::Delete(Move::Single(Direction::Up)));
     // TODO: Make this delete both lines correctly
     editor.check(expect![@r#"

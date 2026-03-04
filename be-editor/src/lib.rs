@@ -346,7 +346,7 @@ impl EditorState {
           self.auto_indent(VerticalDirection::Down);
         }
       }
-      Action::Move { count: _, m } => self.perform_move(m),
+      Action::Move { count, m } => self.perform_move(m, count),
       Action::Edit { count: _, e: be_input::Edit::Insert('\n') }
         if self.active_completion().is_some() =>
       {

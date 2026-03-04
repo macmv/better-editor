@@ -1,10 +1,12 @@
+use std::num::NonZero;
+
 use be_doc::{Column, Line};
 use be_input::{ChangeDirection, Direction, Move};
 
 use crate::EditorState;
 
 impl EditorState {
-  pub(crate) fn perform_move(&mut self, m: be_input::Move) {
+  pub(crate) fn perform_move(&mut self, m: be_input::Move, _count: Option<NonZero<u32>>) {
     if let Some(command) = &mut self.command {
       command.perform_move(m);
       return;
@@ -306,7 +308,7 @@ mod tests {
     let mut editor = editor("fn foo() -> Self { bar }");
 
     editor.check_repeated(
-      |e| e.perform_move(Move::NextWord),
+      |e| e.perform_move(Move::NextWord, None),
       &[
         expect![@"⟦f⟧n foo() -> Self { bar }"],
         expect![@"fn ⟦f⟧oo() -> Self { bar }"],
@@ -326,7 +328,7 @@ mod tests {
     let mut editor = editor("fn foo() -> Self { bar }");
 
     editor.check_repeated(
-      |e| e.perform_move(Move::EndWord),
+      |e| e.perform_move(Move::EndWord, None),
       &[
         expect![@"⟦f⟧n foo() -> Self { bar }"],
         expect![@"f⟦n⟧ foo() -> Self { bar }"],
@@ -345,10 +347,10 @@ mod tests {
   #[test]
   fn prev_word() {
     let mut editor = editor("fn foo() -> Self { bar }");
-    editor.perform_move(Move::LineEnd);
+    editor.perform_move(Move::LineEnd, None);
 
     editor.check_repeated(
-      |e| e.perform_move(Move::PrevWord),
+      |e| e.perform_move(Move::PrevWord, None),
       &[
         expect![@"fn foo() -> Self { bar ⟦}⟧"],
         expect![@"fn foo() -> Self { ⟦b⟧ar }"],
@@ -367,7 +369,7 @@ mod tests {
   fn matching_bracket() {
     let mut editor = editor("fn foo(bar)");
     editor.check_repeated(
-      |e| e.perform_move(Move::MatchingBracket),
+      |e| e.perform_move(Move::MatchingBracket, None),
       &[
         expect![@"⟦f⟧n foo(bar)"],
         expect![@"fn foo(bar⟦)⟧"],
@@ -381,7 +383,7 @@ mod tests {
   fn matching_bracket_nested() {
     let mut editor = editor("fn foo(bar(baz))");
     editor.check_repeated(
-      |e| e.perform_move(Move::MatchingBracket),
+      |e| e.perform_move(Move::MatchingBracket, None),
       &[
         expect![@"⟦f⟧n foo(bar(baz))"],
         expect![@"fn foo(bar(baz)⟦)⟧"],
@@ -390,9 +392,9 @@ mod tests {
       ],
     );
 
-    editor.perform_move(Move::Single(be_input::Direction::Left));
+    editor.perform_move(Move::Single(be_input::Direction::Left), None);
     editor.check_repeated(
-      |e| e.perform_move(Move::MatchingBracket),
+      |e| e.perform_move(Move::MatchingBracket, None),
       &[
         expect![@"fn foo(bar(baz⟦)⟧)"],
         expect![@"fn foo(bar⟦(⟧baz))"],
@@ -406,7 +408,7 @@ mod tests {
   fn matching_bracket_multi_line() {
     let mut editor = editor("fn foo{\n  bar\n}\n");
     editor.check_repeated(
-      |e| e.perform_move(Move::MatchingBracket),
+      |e| e.perform_move(Move::MatchingBracket, None),
       &[
         expect![@r#"
           ⟦f⟧n foo{
@@ -431,13 +433,13 @@ mod tests {
       ],
     );
 
-    editor.perform_move(Move::Single(be_input::Direction::Up));
+    editor.perform_move(Move::Single(be_input::Direction::Up), None);
     editor.check(expect![@r#"
       fn foo{
       ⟦ ⟧ bar
       }
     "#]);
-    editor.perform_move(Move::MatchingBracket);
+    editor.perform_move(Move::MatchingBracket, None);
     editor.check(expect![@r#"
       fn foo{
       ⟦ ⟧ bar
