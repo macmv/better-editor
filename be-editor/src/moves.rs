@@ -6,82 +6,107 @@ use be_input::{ChangeDirection, Direction, Move};
 use crate::EditorState;
 
 impl EditorState {
-  pub(crate) fn perform_move(&mut self, m: be_input::Move, _count: Option<NonZero<u32>>) {
+  pub(crate) fn perform_move(&mut self, m: be_input::Move, count: Option<NonZero<u32>>) {
     if let Some(command) = &mut self.command {
       command.perform_move(m);
       return;
     }
 
+    let count = count.map(|c| c.get());
+
     match m {
-      Move::Single(Direction::Left) => self.move_col_rel(-1),
-      Move::Single(Direction::Right) => self.move_col_rel(1),
-      Move::Single(Direction::Up) => self.move_line_rel(-1),
-      Move::Single(Direction::Down) => self.move_line_rel(1),
+      Move::Single(Direction::Left) => self.move_col_rel(-(count.unwrap_or(1) as i32)),
+      Move::Single(Direction::Right) => self.move_col_rel(count.unwrap_or(1) as i32),
+      Move::Single(Direction::Up) => self.move_line_rel(-(count.unwrap_or(1) as i32)),
+      Move::Single(Direction::Down) => self.move_line_rel(count.unwrap_or(1) as i32),
 
       Move::LineEnd => self.move_to_col(Column::MAX),
       Move::LineStart => self.move_to_col(Column(0)),
 
-      Move::FileStart => self.move_to_line(Line(0)),
-      Move::FileEnd => self.move_to_line(self.max_line()),
+      Move::FileStart => self.move_to_line(count.map_or(Line(0), |v| be_doc::Line(v as usize - 1))),
+      Move::FileEnd => {
+        self.move_to_line(count.map_or(self.max_line(), |v| be_doc::Line(v as usize - 1)))
+      }
 
       Move::NextWord => {
-        if self.cursor_kind() != WordKind::Blank {
-          let start = self.cursor_kind();
-          while self.cursor_kind() == start && !self.at_eof() {
+        for _ in 0..count.unwrap_or(1) {
+          if self.cursor_kind() != WordKind::Blank {
+            let start = self.cursor_kind();
+            while self.cursor_kind() == start && !self.at_eof() {
+              self.move_graphemes(1);
+            }
+          }
+
+          while self.cursor_kind() == WordKind::Blank && !self.at_eof() {
             self.move_graphemes(1);
           }
-        }
 
-        while self.cursor_kind() == WordKind::Blank && !self.at_eof() {
-          self.move_graphemes(1);
+          // Don't loop forever.
+          if self.at_eof() {
+            break;
+          }
         }
       }
 
       Move::EndWord => {
-        self.move_graphemes(1);
-        let mut move_backward = true;
-        while self.cursor_kind() == WordKind::Blank {
-          if self.at_eof() {
-            move_backward = false;
-            break;
-          }
+        for _ in 0..count.unwrap_or(1) {
           self.move_graphemes(1);
-        }
+          let mut move_backward = true;
+          while self.cursor_kind() == WordKind::Blank {
+            if self.at_eof() {
+              move_backward = false;
+              break;
+            }
+            self.move_graphemes(1);
+          }
 
-        let start = self.cursor_kind();
-        while self.cursor_kind() == start {
+          let start = self.cursor_kind();
+          while self.cursor_kind() == start {
+            if self.at_eof() {
+              move_backward = false;
+              break;
+            }
+            self.move_graphemes(1);
+          }
+          if move_backward {
+            self.move_graphemes(-1);
+          }
+
+          // Don't loop forever.
           if self.at_eof() {
-            move_backward = false;
             break;
           }
-          self.move_graphemes(1);
-        }
-        if move_backward {
-          self.move_graphemes(-1);
         }
       }
 
       Move::PrevWord => {
-        self.move_graphemes(-1);
-        let mut move_forward = true;
-        while self.cursor_kind() == WordKind::Blank {
-          if self.at_start() {
-            move_forward = false;
-            break;
-          }
+        for _ in 0..count.unwrap_or(1) {
           self.move_graphemes(-1);
-        }
+          let mut move_forward = true;
+          while self.cursor_kind() == WordKind::Blank {
+            if self.at_start() {
+              move_forward = false;
+              break;
+            }
+            self.move_graphemes(-1);
+          }
 
-        let start = self.cursor_kind();
-        while self.cursor_kind() == start {
+          let start = self.cursor_kind();
+          while self.cursor_kind() == start {
+            if self.at_start() {
+              move_forward = false;
+              break;
+            }
+            self.move_graphemes(-1);
+          }
+          if move_forward {
+            self.move_graphemes(1);
+          }
+
+          // Don't loop forever.
           if self.at_start() {
-            move_forward = false;
             break;
           }
-          self.move_graphemes(-1);
-        }
-        if move_forward {
-          self.move_graphemes(1);
         }
       }
 
@@ -178,38 +203,50 @@ impl EditorState {
 
       Move::Result(dir) => {
         if let Some(search) = self.search_text.as_ref() {
-          let offset = self.doc.cursor_offset(self.cursor) + 1;
-          if let Some(res) = match dir {
-            ChangeDirection::Next => self.doc.find_from(offset, search).next(),
-            ChangeDirection::Prev => self.doc.rfind_from(offset, search).next(),
-          } {
-            let cursor = self.doc.offset_to_cursor(res);
-            self.cursor = cursor;
+          for _ in 0..count.unwrap_or(1) {
+            let offset = self.doc.cursor_offset(self.cursor) + 1;
+            if let Some(res) = match dir {
+              ChangeDirection::Next => self.doc.find_from(offset, search).next(),
+              ChangeDirection::Prev => self.doc.rfind_from(offset, search).next(),
+            } {
+              let cursor = self.doc.offset_to_cursor(res);
+              self.cursor = cursor;
+            } else {
+              break;
+            }
           }
         }
       }
 
       Move::Change(dir) => {
-        if let Some(changes) = &self.changes {
-          if let Some(line) = match dir {
-            ChangeDirection::Next => changes.next_hunk(self.cursor.line),
-            ChangeDirection::Prev => changes.prev_hunk(self.cursor.line),
-          } {
-            self.move_to_line(line);
+        for _ in 0..count.unwrap_or(1) {
+          if let Some(changes) = &self.changes {
+            if let Some(line) = match dir {
+              ChangeDirection::Next => changes.next_hunk(self.cursor.line),
+              ChangeDirection::Prev => changes.prev_hunk(self.cursor.line),
+            } {
+              self.move_to_line(line);
+            } else {
+              break;
+            }
           }
         }
       }
 
       Move::Diagnostic(dir) => {
-        let offset = self.doc.cursor_offset(self.cursor);
+        for _ in 0..count.unwrap_or(1) {
+          let offset = self.doc.cursor_offset(self.cursor);
 
-        if let Some(d) = match dir {
-          ChangeDirection::Next => self.lsp.diagnostics.iter().find(|d| d.range.start > offset),
-          ChangeDirection::Prev => self.lsp.diagnostics.iter().rfind(|d| d.range.start < offset),
-        } {
-          let cursor = self.doc.offset_to_cursor(d.range.start);
-          self.move_to_line(cursor.line);
-          self.move_to_col(cursor.column);
+          if let Some(d) = match dir {
+            ChangeDirection::Next => self.lsp.diagnostics.iter().find(|d| d.range.start > offset),
+            ChangeDirection::Prev => self.lsp.diagnostics.iter().rfind(|d| d.range.start < offset),
+          } {
+            let cursor = self.doc.offset_to_cursor(d.range.start);
+            self.move_to_line(cursor.line);
+            self.move_to_col(cursor.column);
+          } else {
+            break;
+          }
         }
       }
 
