@@ -50,6 +50,8 @@ impl TerminalView {
       Action::SetMode { mode: Mode::Normal, .. } => self.terminal.perform_escape(),
       Action::Tab => self.terminal.perform_tab(),
 
+      Action::Paste => self.terminal.perform_paste("hello"),
+
       _ => {}
     }
   }
