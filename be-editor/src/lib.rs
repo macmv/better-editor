@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashSet, ops::Range, path::PathBuf, rc::Rc
 use be_config::{Config, LanguageName};
 use be_doc::{Change, Column, Cursor, Document, Edit, Line, crop::RopeSlice};
 use be_git::{LineDiffSimilarity, Repo};
-use be_input::{Action, Direction, Mode, Move, VerticalDirection};
+use be_input::{Action, Clipboard, Direction, Mode, Move, VerticalDirection};
 use be_shared::SharedHandle;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -55,10 +55,11 @@ pub struct EditorState {
   history:          Vec<Edit>,
   copied:           String,
 
-  pub config: Rc<RefCell<Config>>,
-  pub repo:   SharedHandle<Option<Repo>>,
-  pub lsp:    lsp::LspState,
-  pub send:   Option<Box<dyn Fn(EditorEvent)>>,
+  pub config:    Rc<RefCell<Config>>,
+  pub repo:      SharedHandle<Option<Repo>>,
+  pub lsp:       lsp::LspState,
+  pub send:      Option<Box<dyn Fn(EditorEvent)>>,
+  pub clipboard: SharedHandle<Clipboard>,
 
   pub changes: Option<LineDiffSimilarity>,
 }
@@ -357,6 +358,16 @@ impl EditorState {
       Action::Navigate { nav } => error!("unhandled navigate passed to editor: {nav:?}"),
       Action::Control { .. } => {} // only really used for the terminal
       Action::Tab => {}            // TODO
+
+      Action::Copy => {} // TODO: Get at selection bytes.
+      Action::Paste => {
+        // TODO: Do we de-duplicate with 'p'?
+        let text = self.clipboard.paste();
+        if !text.is_empty() {
+          self.change(Change::insert(self.doc.cursor_offset(self.cursor), &text));
+          self.move_graphemes(text.graphemes(true).count() as isize);
+        }
+      }
     }
   }
 

@@ -1,5 +1,7 @@
-use be_input::{Action, Direction, Edit, Mode, Move};
+use be_input::{Action, Clipboard, Direction, Edit, Mode, Move};
+use be_shared::SharedHandle;
 use be_terminal::{StyleFlags, Terminal, TerminalColor};
+use be_workspace::Workspace;
 use kurbo::{Rect, Stroke};
 use parley::FontWeight;
 use peniko::color::AlphaColor;
@@ -16,6 +18,8 @@ pub struct TerminalView {
 
   cached_layouts: Vec<LineLayout>,
   cached_scale:   f64,
+
+  clipboard: SharedHandle<Clipboard>,
 }
 
 struct LineLayout {
@@ -24,7 +28,7 @@ struct LineLayout {
 }
 
 impl TerminalView {
-  pub fn new() -> Self {
+  pub fn new(workspace: &Workspace) -> Self {
     TerminalView {
       terminal:       Terminal::new(be_terminal::Size { rows: 40, cols: 80 }),
       set_waker:      false,
@@ -33,6 +37,7 @@ impl TerminalView {
       character_size: kurbo::Size::ZERO,
       cached_layouts: vec![],
       cached_scale:   0.0,
+      clipboard:      workspace.clipboard.clone(),
     }
   }
 
@@ -49,6 +54,8 @@ impl TerminalView {
       // Bit of a hack, but we're in "insert" mode, so escape sends us this.
       Action::SetMode { mode: Mode::Normal, .. } => self.terminal.perform_escape(),
       Action::Tab => self.terminal.perform_tab(),
+
+      Action::Paste => self.terminal.perform_paste(&self.clipboard.paste()),
 
       _ => {}
     }

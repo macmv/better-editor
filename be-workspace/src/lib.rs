@@ -10,6 +10,7 @@ use std::{
 use be_config::Config;
 use be_editor::{EditorEvent, EditorState};
 use be_git::Repo;
+use be_input::Clipboard;
 use be_lsp::LanguageServerStore;
 use be_shared::{SharedHandle, WeakHandle};
 use parking_lot::Mutex;
@@ -17,9 +18,10 @@ use parking_lot::Mutex;
 pub struct Workspace {
   pub root: PathBuf,
 
-  pub config: Rc<RefCell<Config>>,
-  pub repo:   SharedHandle<Option<Repo>>,
-  pub lsp:    Rc<RefCell<LanguageServerStore>>,
+  pub config:    Rc<RefCell<Config>>,
+  pub repo:      SharedHandle<Option<Repo>>,
+  pub lsp:       Rc<RefCell<LanguageServerStore>>,
+  pub clipboard: SharedHandle<Clipboard>,
 
   notifier: Arc<Mutex<Box<dyn Fn(WorkspaceEvent) + Send>>>,
 
@@ -55,6 +57,7 @@ impl Workspace {
       config,
       repo: SharedHandle::new(Some(repo)),
       lsp: Rc::new(RefCell::new(lsp)),
+      clipboard: SharedHandle::new(Clipboard::dummy()),
 
       notifier,
 
@@ -74,6 +77,7 @@ impl Workspace {
       let notifier = self.notifier.clone();
       move |ev| (notifier.lock())(WorkspaceEvent::Editor(ev))
     }));
+    editor.clipboard = self.clipboard.clone();
 
     let handle = SharedHandle::new(editor);
 

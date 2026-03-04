@@ -4,12 +4,17 @@ use winit::{
   event::WindowEvent,
   event_loop::{self, ActiveEventLoop},
   keyboard::NamedKey,
+  window::Window,
 };
 
 use crate::{Event, MouseEvent, render::cursor::CursorKind};
 
-type AppBuilder =
-  fn(&wgpu::Device, &wgpu::SurfaceConfiguration, event_loop::EventLoopProxy<Event>) -> super::App;
+type AppBuilder = fn(
+  &wgpu::Device,
+  &wgpu::SurfaceConfiguration,
+  &Window,
+  event_loop::EventLoopProxy<Event>,
+) -> super::App;
 
 struct App {
   builder: AppBuilder,
@@ -85,7 +90,7 @@ impl winit::application::ApplicationHandler<Event> for App {
     surface.configure(&device, &config);
 
     self.init = Some(Init {
-      app: (self.builder)(&device, &config, self.proxy.clone()),
+      app: (self.builder)(&device, &config, &window, self.proxy.clone()),
       keys: Default::default(),
       cursor: None,
       cursor_kind: CursorKind::Default,
