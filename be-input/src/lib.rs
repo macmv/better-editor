@@ -1,4 +1,5 @@
 mod action;
+mod clipboard;
 mod key;
 
 #[derive(Default, Copy, Clone, Debug, Hash, PartialEq, Eq)]
@@ -19,4 +20,5 @@ pub enum VisualMode {
 }
 
 pub use action::*;
+pub use clipboard::*;
 pub use key::*;

@@ -1,4 +1,4 @@
-use be_input::{Key, KeyStroke};
+use be_input::{Clipboard, Key, KeyStroke};
 use kurbo::{Point, Vec2};
 use winit::{
   event::WindowEvent,
@@ -30,7 +30,7 @@ struct Init {
   config:  wgpu::SurfaceConfiguration,
   scale:   f64,
 
-  clipboard: super::clipboard::Clipboard,
+  clipboard: Clipboard,
 
   // SAFETY: Keep this field last so we don't segfault on exit.
   window: winit::window::Window,
@@ -50,7 +50,7 @@ impl winit::application::ApplicationHandler<Event> for App {
       .create_window(winit::window::WindowAttributes::default().with_title("Better Editor"))
       .unwrap();
 
-    let clipboard = super::clipboard::Clipboard::new(&window);
+    let clipboard = super::clipboard::create(&window);
 
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
       flags: wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL, // disable validation.
