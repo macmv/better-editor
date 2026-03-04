@@ -83,10 +83,12 @@ impl EditorView {
   pub fn split_from(&mut self, editor: &EditorView) {
     // TODO: Save if unsaved.
     self.editor = editor.editor.clone();
+    self.cached_layouts.clear();
   }
 
   pub fn open(&mut self, path: &std::path::Path, workspace: &mut Workspace) -> io::Result<()> {
     self.editor = workspace.open_file(path)?;
+    self.cached_layouts.clear();
     Ok(())
   }
 
