@@ -485,6 +485,25 @@ impl EditorView {
       );
       render.draw_text(&layout, (render.size().width - 50.0, render.size().height - line_height));
     }
+
+    let rect =
+      RoundedRect::new(render.size().width - 18.0, 2.0, render.size().width - 2.0, 18.0, 3.0);
+    let (mode_color, mode_char) = match self.editor.mode() {
+      _ if self.temporary_underline => (render.theme().mode_replace, 'R'),
+      Mode::Normal => (render.theme().mode_normal, 'N'),
+      Mode::Insert => (render.theme().mode_insert, 'I'),
+      Mode::Replace => (render.theme().mode_replace, 'R'),
+      Mode::Visual(_) => (render.theme().mode_visual, 'V'),
+      Mode::Command => (render.theme().mode_command, 'C'), // TODO: Remove
+    };
+    render.fill(&rect, mode_color);
+    let mode_text = mode_char.to_string();
+    let mut layout =
+      render.store.text.layout_builder(&mode_text, render.theme().background, render.scale());
+    layout.apply_default(parley::StyleProperty::FontWeight(parley::FontWeight::BOLD));
+    let (layout, backgrounds) = layout.build(&mode_text);
+    let layout = render.build_layout(layout, backgrounds);
+    render.draw_text(&layout, (render.size().width - 10.0 - layout.size().width / 2.0, 0.0));
   }
 
   fn draw_progress(&mut self, render: &mut Render) {

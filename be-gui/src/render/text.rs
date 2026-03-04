@@ -474,6 +474,10 @@ impl LayoutBuilder<'_> {
     self.builder.push(map_property(style, |b| b.encode()), range);
   }
 
+  pub fn apply_default(&mut self, style: parley::StyleProperty<Brush>) {
+    self.builder.push_default(map_property(style, |b| b.encode()));
+  }
+
   pub fn background(&mut self, range: Range<usize>, color: Color) {
     let start_idx =
       self.backgrounds.binary_search_by(|(it, _)| it.cmp(&range.start)).unwrap_or_else(|e| e);
