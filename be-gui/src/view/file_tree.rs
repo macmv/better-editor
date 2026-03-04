@@ -503,20 +503,24 @@ impl TreeDraw {
 
     let icon = if dir.expanded { &*icon::CHEVRON_DOWN } else { &*icon::CHEVRON_RIGHT };
     icon.stroke(
-      self.pos() + Vec2::new(self.indent_width - 16.0, text.size().height / 2.0 - 6.0),
+      self.pos() + Vec2::new(self.indent_width - 16.0, self.line_height / 2.0 - 6.0),
       12.0,
       render.theme().background_raised_outline,
       render,
     );
 
     icon::FOLDER.fill(
-      self.pos() + Vec2::new(self.indent_width, text.size().height / 2.0 - 6.0),
+      self.pos() + Vec2::new(self.indent_width, self.line_height / 2.0 - 6.0),
       12.0,
       crate::oklch(0.7, 0.14, 240.0),
       render,
     );
 
-    render.draw_text(&text, self.pos() + Vec2::new(self.indent_width + 16.0, 0.0));
+    render.draw_text(
+      &text,
+      self.pos()
+        + Vec2::new(self.indent_width + 16.0, self.line_height / 2.0 - text.size().height / 2.0),
+    );
 
     if let Some(status) = dir.status
       && let Some(icon) = status.icon()
@@ -525,7 +529,7 @@ impl TreeDraw {
         self.pos()
           + Vec2::new(
             self.indent_width + 16.0 + text.size().width + 4.0,
-            text.size().height / 2.0 - 6.0,
+            self.line_height / 2.0 - 6.0,
           ),
         12.0,
         status.color(render.theme()),
@@ -569,21 +573,25 @@ impl TreeDraw {
 
     if fill {
       icon.fill(
-        self.pos() + Vec2::new(self.indent_width, text.size().height / 2.0 - 6.0),
+        self.pos() + Vec2::new(self.indent_width, self.line_height / 2.0 - 6.0),
         12.0,
         color,
         render,
       );
     } else {
       icon.stroke(
-        self.pos() + Vec2::new(self.indent_width, text.size().height / 2.0 - 6.0),
+        self.pos() + Vec2::new(self.indent_width, self.line_height / 2.0 - 6.0),
         12.0,
         color,
         render,
       );
     }
 
-    render.draw_text(&text, self.pos() + Vec2::new(self.indent_width + 16.0, 0.0));
+    render.draw_text(
+      &text,
+      self.pos()
+        + Vec2::new(self.indent_width + 16.0, self.line_height / 2.0 - text.size().height / 2.0),
+    );
 
     if let Some(status) = file.status
       && let Some(icon) = status.icon()
@@ -592,7 +600,7 @@ impl TreeDraw {
         self.pos()
           + Vec2::new(
             self.indent_width + 16.0 + text.size().width + 4.0,
-            text.size().height / 2.0 - 6.0,
+            self.line_height / 2.0 - 6.0,
           ),
         12.0,
         status.color(render.theme()),
