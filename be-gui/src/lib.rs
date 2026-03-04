@@ -187,7 +187,7 @@ impl State {
       },
     );
 
-    for mut editor in layout.store.workspace.editors() {
+    for editor in layout.store.workspace.editors_mut() {
       puffin::profile_scope!("layout editor");
       editor.layout();
     }
@@ -226,11 +226,9 @@ impl State {
       },
     );
 
-    for mut editor in layout.store.workspace.editors() {
+    for editor in layout.store.workspace.editors_mut() {
       editor.clear_damage();
     }
-
-    layout.store.workspace.cleanup_editors();
   }
 
   fn hit_view(&self, pos: Point, size: kurbo::Size) -> Option<ViewId> {

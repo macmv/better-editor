@@ -26,7 +26,7 @@ pub struct Workspace {
   notifier: Arc<Mutex<Box<dyn Fn(WorkspaceEvent) + Send>>>,
 
   next_editor:     u32,
-  editors:         HashMap<u32, WeakHandle<EditorState>>,
+  editors:         HashMap<u32, SharedHandle<EditorState>>,
   editors_by_path: HashMap<PathBuf, WeakHandle<EditorState>>,
 }
 
@@ -82,7 +82,7 @@ impl Workspace {
     let handle = SharedHandle::new(editor);
 
     let id = self.next_editor;
-    self.editors.insert(id, SharedHandle::downgrade(&handle));
+    self.editors.insert(id, handle.clone());
     self.next_editor += 1;
     handle
   }
@@ -106,9 +106,10 @@ impl Workspace {
     *self.notifier.lock() = Box::new(wake);
   }
 
-  pub fn cleanup_editors(&mut self) { self.editors.retain(|_, v| v.can_upgrade()); }
-
-  pub fn editors(&self) -> impl Iterator<Item = SharedHandle<EditorState>> {
-    self.editors.values().filter_map(|v| v.upgrade())
+  pub fn editors(&self) -> impl Iterator<Item = &SharedHandle<EditorState>> {
+    self.editors.values()
+  }
+  pub fn editors_mut(&mut self) -> impl Iterator<Item = &mut SharedHandle<EditorState>> {
+    self.editors.values_mut()
   }
 }
