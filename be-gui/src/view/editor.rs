@@ -489,6 +489,7 @@ impl EditorView {
     let rect =
       RoundedRect::new(render.size().width - 18.0, 2.0, render.size().width - 2.0, 18.0, 3.0);
     let (mode_color, mode_char) = match self.editor.mode() {
+      _ if !self.focused() => (render.theme().mode_normal, 'N'),
       _ if self.temporary_underline => (render.theme().mode_replace, 'R'),
       Mode::Normal => (render.theme().mode_normal, 'N'),
       Mode::Insert => (render.theme().mode_insert, 'I'),
