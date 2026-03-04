@@ -4,9 +4,21 @@ use be_config_macros::Config;
 
 #[derive(Default, Config, Clone)]
 pub struct Settings {
-  pub font:   FontSettings,
   pub editor: EditorSettings,
+  pub ui:     UiSettings,
   pub layout: LayoutSettings,
+}
+
+#[derive(Default, Config, Clone)]
+pub struct EditorSettings {
+  pub font:          FontSettings,
+  pub scroll_offset: u32,
+  pub indent_width:  u32,
+}
+
+#[derive(Default, Config, Clone)]
+pub struct UiSettings {
+  pub font: FontSettings,
 }
 
 #[derive(Default, Config, Clone)]
@@ -46,12 +58,6 @@ pub enum Axis {
   #[default]
   Horizontal,
   Vertical,
-}
-
-#[derive(Default, Config, Clone)]
-pub struct EditorSettings {
-  pub scroll_offset: u32,
-  pub indent_width:  u32,
 }
 
 impl Settings {

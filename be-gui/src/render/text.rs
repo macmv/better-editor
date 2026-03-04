@@ -73,12 +73,13 @@ impl TextStore {
 
   fn update_metrics(&mut self) {
     const TEXT: &str = " ";
+    // TODO: Key metrics off `crate::Font`.
     let mut builder = self.layout.ranged_builder(&mut self.font, TEXT, 1.0, false);
     builder.push_default(parley::StyleProperty::FontSize(
-      self.config.borrow().settings.font.size as f32,
+      self.config.borrow().settings.editor.font.size as f32,
     ));
     builder.push_default(parley::StyleProperty::FontStack(parley::FontStack::Source(
-      self.config.borrow().settings.font.family.as_str().into(),
+      self.config.borrow().settings.editor.font.family.as_str().into(),
     )));
     let mut layout = builder.build(TEXT);
 
@@ -109,18 +110,19 @@ impl TextStore {
     match font {
       Font::Editor => {
         builder.push_default(parley::StyleProperty::FontSize(
-          (config.settings.font.size * scale) as f32,
+          (config.settings.editor.font.size * scale) as f32,
         ));
         builder.push_default(parley::StyleProperty::FontStack(
-          config.settings.font.family.as_str().into(),
+          config.settings.editor.font.family.as_str().into(),
         ));
       }
       Font::Ui => {
         builder.push_default(parley::StyleProperty::FontSize(
-          (config.settings.font.size * scale * 0.8) as f32,
+          (config.settings.ui.font.size * scale) as f32,
         ));
-        builder
-          .push_default(parley::StyleProperty::FontStack(parley::GenericFamily::SansSerif.into()));
+        builder.push_default(parley::StyleProperty::FontStack(
+          config.settings.ui.font.family.as_str().into(),
+        ));
       }
     }
     // NB: Disable ligatures with this:
