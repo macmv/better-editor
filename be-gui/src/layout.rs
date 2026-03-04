@@ -14,6 +14,14 @@ pub struct Layout<'a> {
   pub to_close: Vec<ViewId>,
 }
 
+pub enum Font {
+  /// The font used within the editor itself. This is typically a monospace
+  /// font.
+  Editor,
+  /// The font used for other UI elements. This is typically a sans-serif font.
+  Ui,
+}
+
 impl<'a> Layout<'a> {
   pub fn new(store: &'a mut RenderStore, scale: f64, size: Size) -> Self {
     Self { store, scale, size, stack: vec![], active: None, to_close: vec![] }
@@ -112,10 +120,10 @@ impl<'a> Layout<'a> {
 
   pub fn is_stale(&self, layout: &TextLayout) -> bool { layout.scale != self.scale }
 
-  pub fn layout_text(&mut self, text: &str, color: Color) -> TextLayout {
+  pub fn layout_text(&mut self, font: Font, text: &str, color: Color) -> TextLayout {
     puffin::profile_function!();
 
-    let builder = self.store.text.layout_builder(text, color, self.scale);
+    let builder = self.store.text.layout_builder(font, text, color, self.scale);
 
     let (built, backgrounds) = builder.build(text);
     self.build_layout(built, backgrounds)

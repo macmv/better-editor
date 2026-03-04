@@ -56,8 +56,12 @@ impl Search {
 
       let y = render.size().height - 60.0 - i as f64 * render.store.text.font_metrics().line_height;
       let matched_color = render.theme().search_matched;
-      let mut builder =
-        render.store.text.layout_builder(result.data, render.theme().text, render.scale());
+      let mut builder = render.store.text.layout_builder(
+        crate::Font::Editor,
+        result.data,
+        render.theme().text,
+        render.scale(),
+      );
 
       let mut indices = vec![];
       self.index.nucleo.pattern.column_pattern(0).indices(
@@ -89,7 +93,7 @@ impl Search {
     render.fill(&bounds, render.theme().background);
     render.stroke(&bounds, render.theme().background_raised_outline, Stroke::new(stroke));
 
-    let layout = render.layout_text(&self.search, render.theme().text);
+    let layout = render.layout_text(crate::Font::Editor, &self.search, render.theme().text);
     let text_pos = Point::new(20.0, render.size().height - 40.0);
     render.draw_text(&layout, text_pos);
 

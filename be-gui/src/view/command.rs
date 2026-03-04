@@ -35,7 +35,7 @@ impl CommandView {
     render.fill(&bounds, render.theme().background);
     render.stroke(&bounds, render.theme().background_raised_outline, Stroke::new(stroke));
 
-    let layout = render.layout_text(&self.command, render.theme().text);
+    let layout = render.layout_text(crate::Font::Editor, &self.command, render.theme().text);
     let text_pos = Point::new(20.0, render.size().height - 40.0);
     render.draw_text(&layout, text_pos);
 

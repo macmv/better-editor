@@ -14,7 +14,7 @@ use skrifa::{
   raw::TableProvider,
 };
 
-use crate::{Brush, Color, CursorMode, Render, encode_color};
+use crate::{Brush, Color, CursorMode, Font, Render, encode_color};
 
 pub struct TextStore {
   font:         parley::FontContext,
@@ -98,18 +98,31 @@ impl TextStore {
 
   pub fn layout_builder<'a>(
     &'a mut self,
+    font: Font,
     text: &'a str,
     color: Color,
     scale: f64,
   ) -> LayoutBuilder<'a> {
     let mut builder = self.layout.ranged_builder(&mut self.font, text, 1.0, false);
     builder.push_default(parley::StyleProperty::Brush(encode_color(color).into()));
-    builder.push_default(parley::StyleProperty::FontSize(
-      (self.config.borrow().settings.font.size * scale) as f32,
-    ));
-    builder.push_default(parley::StyleProperty::FontStack(
-      self.config.borrow().settings.font.family.as_str().into(),
-    ));
+    let config = self.config.borrow();
+    match font {
+      Font::Editor => {
+        builder.push_default(parley::StyleProperty::FontSize(
+          (config.settings.font.size * scale) as f32,
+        ));
+        builder.push_default(parley::StyleProperty::FontStack(
+          config.settings.font.family.as_str().into(),
+        ));
+      }
+      Font::Ui => {
+        builder.push_default(parley::StyleProperty::FontSize(
+          (config.settings.font.size * scale * 0.8) as f32,
+        ));
+        builder
+          .push_default(parley::StyleProperty::FontStack(parley::GenericFamily::SansSerif.into()));
+      }
+    }
     // NB: Disable ligatures with this:
     /*
     builder
@@ -144,10 +157,10 @@ impl Render<'_> {
     }
   }
 
-  pub fn layout_text(&mut self, text: &str, color: Color) -> TextLayout {
+  pub fn layout_text(&mut self, font: Font, text: &str, color: Color) -> TextLayout {
     puffin::profile_function!();
 
-    let builder = self.store.text.layout_builder(text, color, self.scale);
+    let builder = self.store.text.layout_builder(font, text, color, self.scale);
 
     let (built, backgrounds) = builder.build(text);
     self.build_layout(built, backgrounds)

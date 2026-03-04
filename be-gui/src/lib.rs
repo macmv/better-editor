@@ -23,7 +23,7 @@ mod theme;
 mod view;
 mod widget;
 
-pub use layout::Layout;
+pub use layout::{Font, Layout};
 pub use widget::{Widget, WidgetStore};
 
 #[macro_use]

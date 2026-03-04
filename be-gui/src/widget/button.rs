@@ -1,6 +1,6 @@
 use kurbo::{Point, Vec2};
 
-use crate::{TextLayout, Widget, widget::LayoutCtx};
+use crate::{Font, TextLayout, Widget, widget::LayoutCtx};
 
 pub struct Button {
   content: String,
@@ -31,7 +31,7 @@ impl Widget for Button {
     self.pending_press = false;
 
     if self.layout.as_ref().is_none_or(|l| layout.is_stale(l)) {
-      self.layout = Some(layout.layout.layout_text(&self.content, layout.theme().text));
+      self.layout = Some(layout.layout.layout_text(Font::Ui, &self.content, layout.theme().text));
     }
 
     Some(

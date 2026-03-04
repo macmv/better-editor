@@ -9,7 +9,8 @@ use be_workspace::Workspace;
 use kurbo::{Arc, Circle, Line, Point, Rect, RoundedRect, Size, Stroke, Triangle, Vec2};
 
 use crate::{
-  CursorMode, Layout, MouseButton, MouseEvent, Render, RenderStore, TextLayout, theme::Underline,
+  CursorMode, Font, Layout, MouseButton, MouseEvent, Render, RenderStore, TextLayout,
+  theme::Underline,
 };
 
 pub struct EditorView {
@@ -345,7 +346,7 @@ impl EditorView {
       };
 
       let line_number_text = (i + 1).to_string();
-      let number_layout = layout.layout_text(&line_number_text, color);
+      let number_layout = layout.layout_text(Font::Editor, &line_number_text, color);
       self.line_number_width = self.line_number_width.max(number_layout.size().width);
       self.line_numbers.push(number_layout);
 
@@ -468,18 +469,19 @@ impl EditorView {
         command.text
       );
 
-      let layout = render.layout_text(&text, render.theme().text);
+      let layout = render.layout_text(Font::Editor, &text, render.theme().text);
       render.draw_text(&layout, text_pos);
 
       let cursor = layout.cursor(command.cursor as usize + 1, CursorMode::Line);
       render.fill(&(cursor + text_pos.to_vec2()), render.theme().text);
     } else if let Some(status) = self.editor.status() {
-      let layout = render.layout_text(&status.message, render.theme().text);
+      let layout = render.layout_text(Font::Ui, &status.message, render.theme().text);
       render.draw_text(&layout, (20.0, render.size().height - line_height));
     }
 
     if let Some(ft) = self.editor.file_type() {
       let layout = render.layout_text(
+        Font::Ui,
         &format!("{}", self.editor.config.borrow().languages[&ft].display_name),
         render.theme().text,
       );
@@ -499,8 +501,12 @@ impl EditorView {
     };
     render.fill(&rect, mode_color);
     let mode_text = mode_char.to_string();
-    let mut layout =
-      render.store.text.layout_builder(&mode_text, render.theme().background, render.scale());
+    let mut layout = render.store.text.layout_builder(
+      Font::Editor,
+      &mode_text,
+      render.theme().background,
+      render.scale(),
+    );
     layout.apply_default(parley::StyleProperty::FontWeight(parley::FontWeight::BOLD));
     let (layout, backgrounds) = layout.build(&mode_text);
     let layout = render.build_layout(layout, backgrounds);
@@ -529,7 +535,7 @@ impl EditorView {
     }
 
     for (i, p) in progress.iter().enumerate() {
-      let layout = render.layout_text(p, render.theme().text);
+      let layout = render.layout_text(Font::Ui, p, render.theme().text);
       let y = progress.len() - i + 1;
       render.fill(
         &Rect::new(
@@ -618,7 +624,7 @@ impl EditorView {
       let layouts = completions
         .iter()
         .take(20)
-        .map(|completion| render.layout_text(&completion, render.theme().text))
+        .map(|completion| render.layout_text(Font::Editor, &completion, render.theme().text))
         .collect::<Vec<_>>();
 
       let inner_width = layouts
@@ -699,8 +705,12 @@ impl EditorView {
 
     let line_string = line.to_string();
     let theme = &layout.store.theme;
-    let mut text_layout =
-      layout.store.text.layout_builder(&line_string, layout.theme().text, layout.scale());
+    let mut line_number_layout = layout.store.text.layout_builder(
+      Font::Editor,
+      &line_string,
+      layout.theme().text,
+      layout.scale(),
+    );
 
     let highlights = self.editor.highlights(index..max_index);
     let mut prev = index;
@@ -721,20 +731,22 @@ impl EditorView {
       if let Some(highlight) = theme.syntax.lookup(&highlight.highlights) {
         let range = prev - index..pos - index;
         if let Some(foreground) = highlight.foreground {
-          text_layout.color_range(range.clone(), foreground);
+          line_number_layout.color_range(range.clone(), foreground);
         }
         if let Some(weight) = highlight.weight {
-          text_layout.apply(range.clone(), parley::StyleProperty::FontWeight(weight.to_parley()));
+          line_number_layout
+            .apply(range.clone(), parley::StyleProperty::FontWeight(weight.to_parley()));
         }
         if let Some(underline) = highlight.underline {
-          text_layout.apply(range.clone(), parley::StyleProperty::Underline(true));
+          line_number_layout.apply(range.clone(), parley::StyleProperty::Underline(true));
 
           if let Underline::Color(c) = underline {
-            text_layout.apply(range.clone(), parley::StyleProperty::UnderlineBrush(Some(c.into())));
+            line_number_layout
+              .apply(range.clone(), parley::StyleProperty::UnderlineBrush(Some(c.into())));
           }
         }
         if let Some(background) = highlight.background {
-          text_layout.background(range.clone(), background);
+          line_number_layout.background(range.clone(), background);
         }
       }
 
@@ -745,7 +757,7 @@ impl EditorView {
       prev = pos;
     }
 
-    let (text_layout, backgrounds) = text_layout.build(&line_string);
+    let (text_layout, backgrounds) = line_number_layout.build(&line_string);
     let text_layout = layout.build_layout(text_layout, backgrounds);
 
     Some(entry.insert(text_layout))

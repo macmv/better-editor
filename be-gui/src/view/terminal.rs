@@ -224,8 +224,12 @@ impl TerminalView {
     let line_string = line.to_string();
 
     let theme = &render.store.theme;
-    let mut layout =
-      render.store.text.layout_builder(&line_string, render.theme().text, render.scale());
+    let mut layout = render.store.text.layout_builder(
+      crate::Font::Editor,
+      &line_string,
+      render.theme().text,
+      render.scale(),
+    );
 
     let mut prev = 0;
     for ((foreground, style), i) in line.specific_styles(|j, s| {

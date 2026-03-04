@@ -499,7 +499,7 @@ impl TreeDraw {
   }
 
   fn draw_directory(&mut self, dir: &Directory, render: &mut Render) {
-    let text = render.layout_text(&format!("{}", dir.name()), render.theme().text);
+    let text = render.layout_text(crate::Font::Ui, &format!("{}", dir.name()), render.theme().text);
 
     let icon = if dir.expanded { &*icon::CHEVRON_DOWN } else { &*icon::CHEVRON_RIGHT };
     icon.stroke(
@@ -546,7 +546,7 @@ impl TreeDraw {
   }
 
   fn draw_file(&self, file: &File, render: &mut Render) {
-    let text = render.layout_text(&file.name, render.theme().text);
+    let text = render.layout_text(crate::Font::Ui, &file.name, render.theme().text);
 
     let (icon, fill, color) = match render
       .store
