@@ -140,7 +140,7 @@ impl State {
           })
         }
         be_config::TabSettings::Terminal => {
-          Pane::View(state.views.new_view(view::TerminalView::new()))
+          Pane::View(state.views.new_view(view::TerminalView::new(&store.workspace)))
         }
         be_config::TabSettings::Editor => {
           Pane::View(state.views.new_view(view::EditorView::new(store)))
@@ -586,7 +586,9 @@ impl State {
       ViewContent::FileTree(_) => self
         .views
         .new_view(crate::view::FileTree::current_directory(store.notifier(), &store.workspace)),
-      ViewContent::Terminal(_) => self.views.new_view(crate::view::TerminalView::new()),
+      ViewContent::Terminal(_) => {
+        self.views.new_view(crate::view::TerminalView::new(&store.workspace))
+      }
     }
   }
 }
