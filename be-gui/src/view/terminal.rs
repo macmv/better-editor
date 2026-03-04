@@ -83,10 +83,20 @@ impl TerminalView {
           let mouse = self.mouse_to_pos(*pos);
 
           if anchor != mouse {
-            self.selection = Some((
-              Position { row: anchor.row.min(mouse.row), col: anchor.col.min(mouse.col) },
-              Position { row: anchor.row.max(mouse.row), col: anchor.col.max(mouse.col) },
-            ));
+            let (min, max) = if anchor.row == mouse.row {
+              let min_col = anchor.col.min(mouse.col);
+              let max_col = anchor.col.max(mouse.col);
+              (
+                Position { row: anchor.row, col: min_col },
+                Position { row: anchor.row, col: max_col },
+              )
+            } else if anchor.row < mouse.row {
+              (anchor, mouse)
+            } else {
+              (mouse, anchor)
+            };
+
+            self.selection = Some((min, max));
           }
         }
       }
