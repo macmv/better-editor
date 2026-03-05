@@ -306,7 +306,9 @@ dependencies = [
 name = "be-notify"
 version = "0.1.0"
 dependencies = [
+ "expect-test",
  "inotify",
+ "parking_lot",
 ]
 
 [[package]]

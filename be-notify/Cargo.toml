@@ -5,3 +5,9 @@ edition = "2024"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 inotify = { version = "0.11", default-features = false }
+
+[dependencies]
+parking_lot = "0.12.5"
+
+[dev-dependencies]
+expect-test.workspace = true
