@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, path::PathBuf};
+use std::path::PathBuf;
 
 use btree_slab::BTreeMap;
 
@@ -7,16 +7,9 @@ pub struct DirectoryChanges {
   changes: BTreeMap<PathBuf, ()>,
 }
 
-pub(crate) struct WorkspaceState {
-  versions: VecDeque<Version>,
-}
-
-pub(crate) struct Version {
-  pub id:      usize,
-  pub changes: DirectoryChanges,
-}
-
 impl DirectoryChanges {
+  pub fn is_empty(&self) -> bool { self.changes.is_empty() }
+
   pub fn merge_with(&mut self, other: &DirectoryChanges) {
     self.changes.extend(other.changes.iter().map(|(c, _)| (c.clone(), ())));
 
@@ -26,24 +19,6 @@ impl DirectoryChanges {
         entries.remove();
       }
     }
-  }
-}
-
-impl WorkspaceState {
-  pub fn versions_since(&self, version: usize) -> impl Iterator<Item = &Version> {
-    if self.versions.is_empty() {
-      return self.versions.iter().skip(0); // empty iterator
-    }
-
-    if version < self.versions[0].id {
-      panic!("version is too old");
-    }
-    let index = version - self.versions[0].id;
-    self.versions.iter().skip(index)
-  }
-
-  pub fn latest_version(&self) -> usize {
-    if self.versions.is_empty() { 0 } else { self.versions[self.versions.len() - 1].id }
   }
 }
 
