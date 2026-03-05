@@ -221,4 +221,28 @@ mod tests {
     assert_eq!(watcher.state.lock().versions.len(), 1);
     check_changes(&handle, expect![@"[foo/baz]"]);
   }
+
+  #[test]
+  fn merge_between_versions() {
+    let (mut watcher, tx) = dummy_watcher();
+
+    let mut h1 = watcher.add_handle();
+    let h2 = watcher.add_handle();
+
+    tx.send("foo/bar".into()).unwrap();
+    watcher.update();
+
+    h1.clear_changes();
+
+    tx.send("foo/baz".into()).unwrap();
+    watcher.update();
+
+    assert_eq!(watcher.state.lock().versions.len(), 2);
+    check_changes(&h1, expect![@"[foo/baz]"]);
+    check_changes(&h2, expect![@"[foo/bar, foo/baz]"]);
+
+    h1.clear_changes();
+    watcher.update();
+    assert_eq!(watcher.state.lock().versions.len(), 3);
+  }
 }
