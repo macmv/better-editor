@@ -35,7 +35,7 @@ impl DirectoryChanges {
 
 #[cfg(test)]
 mod tests {
-  use expect_test::{Expect, expect};
+  use expect_test::Expect;
 
   use super::*;
 

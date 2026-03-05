@@ -11,6 +11,10 @@ pub use watch::*;
 
 use parking_lot::Mutex;
 
+#[cfg(test)]
+#[macro_use]
+extern crate expect_test;
+
 pub struct WorkspaceWatcher {
   watcher: Box<dyn Watcher>,
 
@@ -79,6 +83,16 @@ impl WorkspaceState {
 }
 
 impl WorkspaceWatcher {
+  pub fn add_handle(&mut self) -> WatcherHandle {
+    let latest_version = self.state.lock().latest_version();
+    let handle = WatcherHandle {
+      state:          self.state.clone(),
+      latest_version: Arc::new(latest_version.into()),
+    };
+    self.handles.push(Arc::downgrade(&handle.latest_version));
+    handle
+  }
+
   pub fn update(&mut self) {
     let changes = self.watcher.poll();
     if changes.is_empty() {
@@ -107,5 +121,90 @@ impl WorkspaceWatcher {
       let idx = min_version - state.versions[0].id;
       state.versions.drain(..idx);
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use std::{
+    path::PathBuf,
+    sync::mpsc::{Receiver, Sender},
+  };
+
+  use expect_test::Expect;
+
+  use super::*;
+
+  struct ChannelWatcher {
+    rx: Receiver<PathBuf>,
+  }
+
+  impl Watcher for ChannelWatcher {
+    fn poll(&self) -> DirectoryChanges {
+      if let Some(v) = self.rx.try_recv().ok() {
+        DirectoryChanges::for_path(v)
+      } else {
+        DirectoryChanges::default()
+      }
+    }
+  }
+
+  fn dummy_watcher() -> (WorkspaceWatcher, Sender<PathBuf>) {
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    (
+      WorkspaceWatcher {
+        watcher: Box::new(ChannelWatcher { rx }),
+        state:   Arc::new(Mutex::new(WorkspaceState { versions: VecDeque::new() })),
+        handles: vec![],
+      },
+      tx,
+    )
+  }
+
+  fn check_changes(handle: &WatcherHandle, expected: Expect) {
+    let got = handle.changes().iter().map(|p| p.display().to_string()).collect::<Vec<_>>();
+    expected.assert_eq(&format!("[{}]", got.join(", ")));
+  }
+
+  #[test]
+  fn it_works() {
+    let (mut watcher, tx) = dummy_watcher();
+
+    let mut handle = watcher.add_handle();
+
+    tx.send("foo/bar".into()).unwrap();
+    watcher.update();
+
+    assert_eq!(watcher.state.lock().versions.len(), 1);
+    check_changes(&handle, expect![@"[foo/bar]"]);
+
+    // Changes are added.
+    tx.send("foo/baz".into()).unwrap();
+    watcher.update();
+
+    assert_eq!(watcher.state.lock().versions.len(), 1);
+    check_changes(&handle, expect![@"[foo/bar, foo/baz]"]);
+
+    // Changes are merged.
+    tx.send("foo".into()).unwrap();
+    watcher.update();
+
+    assert_eq!(watcher.state.lock().versions.len(), 1);
+    check_changes(&handle, expect![@"[foo]"]);
+
+    // Clearing results in a new version.
+    handle.clear_changes();
+
+    assert_eq!(watcher.state.lock().versions.len(), 2);
+    check_changes(&handle, expect![@"[]"]);
+
+    // The new version is modified correctly.
+    tx.send("foo/baz".into()).unwrap();
+    watcher.update();
+
+    // The old version is dropped once all handles observe it.
+    assert_eq!(watcher.state.lock().versions.len(), 1);
+    check_changes(&handle, expect![@"[foo/baz]"]);
   }
 }
