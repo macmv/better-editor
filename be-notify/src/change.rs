@@ -8,10 +8,21 @@ pub struct DirectoryChanges {
 }
 
 impl DirectoryChanges {
+  pub fn for_path(path: PathBuf) -> DirectoryChanges {
+    DirectoryChanges { changes: BTreeMap::from_iter([(path, ())]) }
+  }
+
   pub fn is_empty(&self) -> bool { self.changes.is_empty() }
+
+  pub fn iter(&self) -> impl Iterator<Item = &PathBuf> { self.changes.keys() }
 
   pub fn merge_with(&mut self, other: &DirectoryChanges) {
     self.changes.extend(other.changes.iter().map(|(c, _)| (c.clone(), ())));
+
+    // BUG: Workaround for btree-slab panicking on an empty tree.
+    if self.changes.is_empty() {
+      return;
+    }
 
     let mut entries = self.changes.entries_mut();
     while let Some((path, _)) = entries.next() {
