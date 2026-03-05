@@ -4,6 +4,7 @@
 //! This type allows you to dereference a shared handle mutably to access the
 //! shared state seemlessly:
 //! ```
+//! # use be_shared::SharedHandle;
 //! let mut handle = SharedHandle::new(3);
 //! *handle += 1;
 //! assert_eq!(*handle, 4);
@@ -21,6 +22,7 @@
 //!
 //! In general, I use this type like so:
 //! ```
+//! # use be_shared::SharedHandle;
 //! struct State { /* ... */ }
 //! struct View {
 //!   handle: SharedHandle<State>,
