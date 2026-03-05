@@ -52,6 +52,20 @@ impl WatcherHandle {
     let mut state = self.state.lock();
     self.latest_version.store(state.bump_version(), std::sync::atomic::Ordering::Relaxed);
   }
+
+  pub fn take_changes(&mut self) -> DirectoryChanges {
+    // Copy of `WatcherHandle::changes` and `WatcherHandle::clear_changes` with a
+    // single lock
+    let mut state = self.state.lock();
+    let mut changes = DirectoryChanges::default();
+    for version in
+      state.versions_since(self.latest_version.load(std::sync::atomic::Ordering::Relaxed))
+    {
+      changes.merge_with(&version.changes);
+    }
+    self.latest_version.store(state.bump_version(), std::sync::atomic::Ordering::Relaxed);
+    changes
+  }
 }
 
 impl WorkspaceState {
