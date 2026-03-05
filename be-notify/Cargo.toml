@@ -7,6 +7,7 @@ edition = "2024"
 inotify = { version = "0.11", default-features = false }
 
 [dependencies]
+btree-slab = "0.6.1"
 parking_lot = "0.12.5"
 
 [dev-dependencies]

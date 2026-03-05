@@ -1,11 +1,10 @@
-use std::{
-  collections::{BTreeSet, VecDeque},
-  path::PathBuf,
-};
+use std::{collections::VecDeque, path::PathBuf};
 
-#[derive(Default, Clone, Debug, PartialEq, Eq)]
+use btree_slab::BTreeMap;
+
+#[derive(Default, Clone, PartialEq, Eq)]
 pub struct DirectoryChanges {
-  changes: BTreeSet<PathBuf>,
+  changes: BTreeMap<PathBuf, ()>,
 }
 
 pub(crate) struct WorkspaceState {
@@ -19,7 +18,14 @@ pub(crate) struct Version {
 
 impl DirectoryChanges {
   pub fn merge_with(&mut self, other: &DirectoryChanges) {
-    self.changes.extend(other.changes.iter().cloned());
+    self.changes.extend(other.changes.iter().map(|(c, _)| (c.clone(), ())));
+
+    let mut entries = self.changes.entries_mut();
+    while let Some((path, _)) = entries.next() {
+      while entries.peek().is_some_and(|it| it.key().starts_with(path)) {
+        entries.remove();
+      }
+    }
   }
 }
 
@@ -48,7 +54,7 @@ mod tests {
   use super::*;
 
   fn changes(changes: &[&str]) -> DirectoryChanges {
-    DirectoryChanges { changes: changes.iter().map(|c| PathBuf::from(c)).collect() }
+    DirectoryChanges { changes: changes.iter().map(|c| (PathBuf::from(c), ())).collect() }
   }
 
   fn merged(a: &[&str], b: &[&str]) -> DirectoryChanges {
@@ -58,11 +64,23 @@ mod tests {
   }
 
   fn check_merged(a: &[&str], b: &[&str], expected: Expect) {
-    expected.assert_eq(&format!("{:?}", merged(a, b).changes));
+    expected.assert_eq(&format!(
+      "{:?}",
+      merged(a, b).changes.iter().map(|(c, _)| c.to_str().unwrap()).collect::<Vec<_>>()
+    ));
   }
 
   #[test]
   fn merge_works() {
-    check_merged(&["a", "b", "c"], &["c", "d", "e"], expect![@r#"{"a", "b", "c", "d", "e"}"#]);
+    check_merged(&["a", "b", "c"], &["c", "d", "e"], expect![@r#"["a", "b", "c", "d", "e"]"#]);
+  }
+
+  #[test]
+  fn merge_removes_children() {
+    check_merged(
+      &["foo/bar", "foo/baz", "qux"],
+      &["foo", "qux/bar"],
+      expect![@r#"["foo", "qux"]"#],
+    );
   }
 }
