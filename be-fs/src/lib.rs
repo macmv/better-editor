@@ -103,9 +103,9 @@ impl WorkspaceState {
 }
 
 impl WorkspaceWatcher {
-  pub fn new(root: WorkspaceRoot) -> Self {
+  pub fn new(root: &WorkspaceRoot) -> Self {
     WorkspaceWatcher {
-      watcher: watch::default_watcher(&root),
+      watcher: watch::default_watcher(root),
       state:   Arc::new(Mutex::new(WorkspaceState { versions: VecDeque::new() })),
       handles: vec![],
     }
