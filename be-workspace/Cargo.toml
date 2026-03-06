@@ -11,3 +11,4 @@ be-git = { version = "0.1.0", path = "../be-git" }
 be-lsp = { version = "0.1.0", path = "../be-lsp" }
 parking_lot = "0.12.5"
 be-input = { version = "0.1.0", path = "../be-input" }
+be-fs = { version = "0.1.0", path = "../be-fs" }

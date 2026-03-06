@@ -346,6 +346,7 @@ version = "0.1.0"
 dependencies = [
  "be-config",
  "be-editor",
+ "be-fs",
  "be-git",
  "be-input",
  "be-lsp",

@@ -9,6 +9,7 @@ use std::{
 
 use be_config::Config;
 use be_editor::{EditorEvent, EditorState};
+use be_fs::{WorkspaceRoot, WorkspaceWatcher};
 use be_git::Repo;
 use be_input::Clipboard;
 use be_lsp::LanguageServerStore;
@@ -16,8 +17,9 @@ use be_shared::{SharedHandle, WeakHandle};
 use parking_lot::Mutex;
 
 pub struct Workspace {
-  pub root: PathBuf,
+  pub root: WorkspaceRoot,
 
+  pub fs:        WorkspaceWatcher,
   pub config:    Rc<RefCell<Config>>,
   pub repo:      SharedHandle<Option<Repo>>,
   pub lsp:       Rc<RefCell<LanguageServerStore>>,
@@ -49,12 +51,14 @@ impl Workspace {
       }))));
     }
 
-    let root = std::env::current_dir().unwrap();
-    let repo = Repo::open(&root);
+    let root = WorkspaceRoot::from_path(std::env::current_dir().unwrap());
+    let repo = Repo::open(&root.as_path());
+    let fs = WorkspaceWatcher::new(&root);
 
     Workspace {
       root,
       config,
+      fs,
       repo: SharedHandle::new(Some(repo)),
       lsp: Rc::new(RefCell::new(lsp)),
       clipboard: SharedHandle::new(Clipboard::dummy()),
