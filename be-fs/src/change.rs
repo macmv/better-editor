@@ -1,3 +1,5 @@
+use std::fmt;
+
 use btree_slab::BTreeMap;
 
 use crate::WorkspacePathBuf;
@@ -38,6 +40,12 @@ impl DirectoryChanges {
         entries.remove();
       }
     }
+  }
+}
+
+impl fmt::Debug for DirectoryChanges {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.debug_list().entries(self.changes.keys()).finish()
   }
 }
 
