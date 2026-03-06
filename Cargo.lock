@@ -218,6 +218,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "be-fs"
+version = "0.1.0"
+dependencies = [
+ "btree-slab",
+ "expect-test",
+ "inotify",
+ "parking_lot",
+]
+
+[[package]]
 name = "be-git"
 version = "0.1.0"
 dependencies = [
@@ -300,16 +310,6 @@ name = "be-macros"
 version = "0.1.0"
 dependencies = [
  "log",
-]
-
-[[package]]
-name = "be-notify"
-version = "0.1.0"
-dependencies = [
- "btree-slab",
- "expect-test",
- "inotify",
- "parking_lot",
 ]
 
 [[package]]
