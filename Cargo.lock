@@ -224,6 +224,7 @@ dependencies = [
  "btree-slab",
  "expect-test",
  "inotify",
+ "log",
  "parking_lot",
  "relative-path",
 ]

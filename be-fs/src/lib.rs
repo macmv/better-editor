@@ -17,6 +17,9 @@ use parking_lot::Mutex;
 #[macro_use]
 extern crate expect_test;
 
+#[macro_use]
+extern crate log;
+
 pub struct WorkspaceWatcher {
   watcher: Box<dyn Watcher>,
 

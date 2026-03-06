@@ -8,6 +8,7 @@ inotify = { version = "0.11", default-features = false }
 
 [dependencies]
 btree-slab = "0.6.1"
+log = "0.4.29"
 parking_lot = "0.12.5"
 relative-path = "2.0.1"
 
