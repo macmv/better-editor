@@ -1,22 +1,22 @@
-use std::path::PathBuf;
-
 use btree_slab::BTreeMap;
+
+use crate::WorkspacePathBuf;
 
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct DirectoryChanges {
-  changes: BTreeMap<PathBuf, ()>,
+  changes: BTreeMap<WorkspacePathBuf, ()>,
 }
 
 impl DirectoryChanges {
-  pub fn for_path(path: PathBuf) -> DirectoryChanges {
+  pub fn for_path(path: WorkspacePathBuf) -> DirectoryChanges {
     DirectoryChanges { changes: BTreeMap::from_iter([(path, ())]) }
   }
 
   pub fn is_empty(&self) -> bool { self.changes.is_empty() }
 
-  pub fn iter(&self) -> impl Iterator<Item = &PathBuf> { self.changes.keys() }
+  pub fn iter(&self) -> impl Iterator<Item = &WorkspacePathBuf> { self.changes.keys() }
 
-  pub fn insert(&mut self, path: PathBuf) {
+  pub fn insert(&mut self, path: WorkspacePathBuf) {
     self.changes.insert(path, ());
     self.deduplicate();
   }
@@ -48,7 +48,7 @@ mod tests {
   use super::*;
 
   fn changes(changes: &[&str]) -> DirectoryChanges {
-    DirectoryChanges { changes: changes.iter().map(|c| (PathBuf::from(c), ())).collect() }
+    DirectoryChanges { changes: changes.iter().map(|c| (WorkspacePathBuf::from(c), ())).collect() }
   }
 
   fn merged(a: &[&str], b: &[&str]) -> DirectoryChanges {
@@ -58,10 +58,8 @@ mod tests {
   }
 
   fn check_merged(a: &[&str], b: &[&str], expected: Expect) {
-    expected.assert_eq(&format!(
-      "{:?}",
-      merged(a, b).changes.iter().map(|(c, _)| c.to_str().unwrap()).collect::<Vec<_>>()
-    ));
+    expected
+      .assert_eq(&format!("{:?}", merged(a, b).changes.iter().map(|(c, _)| c).collect::<Vec<_>>()));
   }
 
   #[test]

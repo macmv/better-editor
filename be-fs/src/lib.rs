@@ -150,17 +150,14 @@ impl WorkspaceWatcher {
 
 #[cfg(test)]
 mod tests {
-  use std::{
-    path::PathBuf,
-    sync::mpsc::{Receiver, Sender},
-  };
+  use std::sync::mpsc::{Receiver, Sender};
 
   use expect_test::Expect;
 
   use super::*;
 
   struct ChannelWatcher {
-    rx: Receiver<PathBuf>,
+    rx: Receiver<WorkspacePathBuf>,
   }
 
   impl Watcher for ChannelWatcher {
@@ -173,7 +170,7 @@ mod tests {
     }
   }
 
-  fn dummy_watcher() -> (WorkspaceWatcher, Sender<PathBuf>) {
+  fn dummy_watcher() -> (WorkspaceWatcher, Sender<WorkspacePathBuf>) {
     let (tx, rx) = std::sync::mpsc::channel();
 
     (
@@ -187,7 +184,7 @@ mod tests {
   }
 
   fn check_changes(handle: &WatcherHandle, expected: Expect) {
-    let got = handle.changes().iter().map(|p| p.display().to_string()).collect::<Vec<_>>();
+    let got = handle.changes().iter().map(|p| p.to_string()).collect::<Vec<_>>();
     expected.assert_eq(&format!("[{}]", got.join(", ")));
   }
 

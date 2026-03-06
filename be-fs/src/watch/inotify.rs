@@ -1,9 +1,7 @@
-use std::path::Path;
-
 use inotify::{Inotify, WatchMask};
 
 use super::Watcher;
-use crate::{DirectoryChanges, WorkspaceRoot};
+use crate::{DirectoryChanges, WorkspacePathBuf, WorkspaceRoot};
 
 pub struct INotifyWatcher {
   inotify: Inotify,
@@ -39,8 +37,11 @@ impl Watcher for INotifyWatcher {
     let mut changes = DirectoryChanges::default();
 
     for ev in events {
-      if let Some(name) = ev.name {
-        changes.insert(Path::new(name).into());
+      if let Some(name) = ev.name
+        && let Some(s) = name.to_str()
+      {
+        // TODO: Make this relative to the workspace root.
+        changes.insert(WorkspacePathBuf::from(s));
       }
     }
 
