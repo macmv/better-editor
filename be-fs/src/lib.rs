@@ -83,6 +83,7 @@ impl WorkspaceState {
 
   fn versions_since(&self, version: usize) -> impl Iterator<Item = &Version> {
     if self.versions.is_empty() {
+      #[allow(clippy::iter_skip_zero)]
       return self.versions.iter().skip(0); // empty iterator
     }
 
