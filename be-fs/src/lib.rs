@@ -4,9 +4,11 @@ use std::{
 };
 
 mod change;
+mod path;
 mod watch;
 
 pub use change::DirectoryChanges;
+pub use path::{WorkspacePath, WorkspacePathBuf, WorkspaceRoot};
 pub use watch::*;
 
 use parking_lot::Mutex;
