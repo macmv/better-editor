@@ -73,6 +73,8 @@ impl WorkspacePath {
 
   pub fn starts_with(&self, other: &WorkspacePath) -> bool { self.path.starts_with(&other.path) }
 
+  pub fn is_empty(&self) -> bool { self.path.as_str().is_empty() }
+
   pub fn join(&self, other: &str) -> WorkspacePathBuf {
     WorkspacePathBuf { path: self.path.join(other) }
   }
