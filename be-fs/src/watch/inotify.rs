@@ -32,7 +32,11 @@ impl INotifyWatcher {
 impl Watcher for INotifyWatcher {
   fn poll(&mut self) -> DirectoryChanges {
     let mut buffer = [0; 1024];
-    let events = self.inotify.read_events(&mut buffer).expect("Error while reading events");
+    let events = match self.inotify.read_events(&mut buffer) {
+      Ok(events) => events,
+      Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return DirectoryChanges::default(),
+      Err(e) => panic!("{}", e),
+    };
 
     let mut changes = DirectoryChanges::default();
 
