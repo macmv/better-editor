@@ -68,6 +68,14 @@ impl WorkspacePath {
   }
 
   pub fn starts_with(&self, other: &WorkspacePath) -> bool { self.path.starts_with(&other.path) }
+
+  pub fn join(&self, other: &str) -> WorkspacePathBuf {
+    WorkspacePathBuf { path: self.path.join(other) }
+  }
+
+  pub fn to_path_buf(&self) -> WorkspacePathBuf {
+    WorkspacePathBuf { path: self.path.to_relative_path_buf() }
+  }
 }
 
 impl fmt::Debug for WorkspacePath {
