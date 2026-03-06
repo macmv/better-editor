@@ -3,20 +3,20 @@ use std::path::Path;
 use inotify::{Inotify, WatchMask};
 
 use super::Watcher;
-use crate::DirectoryChanges;
+use crate::{DirectoryChanges, WorkspaceRoot};
 
 pub struct INotifyWatcher {
   inotify: Inotify,
 }
 
 impl INotifyWatcher {
-  pub fn new() -> Self {
+  pub fn new(root: &WorkspaceRoot) -> Self {
     let inotify = Inotify::init().unwrap();
 
     inotify
       .watches()
       .add(
-        ".",
+        root.as_path(),
         WatchMask::ATTRIB
           | WatchMask::CREATE
           | WatchMask::DELETE

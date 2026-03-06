@@ -1,4 +1,4 @@
-use crate::DirectoryChanges;
+use crate::{DirectoryChanges, WorkspaceRoot};
 
 #[cfg(target_os = "linux")]
 mod inotify;
@@ -6,9 +6,9 @@ mod inotify;
 pub use inotify::INotifyWatcher;
 
 #[allow(unreachable_code)]
-pub fn default_watcher() -> Box<dyn Watcher> {
+pub fn default_watcher(root: &WorkspaceRoot) -> Box<dyn Watcher> {
   #[cfg(target_os = "linux")]
-  return Box::new(INotifyWatcher::new());
+  return Box::new(INotifyWatcher::new(root));
 
   panic!("no watcher implemented on platform");
 }
