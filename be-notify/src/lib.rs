@@ -97,6 +97,14 @@ impl WorkspaceState {
 }
 
 impl WorkspaceWatcher {
+  pub fn new() -> Self {
+    WorkspaceWatcher {
+      watcher: watch::default_watcher(),
+      state:   Arc::new(Mutex::new(WorkspaceState { versions: VecDeque::new() })),
+      handles: vec![],
+    }
+  }
+
   pub fn add_handle(&mut self) -> WatcherHandle {
     let latest_version = self.state.lock().latest_version();
     let handle = WatcherHandle {
