@@ -36,6 +36,10 @@ impl WorkspaceRoot {
   pub fn from_path(path: PathBuf) -> Self { WorkspaceRoot { path } }
 
   pub fn as_path(&self) -> &Path { &self.path }
+
+  pub fn resolve_path(&self, path: &WorkspacePath) -> PathBuf {
+    path.path.to_logical_path(&self.path)
+  }
 }
 
 impl Deref for WorkspacePathBuf {
