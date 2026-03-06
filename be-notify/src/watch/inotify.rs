@@ -1,28 +1,49 @@
-fn foo() {
-  use inotify::{Inotify, WatchMask};
+use std::path::Path;
 
-  let mut inotify = Inotify::init().unwrap();
+use inotify::{Inotify, WatchMask};
 
-  // Watch for modify and close events.
-  inotify
-    .watches()
-    .add(
-      "/tmp/inotify-test",
-      WatchMask::ATTRIB
-        | WatchMask::CREATE
-        | WatchMask::DELETE
-        | WatchMask::DELETE_SELF
-        | WatchMask::MODIFY
-        | WatchMask::MOVE_SELF
-        | WatchMask::MOVE,
-    )
-    .expect("Failed to add file watch");
+use super::Watcher;
+use crate::DirectoryChanges;
 
-  let mut buffer = [0; 1024];
-  let events = inotify.read_events_blocking(&mut buffer).expect("Error while reading events");
+pub struct INotifyWatcher {
+  inotify: Inotify,
+}
 
-  for event in events {
-    dbg!(&event);
-    // Handle event
+impl INotifyWatcher {
+  pub fn new() -> Self {
+    let inotify = Inotify::init().unwrap();
+
+    inotify
+      .watches()
+      .add(
+        ".",
+        WatchMask::ATTRIB
+          | WatchMask::CREATE
+          | WatchMask::DELETE
+          | WatchMask::DELETE_SELF
+          | WatchMask::MODIFY
+          | WatchMask::MOVE_SELF
+          | WatchMask::MOVE,
+      )
+      .expect("Failed to add file watch");
+
+    INotifyWatcher { inotify }
+  }
+}
+
+impl Watcher for INotifyWatcher {
+  fn poll(&mut self) -> DirectoryChanges {
+    let mut buffer = [0; 1024];
+    let events = self.inotify.read_events(&mut buffer).expect("Error while reading events");
+
+    let mut changes = DirectoryChanges::default();
+
+    for ev in events {
+      if let Some(name) = ev.name {
+        changes.insert(Path::new(name).into());
+      }
+    }
+
+    changes
   }
 }

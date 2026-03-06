@@ -16,9 +16,17 @@ impl DirectoryChanges {
 
   pub fn iter(&self) -> impl Iterator<Item = &PathBuf> { self.changes.keys() }
 
+  pub fn insert(&mut self, path: PathBuf) {
+    self.changes.insert(path, ());
+    self.deduplicate();
+  }
+
   pub fn merge_with(&mut self, other: &DirectoryChanges) {
     self.changes.extend(other.changes.iter().map(|(c, _)| (c.clone(), ())));
+    self.deduplicate();
+  }
 
+  fn deduplicate(&mut self) {
     // BUG: Workaround for btree-slab panicking on an empty tree.
     if self.changes.is_empty() {
       return;

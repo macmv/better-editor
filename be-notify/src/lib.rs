@@ -154,7 +154,7 @@ mod tests {
   }
 
   impl Watcher for ChannelWatcher {
-    fn poll(&self) -> DirectoryChanges {
+    fn poll(&mut self) -> DirectoryChanges {
       if let Some(v) = self.rx.try_recv().ok() {
         DirectoryChanges::for_path(v)
       } else {
