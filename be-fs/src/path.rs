@@ -1,4 +1,5 @@
 use std::{
+  borrow::Borrow,
   fmt,
   ops::Deref,
   path::{Path, PathBuf},
@@ -16,7 +17,7 @@ pub struct WorkspaceRoot {
 /// A path to a file within a workspace. This can only be resolved to a path
 /// using a [`WorkspaceRoot`]. It is portable and can be consistently converted
 /// to/from it's owned counterpart, [`WorkspacePathBuf`].
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct WorkspacePath {
   path: RelativePath,
@@ -25,7 +26,7 @@ pub struct WorkspacePath {
 /// A path to a file within a workspace. This can only be resolved to a path
 /// using a [`WorkspaceRoot`]. It is portable and can safely be sent over the
 /// network.
-#[derive(Default, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct WorkspacePathBuf {
   path: RelativePathBuf,
@@ -46,6 +47,15 @@ impl Deref for WorkspacePathBuf {
 impl<'a, T: ?Sized + AsRef<str>> From<&'a T> for WorkspacePathBuf {
   #[inline]
   fn from(path: &'a T) -> Self { WorkspacePathBuf { path: RelativePathBuf::from(path) } }
+}
+
+impl From<&WorkspacePath> for WorkspacePathBuf {
+  #[inline]
+  fn from(path: &WorkspacePath) -> Self { WorkspacePathBuf { path: path.path.into() } }
+}
+
+impl Borrow<WorkspacePath> for WorkspacePathBuf {
+  fn borrow(&self) -> &WorkspacePath { self }
 }
 
 impl WorkspacePath {
