@@ -148,7 +148,7 @@ impl State {
         be_config::TabSettings::FileTree => Pane::View(
           state
             .views
-            .new_view(view::FileTree::current_directory(store.notifier(), &store.workspace)),
+            .new_view(view::FileTree::current_directory(store.notifier(), &mut store.workspace)),
         ),
       }
     }
@@ -179,6 +179,8 @@ impl State {
 
   fn layout(&mut self, layout: &mut Layout) {
     puffin::profile_function!();
+
+    layout.store.workspace.fs.update();
 
     layout.clipped(
       Rect::new(0.0, layout.size().height - 25.0, layout.size().width, layout.size().height),
@@ -583,7 +585,7 @@ impl State {
       }
       ViewContent::FileTree(_) => self
         .views
-        .new_view(crate::view::FileTree::current_directory(store.notifier(), &store.workspace)),
+        .new_view(crate::view::FileTree::current_directory(store.notifier(), &mut store.workspace)),
       ViewContent::Terminal(_) => {
         self.views.new_view(crate::view::TerminalView::new(&store.workspace))
       }

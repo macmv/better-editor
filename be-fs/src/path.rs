@@ -7,6 +7,8 @@ use std::{
 
 use relative_path::{RelativePath, RelativePathBuf};
 
+pub use relative_path::Component;
+
 /// The root path of a workspace. This is non-portable, and is only usable on
 /// the machine hosting a session.
 #[derive(Debug, Clone)]
@@ -82,6 +84,10 @@ impl WorkspacePath {
   pub fn to_path_buf(&self) -> WorkspacePathBuf {
     WorkspacePathBuf { path: self.path.to_relative_path_buf() }
   }
+
+  pub fn components(&self) -> impl Iterator<Item = Component<'_>> { self.path.components() }
+
+  pub fn parent(&self) -> Option<&WorkspacePath> { self.path.parent().map(WorkspacePath::new) }
 }
 
 impl fmt::Debug for WorkspacePath {

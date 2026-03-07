@@ -5,6 +5,7 @@ use std::{
   sync::LazyLock,
 };
 
+use be_fs::{WatcherHandle, WorkspacePath};
 use be_git::Repo;
 use be_input::{Action, ChangeDirection, Direction, Mode, Move};
 use be_shared::SharedHandle;
@@ -22,6 +23,7 @@ pub struct FileTree {
   active:  usize,
 
   notify: Notify,
+  handle: WatcherHandle,
   repo:   SharedHandle<Option<be_git::Repo>>,
 }
 
@@ -129,16 +131,23 @@ impl Ord for Directory {
 }
 
 impl FileTree {
-  pub fn current_directory(notify: Notify, workspace: &be_workspace::Workspace) -> Self {
+  pub fn current_directory(notify: Notify, workspace: &mut be_workspace::Workspace) -> Self {
     FileTree::new(Path::new("."), notify, workspace)
   }
 
-  pub fn new(path: &Path, notify: Notify, workspace: &be_workspace::Workspace) -> Self {
+  pub fn new(path: &Path, notify: Notify, workspace: &mut be_workspace::Workspace) -> Self {
     let path = path.canonicalize().unwrap();
     let mut tree = Directory::new(path);
     tree.expand();
 
-    FileTree { tree, focused: false, active: 0, notify, repo: workspace.repo.clone() }
+    FileTree {
+      tree,
+      focused: false,
+      active: 0,
+      notify,
+      handle: workspace.fs.add_handle(),
+      repo: workspace.repo.clone(),
+    }
   }
 
   fn active_mut(&mut self) -> Option<&mut Item> {
@@ -374,6 +383,17 @@ impl FileTree {
   pub fn layout(&mut self, _layout: &mut Layout) {
     puffin::profile_function!();
 
+    for change in self.handle.take_changes().iter() {
+      if let Some(parent) = change.parent()
+        && let Some(mut it) = self.item(parent)
+      {
+        it.refresh();
+      }
+      if let Some(mut it) = self.item(change) {
+        it.refresh();
+      }
+    }
+
     let mut node = ItemMut::Directory(&mut self.tree);
     if let Some(repo) = &*self.repo {
       node.layout(&repo);
@@ -381,6 +401,36 @@ impl FileTree {
   }
 
   pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
+
+  // TODO: Deduplicate with open()
+  fn item(&mut self, path: &WorkspacePath) -> Option<ItemMut<'_>> {
+    let mut curr = &mut self.tree;
+
+    let mut components = path.components().peekable();
+
+    while let Some(component) = components.next() {
+      match component {
+        be_fs::Component::Normal(name) => {
+          let Some(items) = curr.items.as_mut() else { return None };
+
+          match items.iter_mut().find(|it| *it.name() == *name) {
+            // If we're done with the path, then break and update `active`. Otherwise, we
+            // found a file early, and the path is invalid.
+            Some(it) if components.peek().is_none() => return Some(it.as_mut()),
+            Some(Item::Directory(dir)) => {
+              curr = dir;
+            }
+            // Item wasn't found; bail
+            _ => return None,
+          }
+        }
+
+        _ => return None,
+      }
+    }
+
+    Some(ItemMut::Directory(curr))
+  }
 }
 
 struct TreeDraw {
@@ -442,6 +492,19 @@ impl ItemMut<'_> {
         }
       }
       ItemMut::File(file) => file.layout(repo),
+    }
+  }
+
+  fn refresh(&mut self) {
+    match self {
+      ItemMut::Directory(d) => {
+        dbg!(&d.path);
+        d.items = None;
+        d.status = None;
+      }
+      ItemMut::File(f) => {
+        f.status = None;
+      }
     }
   }
 }

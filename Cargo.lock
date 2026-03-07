@@ -248,6 +248,7 @@ dependencies = [
  "be-config",
  "be-doc",
  "be-editor",
+ "be-fs",
  "be-git",
  "be-icon-importer",
  "be-input",
