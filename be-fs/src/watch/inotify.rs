@@ -91,6 +91,7 @@ impl INotifyWatcher {
     }
   }
 
+  /// Removes the watch and all children watches from `root`.
   fn remove_watch_tree_for(&mut self, root: &WorkspacePath) {
     let Ok(mut addr) = self.watch.address_of(root) else { return };
 
@@ -170,8 +171,6 @@ impl Watcher for INotifyWatcher {
       if ev.mask.contains(EventMask::IGNORED) {
         if let Some(dir) = self.reverse_watch.remove(&ev.wd) {
           self.remove_watch_tree_for(&dir);
-        } else {
-          warn!("unknown watch descriptor from inotify: {:?}", ev.wd);
         }
       }
 
