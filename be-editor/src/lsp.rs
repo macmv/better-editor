@@ -24,7 +24,7 @@ pub struct LspState {
 
 #[derive(Default)]
 pub struct CompletionsState {
-  tasks: Vec<Task<Option<types::Or2<Vec<types::CompletionItem>, types::CompletionList>>>>,
+  tasks:            Vec<Task<Vec<types::CompletionItem>>>,
   completions:      types::CompletionList,
   show:             bool,
   clear_on_message: bool,
@@ -280,18 +280,13 @@ impl EditorState {
 
   pub(crate) fn lsp_update_completions(&mut self) {
     self.lsp.completions.tasks.retain(|task| {
-      if let Some(completed) = task.completed() {
+      if let Some(completions) = task.completed() {
         if self.lsp.completions.clear_on_message {
           self.lsp.completions.completions.items.clear();
           self.lsp.completions.clear_on_message = false;
         }
 
-        if let Some(completions) = completed {
-          self.lsp.completions.completions.items.extend(match completions {
-            types::Or2::A(completions) => completions,
-            types::Or2::B(list) => list.items,
-          });
-        }
+        self.lsp.completions.completions.items.extend(completions);
         self.lsp.completions.show = true;
         false
       } else {

@@ -254,31 +254,36 @@ pub struct Completion {
 }
 
 impl LspCommand for Completion {
-  type Result = Option<types::Or2<Vec<types::CompletionItem>, types::CompletionList>>;
+  type Result = Vec<types::CompletionItem>;
 
   fn is_capable(&self, caps: &types::ServerCapabilities) -> bool {
     caps.completion_provider.is_some()
   }
 
-  fn send(
-    &self,
-    client: &mut LspClient,
-  ) -> Option<Task<Option<types::Or2<Vec<types::CompletionItem>, types::CompletionList>>>> {
+  fn send(&self, client: &mut LspClient) -> Option<Task<Vec<types::CompletionItem>>> {
     let position = {
       let state = client.state.lock();
       let file = state.file(&self.path)?;
       state.encode_cursor(&file.doc, self.cursor)
     };
 
-    Some(client.request::<types::request::TextDocumentCompletion>(types::CompletionParams {
-      text_document_position_params: types::TextDocumentPositionParams {
-        text_document: doc_id(&self.path),
-        position,
-      },
-      context:                       None,
-      work_done_progress_params:     types::WorkDoneProgressParams::default(),
-      partial_result_params:         types::PartialResultParams::default(),
-    }))
+    Some(
+      client
+        .request::<types::request::TextDocumentCompletion>(types::CompletionParams {
+          text_document_position_params: types::TextDocumentPositionParams {
+            text_document: doc_id(&self.path),
+            position,
+          },
+          context:                       None,
+          work_done_progress_params:     types::WorkDoneProgressParams::default(),
+          partial_result_params:         types::PartialResultParams::default(),
+        })
+        .map(|completions| match completions {
+          Some(types::Or2::A(completions)) => completions,
+          Some(types::Or2::B(list)) => list.items,
+          None => vec![],
+        }),
+    )
   }
 }
 
