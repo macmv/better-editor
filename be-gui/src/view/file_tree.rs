@@ -1,11 +1,10 @@
 use std::{
-  borrow::Cow,
   ops::{BitOr, BitOrAssign},
-  path::{Path, PathBuf},
+  path::Path,
   sync::LazyLock,
 };
 
-use be_fs::{WatcherHandle, WorkspacePath};
+use be_fs::{WatcherHandle, WorkspacePath, WorkspacePathBuf, WorkspaceRoot};
 use be_git::Repo;
 use be_input::{Action, ChangeDirection, Direction, Mode, Move};
 use be_shared::SharedHandle;
@@ -24,6 +23,7 @@ pub struct FileTree {
 
   notify: Notify,
   handle: WatcherHandle,
+  root:   WorkspaceRoot,
   repo:   SharedHandle<Option<be_git::Repo>>,
 }
 
@@ -45,7 +45,7 @@ enum ItemMut<'a> {
 
 #[derive(Debug, Eq)]
 struct Directory {
-  path:     PathBuf,
+  path:     WorkspacePathBuf,
   items:    Option<Vec<Item>>,
   expanded: bool,
 
@@ -55,7 +55,7 @@ struct Directory {
 #[derive(Debug, Eq)]
 struct File {
   name: String,
-  path: PathBuf,
+  path: WorkspacePathBuf,
 
   status: Option<FileStatus>,
 }
@@ -131,13 +131,8 @@ impl Ord for Directory {
 }
 
 impl FileTree {
-  pub fn current_directory(notify: Notify, workspace: &mut be_workspace::Workspace) -> Self {
-    FileTree::new(Path::new("."), notify, workspace)
-  }
-
-  pub fn new(path: &Path, notify: Notify, workspace: &mut be_workspace::Workspace) -> Self {
-    let path = path.canonicalize().unwrap();
-    let mut tree = Directory::new(path);
+  pub fn new(notify: Notify, workspace: &mut be_workspace::Workspace) -> Self {
+    let mut tree = Directory::new(WorkspacePathBuf::from(""));
     tree.expand();
 
     FileTree {
@@ -146,6 +141,7 @@ impl FileTree {
       active: 0,
       notify,
       handle: workspace.fs.add_handle(),
+      root: workspace.root.clone(),
       repo: workspace.repo.clone(),
     }
   }
@@ -209,7 +205,7 @@ impl FileTree {
             Some(Item::Directory(dir)) => {
               curr = dir;
               curr.expand();
-              curr.populate();
+              curr.populate(&self.root);
             }
             Some(Item::File(_)) => {
               // If we're done with the path, then break and update `active`. Otherwise, we
@@ -264,7 +260,7 @@ impl FileTree {
           Some(Item::Directory(dir)) => dir.toggle_expanded(),
           Some(Item::File(file)) => {
             let path = file.path.clone();
-            self.notify.open_file(path);
+            self.notify.open_file(self.root.resolve_path(&path));
           }
           None => {}
         }
@@ -299,9 +295,11 @@ impl FileTree {
 }
 
 impl Directory {
-  fn new(path: PathBuf) -> Self { Directory { path, items: None, expanded: false, status: None } }
+  fn new(path: WorkspacePathBuf) -> Self {
+    Directory { path, items: None, expanded: false, status: None }
+  }
 
-  fn name(&self) -> Cow<'_, str> { self.path.file_name().unwrap().to_string_lossy() }
+  fn name(&self) -> &str { self.path.file_name().unwrap_or("") }
 
   fn len_visible(&self) -> usize {
     if self.expanded {
@@ -321,17 +319,18 @@ impl Directory {
 
   fn expand(&mut self) { self.expanded = true; }
 
-  fn populate(&mut self) {
+  fn populate(&mut self, root: &WorkspaceRoot) {
     let mut items = vec![];
 
-    for entry in std::fs::read_dir(&self.path).unwrap() {
+    for entry in std::fs::read_dir(root.resolve_path(&self.path)).unwrap() {
       let entry = entry.unwrap();
-      let path = entry.path();
-      if path.is_dir() {
+      let meta = entry.metadata().unwrap();
+      let path = self.path.join(&entry.file_name().to_string_lossy());
+      if meta.is_dir() {
         items.push(Item::Directory(Directory::new(path)));
       } else {
         items.push(Item::File(File {
-          name: path.file_name().unwrap().to_string_lossy().to_string(),
+          name: path.file_name().unwrap().to_string(),
           path,
           status: None,
         }));
@@ -345,10 +344,10 @@ impl Directory {
 }
 
 impl Item {
-  fn name(&self) -> Cow<'_, str> {
+  fn name(&self) -> &str {
     match self {
       Item::Directory(d) => d.name(),
-      Item::File(f) => Cow::Borrowed(&f.name),
+      Item::File(f) => &f.name,
     }
   }
 
@@ -396,7 +395,7 @@ impl FileTree {
 
     let mut node = ItemMut::Directory(&mut self.tree);
     if let Some(repo) = &*self.repo {
-      node.layout(&repo);
+      node.layout(&self.root, &repo);
     }
   }
 
@@ -461,21 +460,21 @@ impl Item {
 }
 
 impl ItemMut<'_> {
-  fn layout(&mut self, repo: &Repo) {
+  fn layout(&mut self, root: &WorkspaceRoot, repo: &Repo) {
     match self {
       ItemMut::Directory(dir) => {
         if dir.expanded && dir.items.is_none() {
-          dir.populate();
+          dir.populate(root);
         }
 
         // TODO: Move the caching to repo? It's somewhat nice to have it here. We just
         // need some sense of 'staleness'.
         if dir.status.is_none() {
-          if repo.is_ignored(&dir.path) {
+          if repo.is_ignored(&root.resolve_path(&dir.path)) {
             dir.status = Some(FileStatus::Ignored);
-          } else if repo.is_added(&dir.path) {
+          } else if repo.is_added(&root.resolve_path(&dir.path)) {
             dir.status = Some(FileStatus::Created);
-          } else if repo.is_modified(&dir.path) {
+          } else if repo.is_modified(&root.resolve_path(&dir.path)) {
             dir.status = Some(FileStatus::Modified);
           } else {
             dir.status = Some(FileStatus::Unchanged);
@@ -484,14 +483,14 @@ impl ItemMut<'_> {
 
         if let Some(items) = &mut dir.items {
           for it in items {
-            it.as_mut().layout(repo);
+            it.as_mut().layout(root, repo);
             if let Some(stat) = &mut dir.status {
               *stat |= it.status();
             }
           }
         }
       }
-      ItemMut::File(file) => file.layout(repo),
+      ItemMut::File(file) => file.layout(root, repo),
     }
   }
 
@@ -519,13 +518,13 @@ impl Item {
 }
 
 impl File {
-  fn layout(&mut self, repo: &Repo) {
+  fn layout(&mut self, root: &WorkspaceRoot, repo: &Repo) {
     if self.status.is_none() {
-      if repo.is_ignored(&self.path) {
+      if repo.is_ignored(&root.resolve_path(&self.path)) {
         self.status = Some(FileStatus::Ignored);
-      } else if repo.is_added(&self.path) {
+      } else if repo.is_added(&root.resolve_path(&self.path)) {
         self.status = Some(FileStatus::Created);
-      } else if repo.is_modified(&self.path) {
+      } else if repo.is_modified(&root.resolve_path(&self.path)) {
         self.status = Some(FileStatus::Modified);
       } else {
         self.status = Some(FileStatus::Unchanged);

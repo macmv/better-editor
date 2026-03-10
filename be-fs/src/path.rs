@@ -88,6 +88,8 @@ impl WorkspacePath {
   pub fn components(&self) -> impl Iterator<Item = Component<'_>> { self.path.components() }
 
   pub fn parent(&self) -> Option<&WorkspacePath> { self.path.parent().map(WorkspacePath::new) }
+
+  pub fn file_name(&self) -> Option<&str> { self.path.file_name() }
 }
 
 impl fmt::Debug for WorkspacePath {
