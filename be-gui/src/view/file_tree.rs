@@ -21,10 +21,10 @@ pub struct FileTree {
   focused: bool,
   active:  usize,
 
-  notify: Notify,
-  handle: WatcherHandle,
-  root:   WorkspaceRoot,
-  repo:   SharedHandle<Option<be_git::Repo>>,
+  notify:  Notify,
+  watcher: WatcherHandle,
+  root:    WorkspaceRoot,
+  repo:    SharedHandle<Option<be_git::Repo>>,
 }
 
 #[derive(Debug, PartialOrd, PartialEq, Eq, Ord)]
@@ -140,7 +140,7 @@ impl FileTree {
       focused: false,
       active: 0,
       notify,
-      handle: workspace.fs.add_handle(),
+      watcher: workspace.fs.add_handle(),
       root: workspace.root.clone(),
       repo: workspace.repo.clone(),
     }
@@ -382,7 +382,7 @@ impl FileTree {
   pub fn layout(&mut self, _layout: &mut Layout) {
     puffin::profile_function!();
 
-    for change in self.handle.take_changes().iter() {
+    for change in self.watcher.take_changes().iter() {
       if let Some(parent) = change.parent()
         && let Some(mut it) = self.item(parent)
       {
@@ -395,7 +395,7 @@ impl FileTree {
 
     let mut node = ItemMut::Directory(&mut self.tree);
     if let Some(repo) = &*self.repo {
-      node.layout(&self.root, &repo);
+      node.layout(&mut self.watcher, &self.root, &repo);
     }
   }
 
@@ -460,12 +460,18 @@ impl Item {
 }
 
 impl ItemMut<'_> {
-  fn layout(&mut self, root: &WorkspaceRoot, repo: &Repo) {
+  fn layout(&mut self, watcher: &mut WatcherHandle, root: &WorkspaceRoot, repo: &Repo) {
     match self {
       ItemMut::Directory(dir) => {
         if dir.expanded && dir.items.is_none() {
           dir.populate(root);
         }
+
+        // TODO: Add this api.
+        // watcher.watch(&dir.path);
+        // if watcher.is_changed(&dir.path) {
+        //   println!("CHAGNED!!");
+        // }
 
         // TODO: Move the caching to repo? It's somewhat nice to have it here. We just
         // need some sense of 'staleness'.
@@ -483,7 +489,7 @@ impl ItemMut<'_> {
 
         if let Some(items) = &mut dir.items {
           for it in items {
-            it.as_mut().layout(root, repo);
+            it.as_mut().layout(watcher, root, repo);
             if let Some(stat) = &mut dir.status {
               *stat |= it.status();
             }
