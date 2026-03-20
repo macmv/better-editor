@@ -1,4 +1,4 @@
-use crate::{DirectoryChanges, WorkspaceRoot};
+use crate::{DirectoryChanges, WorkspacePath, WorkspaceRoot};
 
 #[cfg(target_os = "linux")]
 mod inotify;
@@ -14,5 +14,13 @@ pub fn default_watcher(root: &WorkspaceRoot) -> Box<dyn Watcher> {
 }
 
 pub trait Watcher {
+  /// Watches a particular directory. This simply ensures the path will be
+  /// watched, and that events for the path will be returned.
+  ///
+  /// If the directory is deleted and re-created, it will be watched again.
+  fn watch_dir(&mut self, dir: &WorkspacePath);
+  /// Stops watching a particular directory.
+  fn unwatch_dir(&mut self, dir: &WorkspacePath);
+
   fn poll(&mut self) -> DirectoryChanges;
 }

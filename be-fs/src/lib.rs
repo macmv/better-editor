@@ -165,6 +165,9 @@ mod tests {
   }
 
   impl Watcher for ChannelWatcher {
+    fn watch_dir(&mut self, _: &WorkspacePath) {}
+    fn unwatch_dir(&mut self, _: &WorkspacePath) {}
+
     fn poll(&mut self) -> DirectoryChanges {
       if let Some(v) = self.rx.try_recv().ok() {
         DirectoryChanges::for_path(v)

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, ffi::OsStr, fs};
 
 use btree_slab::{
-  BTreeMap,
+  BTreeMap, BTreeSet,
   generic::map::{BTreeExt, BTreeExtMut},
 };
 use inotify::{EventMask, Inotify, WatchDescriptor, WatchMask};
@@ -14,6 +14,8 @@ pub struct INotifyWatcher {
   inotify:       Inotify,
   watch:         BTreeMap<WorkspacePathBuf, WatchDescriptor>,
   reverse_watch: HashMap<WatchDescriptor, WorkspacePathBuf>,
+
+  watched_dirs: BTreeSet<WorkspacePathBuf>,
 }
 
 impl INotifyWatcher {
@@ -24,6 +26,8 @@ impl INotifyWatcher {
       inotify,
       watch: BTreeMap::new(),
       reverse_watch: HashMap::new(),
+
+      watched_dirs: BTreeSet::new(),
     };
     watcher.add_watch_tree_for(WorkspacePath::new(""));
     watcher
@@ -113,6 +117,18 @@ impl INotifyWatcher {
 }
 
 impl Watcher for INotifyWatcher {
+  fn watch_dir(&mut self, dir: &WorkspacePath) {
+    if !self.watched_dirs.contains(dir) {
+      self.watched_dirs.insert(dir.into());
+      self.add_watch_for(dir);
+    }
+  }
+
+  fn unwatch_dir(&mut self, dir: &WorkspacePath) {
+    self.watched_dirs.remove(dir);
+    self.remove_watch_for(dir);
+  }
+
   fn poll(&mut self) -> DirectoryChanges {
     let mut buffer = [0; 1024];
     let events = match self.inotify.read_events(&mut buffer) {
