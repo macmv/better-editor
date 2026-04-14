@@ -2,6 +2,7 @@
 name = "be-gui"
 version = "0.1.0"
 edition = "2024"
+default-run = "be-gui"
 
 [dependencies]
 kurbo = "0.12"
