@@ -20,3 +20,10 @@ path = "fuzz_targets/single_store.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "convergence"
+path = "fuzz_targets/convergence.rs"
+test = false
+doc = false
+bench = false
