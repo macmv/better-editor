@@ -12,7 +12,6 @@ pollster = "0.4.0"
 vello = "0.6.0"
 wgpu = "26.0.1"
 winit = "0.30.12"
-smithay-clipboard = "0.7.2"
 skrifa = { version = "0.37", default-features = false }
 
 be-doc = { path = "../be-doc" }
@@ -39,6 +38,9 @@ ignore = "0.4.25"
 smol_str = "0.3.5"
 be-git = { version = "0.1.0", path = "../be-git" }
 be-fs = { version = "0.1.0", path = "../be-fs" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+smithay-clipboard = "0.7.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.3"
