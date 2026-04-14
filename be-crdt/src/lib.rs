@@ -148,7 +148,7 @@ impl State {
     let text = self.text.get(&id).map(|s| s.as_str()).unwrap_or("");
     let is_deleted = self.tombstone.contains(&id);
     let text_len = text.len();
-    let mut text_pos = 0usize;
+    let mut text_pos = 0;
 
     if let Some(split_map) = self.splits.get(&id) {
       for (&offset, children) in split_map {
