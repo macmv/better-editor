@@ -2,34 +2,35 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use arbitrary::Arbitrary;
 use crop::Rope;
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct ActorId(u64);
+#[derive(Arbitrary, Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct ActorId(pub u64);
 
 /// Chunk IDs are ordered by actor then by sequence.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-struct ChunkId {
-  actor: ActorId,
-  seq:   u64,
+#[derive(Arbitrary, Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct ChunkId {
+  pub actor: ActorId,
+  pub seq:   u64,
 }
 
-#[derive(Debug)]
-enum Operation {
+#[derive(Clone, Debug)]
+pub enum Operation {
   Insert(Insert),
   Split(Split),
   Delete(ChunkId),
 }
 
-#[derive(Debug)]
-struct Insert {
-  id:    ChunkId,
-  after: ChunkId,
-  text:  String,
+#[derive(Clone, Debug)]
+pub struct Insert {
+  pub id:    ChunkId,
+  pub after: ChunkId,
+  pub text:  String,
 }
 
-#[derive(Debug)]
-struct Split {
+#[derive(Clone, Debug)]
+pub struct Split {
   target: ChunkId,
   at:     u32,
   left:   ChunkId,
@@ -64,7 +65,7 @@ impl Default for State {
 }
 
 impl ChunkId {
-  const ROOT: ChunkId = ChunkId { actor: ActorId(0), seq: u64::MAX };
+  pub const ROOT: ChunkId = ChunkId { actor: ActorId(0), seq: u64::MAX };
 }
 
 impl Store {
@@ -76,13 +77,13 @@ impl Store {
     id
   }
 
-  fn insert(&mut self, after: ChunkId, text: &str) -> ChunkId {
+  pub fn insert(&mut self, after: ChunkId, text: &str) -> ChunkId {
     let id = self.fresh_id();
     self.state.apply(Operation::Insert(Insert { id, after, text: text.to_string() }));
     id
   }
 
-  fn split(&mut self, target: ChunkId, at: u32) -> (ChunkId, ChunkId) {
+  pub fn split(&mut self, target: ChunkId, at: u32) -> (ChunkId, ChunkId) {
     let l = self.fresh_id();
     let r = self.fresh_id();
     self.state.apply(Operation::Split(Split { target, at, left: l, right: r }));
@@ -90,7 +91,10 @@ impl Store {
     (l, r)
   }
 
-  fn delete(&mut self, id: ChunkId) { self.state.apply(Operation::Delete(id)); }
+  pub fn delete(&mut self, id: ChunkId) { self.state.apply(Operation::Delete(id)); }
+
+  pub fn apply_remote(&mut self, op: Operation) { self.state.apply(op); }
+  pub fn materialize(&self) -> Rope { self.state.materialize() }
 }
 
 impl State {

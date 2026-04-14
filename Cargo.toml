@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["be-*"]
+members = ["be-*", "be-crdt/fuzz"]
 
 [workspace.dependencies]
 expect-test = { version = "0.1.0", path = "../expect-test" }
