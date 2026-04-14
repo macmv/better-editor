@@ -1,13 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use arbitrary::Arbitrary;
 use crop::Rope;
 
-#[derive(Arbitrary, Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ActorId(pub u64);
 
 /// Chunk IDs are ordered by actor then by sequence.
-#[derive(Arbitrary, Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ChunkId {
   pub actor: ActorId,
   pub seq:   u64,
