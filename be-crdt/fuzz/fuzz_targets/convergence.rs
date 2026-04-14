@@ -62,5 +62,5 @@ fuzz_target!(|input: (Vec<AbstractOp>, Vec<AbstractOp>)| {
     store_b.apply_remote(op.clone());
   }
 
-  assert_eq!(store_a.materialize().to_string(), store_b.materialize().to_string());
+  assert_eq!(store_a.materialize(), store_b.materialize());
 });
