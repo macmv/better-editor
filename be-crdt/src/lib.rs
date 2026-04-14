@@ -1,39 +1,35 @@
-#![allow(dead_code)] // TODO
-
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use crop::Rope;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct ActorId(u64);
+pub struct ActorId(pub u64);
 
 /// Chunk IDs are ordered by actor then by sequence.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-struct ChunkId {
-  actor: ActorId,
-  seq:   u64,
+pub struct ChunkId {
+  pub actor: ActorId,
+  pub seq:   u64,
 }
 
-#[derive(Debug)]
-enum Operation {
+#[derive(Clone, Debug)]
+pub enum Operation {
   Insert(Insert),
-  Split(Split),
   Delete(ChunkId),
 }
 
-#[derive(Debug)]
-struct Insert {
-  id:    ChunkId,
-  after: ChunkId,
-  text:  String,
+#[derive(Clone, Debug)]
+pub struct Insert {
+  pub id:    ChunkId,
+  pub after: Anchor,
+  pub text:  String,
 }
 
-#[derive(Debug)]
-struct Split {
-  target: ChunkId,
-  at:     u32,
-  left:   ChunkId,
-  right:  ChunkId,
+/// A position within a chunk: byte `offset` bytes into `chunk`'s text.
+#[derive(Clone, Debug)]
+pub struct Anchor {
+  pub chunk:  ChunkId,
+  pub offset: u32,
 }
 
 pub struct Store {
@@ -44,27 +40,33 @@ pub struct Store {
 
 #[derive(Debug)]
 struct State {
-  children:  HashMap<ChunkId, BTreeSet<ChunkId>>,
   text:      HashMap<ChunkId, String>,
   tombstone: HashSet<ChunkId>,
+  /// splits[chunk][offset] = chunks inserted at byte `offset` within `chunk`.
+  splits:    HashMap<ChunkId, BTreeMap<u32, BTreeSet<ChunkId>>>,
+  /// Inserts waiting for their anchor chunk to arrive.
   pending:   HashMap<ChunkId, Vec<Insert>>,
-  alias:     HashMap<ChunkId, ChunkId>,
 }
 
 impl Default for State {
   fn default() -> Self {
     State {
-      children:  HashMap::from([(ChunkId::ROOT, BTreeSet::new())]),
       text:      HashMap::new(),
       tombstone: HashSet::new(),
+      splits:    HashMap::new(),
       pending:   HashMap::new(),
-      alias:     HashMap::new(),
     }
   }
 }
 
 impl ChunkId {
-  const ROOT: ChunkId = ChunkId { actor: ActorId(0), seq: u64::MAX };
+  pub const ROOT: ChunkId = ChunkId { actor: ActorId(0), seq: u64::MAX };
+
+  pub fn at(self, offset: u32) -> Anchor { Anchor { chunk: self, offset } }
+}
+
+impl Anchor {
+  pub const ROOT: Anchor = Anchor { chunk: ChunkId::ROOT, offset: 0 };
 }
 
 impl Store {
@@ -76,28 +78,22 @@ impl Store {
     id
   }
 
-  fn insert(&mut self, after: ChunkId, text: &str) -> ChunkId {
+  pub fn insert(&mut self, after: Anchor, text: &str) -> ChunkId {
     let id = self.fresh_id();
     self.state.apply(Operation::Insert(Insert { id, after, text: text.to_string() }));
     id
   }
 
-  fn split(&mut self, target: ChunkId, at: u32) -> (ChunkId, ChunkId) {
-    let l = self.fresh_id();
-    let r = self.fresh_id();
-    self.state.apply(Operation::Split(Split { target, at, left: l, right: r }));
+  pub fn delete(&mut self, id: ChunkId) { self.state.apply(Operation::Delete(id)); }
 
-    (l, r)
-  }
-
-  fn delete(&mut self, id: ChunkId) { self.state.apply(Operation::Delete(id)); }
+  pub fn apply_remote(&mut self, op: Operation) { self.state.apply(op); }
+  pub fn materialize(&self) -> Rope { self.state.materialize() }
 }
 
 impl State {
   pub fn apply(&mut self, op: Operation) {
     match op {
       Operation::Insert(insert) => self.apply_insert(insert),
-      Operation::Split(split) => self.apply_split(split),
       Operation::Delete(id) => {
         self.tombstone.insert(id);
       }
@@ -105,90 +101,75 @@ impl State {
   }
 
   fn apply_insert(&mut self, insert: Insert) {
-    let after = self.resolve_after(insert.after);
+    let anchor_chunk = insert.after.chunk;
+    let anchor_offset = insert.after.offset;
 
-    if !(after == ChunkId::ROOT
-      || self.text.contains_key(&after)
-      || self.tombstone.contains(&after))
-    {
-      self.text.insert(insert.id, insert.text.clone());
-      self.pending.entry(after).or_default().push(insert);
+    // Defer if the anchor chunk hasn't arrived yet.
+    let chunk_known = anchor_chunk == ChunkId::ROOT
+      || self.text.contains_key(&anchor_chunk)
+      || self.tombstone.contains(&anchor_chunk);
+
+    if !chunk_known {
+      self.pending.entry(anchor_chunk).or_default().push(insert);
       return;
-    } else {
-      self.text.insert(insert.id, insert.text);
     }
 
-    self.children.entry(after).or_default().insert(insert.id);
-    self.children.entry(insert.id).or_default();
+    // Register this chunk's text and slot it into the anchor's split map.
+    self.text.insert(insert.id, insert.text);
+    self
+      .splits
+      .entry(anchor_chunk)
+      .or_default()
+      .entry(anchor_offset)
+      .or_default()
+      .insert(insert.id);
 
-    if let Some(pending) = self.pending.remove(&after) {
-      for insert in pending {
-        self.apply_insert(insert);
+    // Release any inserts that were waiting for this chunk.
+    if let Some(pending) = self.pending.remove(&insert.id) {
+      for p in pending {
+        self.apply_insert(p);
       }
     }
-  }
-
-  fn apply_split(&mut self, split: Split) {
-    let Some(orig) = self.text.remove(&split.target) else { panic!("no text at split target") };
-
-    let left = orig[..split.at as usize].to_string();
-    let right = orig[split.at as usize..].to_string();
-
-    self.tombstone.insert(split.target);
-    self.text.remove(&split.target);
-
-    self.alias.insert(split.target, split.right);
-
-    self.text.insert(split.left, left);
-    self.text.insert(split.right, right);
-
-    self.children.entry(split.left).or_default().insert(split.right);
-    let old_children = self.children.remove(&split.target).unwrap();
-    let right_children = self.children.entry(split.right).or_default();
-
-    for c in old_children {
-      if c != split.left && c != split.right {
-        right_children.insert(c);
-      }
-    }
-
-    self.children.entry(split.target).or_default().insert(split.left);
-
-    if let Some(pending) = self.pending.remove(&split.target) {
-      for insert in pending {
-        self.apply_insert(insert);
-      }
-    }
-  }
-
-  fn resolve_after(&self, mut id: ChunkId) -> ChunkId {
-    while let Some(after) = self.alias.get(&id) {
-      id = *after;
-    }
-    id
   }
 
   pub fn materialize(&self) -> Rope {
+    let mut out = String::new();
+    self.collect_chunk(ChunkId::ROOT, &mut out);
     let mut rope = Rope::new();
-    let mut stack = vec![ChunkId::ROOT];
-    let mut i = 0;
+    if !out.is_empty() {
+      rope.insert(0, &out);
+    }
+    rope
+  }
 
-    while let Some(id) = stack.pop() {
-      if !self.tombstone.contains(&id)
-        && let Some(text) = self.text.get(&id)
-      {
-        rope.insert(i, text);
-        i += text.len();
-      }
+  /// Recursively emit the content of `id` into `out`, interleaving the
+  /// chunk's own text with any chunks inserted at offsets within it.
+  fn collect_chunk(&self, id: ChunkId, out: &mut String) {
+    let text = self.text.get(&id).map(|s| s.as_str()).unwrap_or("");
+    let is_deleted = self.tombstone.contains(&id);
+    let text_len = text.len();
+    let mut text_pos = 0;
 
-      if let Some(children) = self.children.get(&id) {
-        for child in children {
-          stack.push(*child);
+    if let Some(split_map) = self.splits.get(&id) {
+      for (&offset, children) in split_map {
+        let offset = (offset as usize).min(text_len);
+        let offset = (0..=offset).rev().find(|&i| text.is_char_boundary(i)).unwrap_or(0);
+        // Emit text up to this split point.
+        if !is_deleted && text_pos < offset {
+          out.push_str(&text[text_pos..offset]);
+        }
+        text_pos = offset;
+        // Recurse into each chunk inserted at this offset.
+        for &child in children {
+          self.collect_chunk(child, out);
         }
       }
     }
 
-    rope
+    // Emit any text after the last split point.
+    if !is_deleted && text_pos < text_len {
+      out.push_str(&text[text_pos..]);
+    }
   }
 }
 
@@ -199,11 +180,31 @@ mod tests {
   const TEST_ACTOR: ActorId = ActorId(0);
 
   #[test]
-  fn insert_works() {
+  fn insert_start() {
     let mut store = Store::new(TEST_ACTOR);
 
-    let first = store.insert(ChunkId::ROOT, "hello");
-    let second = store.insert(first, " world");
+    let first = store.insert(Anchor::ROOT, "hello");
+    store.insert(first.at(0), "foo");
+
+    assert_eq!(store.state.materialize(), "foohello");
+  }
+
+  #[test]
+  fn insert_middle() {
+    let mut store = Store::new(TEST_ACTOR);
+
+    let first = store.insert(Anchor::ROOT, "fooo");
+    store.insert(first.at(1), "a");
+
+    assert_eq!(store.state.materialize(), "faooo");
+  }
+
+  #[test]
+  fn insert_end() {
+    let mut store = Store::new(TEST_ACTOR);
+
+    let first = store.insert(Anchor::ROOT, "hello");
+    let second = store.insert(first.at(5), " world");
 
     assert_eq!(store.state.materialize(), "hello world");
 
@@ -212,28 +213,5 @@ mod tests {
 
     store.delete(second);
     assert_eq!(store.state.materialize(), "");
-  }
-
-  #[test]
-  fn split_works() {
-    let mut store = Store::new(TEST_ACTOR);
-
-    let first = store.insert(ChunkId::ROOT, "hello");
-    let (l, _) = store.split(first, 2);
-    store.insert(l, " ");
-
-    assert_eq!(store.state.materialize(), "he llo");
-  }
-
-  #[test]
-  fn split_children() {
-    let mut store = Store::new(TEST_ACTOR);
-
-    let first = store.insert(ChunkId::ROOT, "hello");
-    store.insert(first, " world");
-    let (l, _) = store.split(first, 2);
-    store.insert(l, " ");
-
-    assert_eq!(store.state.materialize(), "he llo world");
   }
 }
