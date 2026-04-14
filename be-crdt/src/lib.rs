@@ -172,9 +172,15 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+  use expect_test::{Expect, expect};
+
   use super::*;
 
   const TEST_ACTOR: ActorId = ActorId(0);
+
+  fn check(store: &Store, expected: Expect) {
+    expected.assert_eq(&store.materialize().to_string());
+  }
 
   #[test]
   fn insert_start() {
@@ -183,7 +189,7 @@ mod tests {
     let first = store.insert(Anchor::ROOT, "hello");
     store.insert(first.at(0), "foo");
 
-    assert_eq!(store.state.materialize(), "foohello");
+    check(&store, expect![@"foohello"]);
   }
 
   #[test]
@@ -193,7 +199,7 @@ mod tests {
     let first = store.insert(Anchor::ROOT, "fooo");
     store.insert(first.at(1), "a");
 
-    assert_eq!(store.state.materialize(), "faooo");
+    check(&store, expect![@"faooo"]);
   }
 
   #[test]
@@ -203,12 +209,12 @@ mod tests {
     let first = store.insert(Anchor::ROOT, "hello");
     let second = store.insert(first.at(5), " world");
 
-    assert_eq!(store.state.materialize(), "hello world");
+    check(&store, expect![@"hello world"]);
 
     store.delete(first);
-    assert_eq!(store.state.materialize(), " world");
+    check(&store, expect![@" world"]);
 
     store.delete(second);
-    assert_eq!(store.state.materialize(), "");
+    check(&store, expect![@""]);
   }
 }
