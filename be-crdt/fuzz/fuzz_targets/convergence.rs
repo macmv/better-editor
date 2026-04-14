@@ -28,7 +28,7 @@ fn build_ops(actor: ActorId, abstract_ops: &[AbstractOp]) -> Vec<Operation> {
         chunks.push((id, text.len() as u32));
         ops.push(Operation::Insert(Insert {
           id,
-          after: Anchor { chunk, offset },
+          at: Anchor { chunk, offset },
           text: text.clone(),
         }));
       }

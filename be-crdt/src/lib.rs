@@ -20,9 +20,9 @@ pub enum Operation {
 
 #[derive(Clone, Debug)]
 pub struct Insert {
-  pub id:    ChunkId,
-  pub after: Anchor,
-  pub text:  String,
+  pub id:   ChunkId,
+  pub at:   Anchor,
+  pub text: String,
 }
 
 /// A position within a chunk: byte `offset` bytes into `chunk`'s text.
@@ -78,9 +78,9 @@ impl Store {
     id
   }
 
-  pub fn insert(&mut self, after: Anchor, text: &str) -> ChunkId {
+  pub fn insert(&mut self, at: Anchor, text: &str) -> ChunkId {
     let id = self.fresh_id();
-    self.state.apply(Operation::Insert(Insert { id, after, text: text.to_string() }));
+    self.state.apply(Operation::Insert(Insert { id, at, text: text.to_string() }));
     id
   }
 
@@ -101,16 +101,13 @@ impl State {
   }
 
   fn apply_insert(&mut self, insert: Insert) {
-    let anchor_chunk = insert.after.chunk;
-    let anchor_offset = insert.after.offset;
-
     // Defer if the anchor chunk hasn't arrived yet.
-    let chunk_known = anchor_chunk == ChunkId::ROOT
-      || self.text.contains_key(&anchor_chunk)
-      || self.tombstone.contains(&anchor_chunk);
+    let chunk_known = insert.at.chunk == ChunkId::ROOT
+      || self.text.contains_key(&insert.at.chunk)
+      || self.tombstone.contains(&insert.at.chunk);
 
     if !chunk_known {
-      self.pending.entry(anchor_chunk).or_default().push(insert);
+      self.pending.entry(insert.at.chunk).or_default().push(insert);
       return;
     }
 
@@ -118,9 +115,9 @@ impl State {
     self.text.insert(insert.id, insert.text);
     self
       .splits
-      .entry(anchor_chunk)
+      .entry(insert.at.chunk)
       .or_default()
-      .entry(anchor_offset)
+      .entry(insert.at.offset)
       .or_default()
       .insert(insert.id);
 
