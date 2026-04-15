@@ -5,7 +5,7 @@ use objc2_core_foundation::{CFArray, CFString};
 use objc2_core_services::*;
 
 use super::Watcher;
-use crate::{DirectoryChanges, WorkspacePathBuf, WorkspaceRoot};
+use crate::{DirectoryChanges, Waker, WorkspacePathBuf, WorkspaceRoot};
 
 pub struct FSEventsWatcher {
   root:   WorkspaceRoot,
@@ -31,15 +31,20 @@ impl Drop for FSEventsWatcher {
   }
 }
 
+struct Context {
+  tx:    mpsc::Sender<Vec<Event>>,
+  waker: Waker,
+}
+
 impl FSEventsWatcher {
-  pub fn new(root: &WorkspaceRoot) -> Self {
+  pub fn new(root: &WorkspaceRoot, waker: Waker) -> Self {
     let (tx, rx) = mpsc::channel();
 
     let root_str = root.as_path().to_str().expect("workspace root must be valid UTF-8");
     let cf_path = CFString::from_str(root_str);
     let paths = CFArray::from_objects(&[&*cf_path]);
 
-    let context_ptr = Box::into_raw(Box::new(tx));
+    let context_ptr = Box::into_raw(Box::new(Context { tx, waker }));
 
     let mut context = FSEventStreamContext {
       version:         0,
@@ -80,7 +85,7 @@ unsafe extern "C-unwind" fn stream_callback(
   _event_ids: std::ptr::NonNull<FSEventStreamEventId>,
 ) {
   unsafe {
-    let tx = &*(info as *const mpsc::Sender<Vec<Event>>);
+    let ctx = &*(info as *const Context);
     let paths = event_paths.as_ptr() as *const *const std::ffi::c_char;
 
     let events = (0..num_events)
@@ -92,9 +97,10 @@ unsafe extern "C-unwind" fn stream_callback(
       })
       .collect();
 
-    if tx.send(events).is_err() {
+    if ctx.tx.send(events).is_err() {
       error!("fsevents receiver has disconnected");
     }
+    (ctx.waker)();
   }
 }
 

@@ -53,7 +53,12 @@ impl Workspace {
 
     let root = WorkspaceRoot::from_path(std::env::current_dir().unwrap());
     let repo = Repo::open(&root.as_path());
-    let fs = WorkspaceWatcher::new(&root);
+    let fs = {
+      let waker = notifier.clone();
+      WorkspaceWatcher::new(&root, move || {
+        (waker.lock())(WorkspaceEvent::Refresh);
+      })
+    };
 
     Workspace {
       root,
