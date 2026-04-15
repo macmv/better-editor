@@ -63,7 +63,9 @@ impl FSEventsWatcher {
         paths.as_opaque(),
         kFSEventStreamEventIdSinceNow,
         0.0,
-        kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer,
+        kFSEventStreamCreateFlagFileEvents
+          | kFSEventStreamCreateFlagNoDefer
+          | kFSEventStreamCreateFlagIgnoreSelf,
       )
     };
 
