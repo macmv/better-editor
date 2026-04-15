@@ -81,7 +81,7 @@ pub enum MouseEvent {
   },
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum MouseButton {
   Left,
   Middle,

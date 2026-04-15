@@ -51,6 +51,10 @@ pub struct TerminalState {
 
   pub title:                   String,
   pub report_mouse:            bool,
+  pub mouse_motion:            bool,
+  pub mouse_all_motion:        bool,
+  pub report_focus:            bool,
+  pub mouse_utf8:              bool,
   pub cursor_keys:             bool,
   pub bracketed_paste:         bool,
   pub keypad_application_mode: bool,
@@ -227,6 +231,85 @@ impl Terminal {
       self.pty.input_str("\x1b[C");
     }
   }
+  /// Report a mouse button press or release to the PTY.
+  ///
+  /// `button` is 0=left, 1=middle, 2=right. Only sent when mode 1000 is active.
+  pub fn perform_mouse_button(&mut self, col: usize, row: usize, button: u8, pressed: bool) {
+    if self.state.report_mouse {
+      let code = if pressed { button } else { 3 };
+      self.send_mouse_report(col, row, code);
+    }
+  }
+
+  /// Report a scroll-wheel event to the PTY.
+  ///
+  /// Only sent when mode 1000 is active.
+  pub fn perform_mouse_scroll(&mut self, col: usize, row: usize, up: bool) {
+    if self.state.report_mouse {
+      // Scroll buttons: 64=wheel-up, 65=wheel-down (before the +32 offset in
+      // send_mouse_report).
+      let code = if up { 64 } else { 65 };
+      self.send_mouse_report(col, row, code);
+    }
+  }
+
+  /// Report mouse motion to the PTY.
+  ///
+  /// `held` is the button currently held (0=left, 1=middle, 2=right), or None.
+  /// Sent when mode 1002 (held button) or 1003 (all motion) is active.
+  pub fn perform_mouse_move(&mut self, col: usize, row: usize, held: Option<u8>) {
+    let report = if self.state.mouse_all_motion {
+      true
+    } else if self.state.mouse_motion {
+      held.is_some()
+    } else {
+      false
+    };
+    if report {
+      // Add the motion bit (0x20 / 32) to the button code.
+      // When no button is held the code is 3 (release), giving 32|3 = 35.
+      let code = held.map(|b| b | 32).unwrap_or(32 | 3);
+      self.send_mouse_report(col, row, code);
+    }
+  }
+
+  /// Report a focus-in or focus-out event to the PTY.
+  ///
+  /// Only sent when mode 1004 is active.
+  pub fn perform_focus_event(&mut self, focus: bool) {
+    if self.state.report_focus {
+      if focus {
+        self.pty.input_str("\x1b[I");
+      } else {
+        self.pty.input_str("\x1b[O");
+      }
+    }
+  }
+
+  fn send_mouse_report(&mut self, col: usize, row: usize, button_code: u8) {
+    if self.state.mouse_utf8 {
+      // Mode 1005: encode each of the three values as a UTF-8 codepoint.
+      let mut buf = vec![0x1b, b'[', b'M'];
+      push_utf8_coord(&mut buf, 32 + u32::from(button_code));
+      push_utf8_coord(&mut buf, 32 + col as u32 + 1);
+      push_utf8_coord(&mut buf, 32 + row as u32 + 1);
+      self.pty.input_bytes(&buf);
+    } else {
+      // X10 encoding: coords are limited to < 224 (byte value 255-32+1).
+      if col >= 224 || row >= 224 {
+        return;
+      }
+      self.pty.input_bytes(&[
+        0x1b,
+        b'[',
+        b'M',
+        32 + button_code,
+        (32 + col + 1) as u8,
+        (32 + row + 1) as u8,
+      ]);
+    }
+  }
+
   pub fn perform_paste(&mut self, s: &str) {
     // Source: alacritty
     if self.state.bracketed_paste {
@@ -300,6 +383,13 @@ impl Drop for Poller {
   fn drop(&mut self) { self.poller.delete(self.fd).unwrap(); }
 }
 
+fn push_utf8_coord(buf: &mut Vec<u8>, codepoint: u32) {
+  if let Some(c) = char::from_u32(codepoint) {
+    let mut tmp = [0u8; 4];
+    buf.extend_from_slice(c.encode_utf8(&mut tmp).as_bytes());
+  }
+}
+
 impl TerminalState {
   fn new(size: Size) -> Self {
     TerminalState {
@@ -316,6 +406,10 @@ impl TerminalState {
 
       title: String::new(),
       report_mouse: false,
+      mouse_motion: false,
+      mouse_all_motion: false,
+      report_focus: false,
+      mouse_utf8: false,
       cursor_keys: false,
       bracketed_paste: false,
       keypad_application_mode: false,

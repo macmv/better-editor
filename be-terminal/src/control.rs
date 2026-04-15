@@ -417,14 +417,15 @@ impl TerminalState {
       12 => self.cursor.blink = set,
       25 => self.cursor.visible = set,
       1000 => self.report_mouse = set,
-      // 1002/1003: mouse motion reporting. 1002 reports motion while a button
-      // is held; 1003 reports all motion. Both require forwarding mouse coords
-      // to the PTY in X10 (or SGR with mode 1006) format.
-      1002 => unhandled!("report cell mouse motion"),
-      1003 => unhandled!("report all mouse motion"),
+      1001 => unhandled!("highlight mouse tracking"),
+      // 1002: report motion while a button is held; 1003: report all motion.
+      // Both use X10 (or SGR with mode 1006) encoding.
+      1002 => self.mouse_motion = set,
+      1003 => self.mouse_all_motion = set,
       // 1004: send \x1b[I on focus gain and \x1b[O on focus loss.
-      1004 => unhandled!("report focus in out"),
-      1005 => unhandled!("utf8 mouse"),
+      1004 => self.report_focus = set,
+      // 1005: encode mouse coords as UTF-8 codepoints instead of raw bytes.
+      1005 => self.mouse_utf8 = set,
       // 1006: use CSI < b ; x ; y M/m instead of the old X10 encoding.
       // Required by most modern TUI apps when combined with 1000/1002/1003.
       1006 => unhandled!("sgr mouse"),

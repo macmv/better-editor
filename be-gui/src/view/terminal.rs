@@ -25,6 +25,8 @@ pub struct TerminalView {
 
   drag_start: Option<Point>,
   selection:  Option<(Position, Position)>,
+  mouse_held: Option<u8>,
+  mouse_pos:  Option<Point>,
 }
 
 struct LineLayout {
@@ -45,6 +47,8 @@ impl TerminalView {
       clipboard:      workspace.clipboard.clone(),
       drag_start:     None,
       selection:      None,
+      mouse_held:     None,
+      mouse_pos:      None,
     }
   }
 
@@ -80,11 +84,15 @@ impl TerminalView {
     _size: Size,
     _store: &RenderStore,
   ) -> crate::CursorKind {
-    match ev {
+    match *ev {
       MouseEvent::Move { pos } => {
+        self.mouse_pos = Some(pos);
+        let mouse = self.mouse_to_pos(pos);
+
+        self.terminal.perform_mouse_move(mouse.col, mouse.row, self.mouse_held);
+
         if let Some(start) = self.drag_start {
           let anchor = self.mouse_to_pos(start);
-          let mouse = self.mouse_to_pos(*pos);
 
           if anchor != mouse {
             let (min, max) = if anchor.row == mouse.row {
@@ -107,15 +115,46 @@ impl TerminalView {
         }
       }
 
-      MouseEvent::Button { pos, pressed: true, button: MouseButton::Left } => {
-        self.drag_start = Some(*pos);
-        self.selection = None;
+      MouseEvent::Button { pos, pressed, button } => {
+        let mouse = self.mouse_to_pos(pos);
+        let btn_code = match button {
+          MouseButton::Left => 0,
+          MouseButton::Middle => 1,
+          MouseButton::Right => 2,
+        };
+
+        self.terminal.perform_mouse_button(mouse.col, mouse.row, btn_code, pressed);
+
+        if pressed {
+          self.mouse_held = Some(btn_code);
+        } else {
+          self.mouse_held = None;
+        }
+
+        if button == MouseButton::Left {
+          if pressed {
+            self.drag_start = Some(pos);
+            self.selection = None;
+          } else {
+            self.drag_start = None;
+          }
+        }
       }
 
-      MouseEvent::Button { pos: _, pressed: false, button: MouseButton::Left } => {
-        self.drag_start = None;
+      MouseEvent::Scroll { pos, delta } => {
+        let cell = self.mouse_to_pos(pos);
+        if delta.y < 0.0 {
+          self.terminal.perform_mouse_scroll(cell.col, cell.row, true);
+        } else if delta.y > 0.0 {
+          self.terminal.perform_mouse_scroll(cell.col, cell.row, false);
+        }
       }
-      MouseEvent::Leave => self.drag_start = None,
+
+      MouseEvent::Leave => {
+        self.drag_start = None;
+        self.mouse_held = None;
+        self.mouse_pos = None;
+      }
 
       _ => {}
     }
@@ -213,7 +252,10 @@ impl TerminalView {
     }
   }
 
-  pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
+  pub fn on_focus(&mut self, focus: bool) {
+    self.focused = focus;
+    self.terminal.perform_focus_event(focus);
+  }
 
   fn layout_line(&mut self, render: &mut Render, i: usize) -> Option<&mut LineLayout> {
     if self.cached_layouts.len() < i {
