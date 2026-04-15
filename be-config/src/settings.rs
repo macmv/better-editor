@@ -64,15 +64,15 @@ impl Settings {
   pub fn load() -> ParseResult<Settings> {
     let mut config = crate::Config::default_ref().settings.clone();
 
-    if let Ok(data) = std::fs::read_to_string(crate::config_root().unwrap().join("config.toml")) {
-      let diagnostics = crate::parse::parse_into(&mut config, &data);
+    let diagnostics = if let Ok(data) =
+      std::fs::read_to_string(crate::config_root().unwrap().join("config.toml"))
+    {
+      crate::parse::parse_into(&mut config, &data)
+    } else {
+      vec![]
+    };
 
-      for diag in diagnostics {
-        eprintln!("failed to parse config: {diag}"); // TODO: User-visible error
-      }
-    }
-
-    ParseResult::ok(config)
+    ParseResult { value: config, diagnostics }
   }
 
   pub(crate) fn parse_default() -> Settings { parse_default_config().value }

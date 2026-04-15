@@ -19,8 +19,6 @@ pub enum DiagnosticLevel {
 }
 
 impl<T> ParseResult<T> {
-  pub(crate) fn ok(value: T) -> Self { ParseResult { value, diagnostics: vec![] } }
-
   pub(crate) fn map<U>(self, f: impl FnOnce(T) -> U) -> ParseResult<U> {
     ParseResult { value: f(self.value), diagnostics: self.diagnostics }
   }

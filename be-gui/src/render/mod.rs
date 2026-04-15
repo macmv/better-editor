@@ -111,7 +111,7 @@ pub fn run() {
 
     let config = Config::load();
     for diagnostic in &config.diagnostics {
-      println!("{diagnostic}");
+      warn!("{diagnostic}");
     }
     let config = Rc::new(RefCell::new(config.value));
 
