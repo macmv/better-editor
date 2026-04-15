@@ -3,6 +3,7 @@ use std::{collections::HashMap, io, path::PathBuf};
 use be_animation::Animation;
 use be_doc::Cursor;
 use be_editor::{CommandMode, EditorEvent, EditorState, IndentLevel};
+use be_fs::WatcherHandle;
 use be_input::{Action, Mode};
 use be_shared::SharedHandle;
 use be_workspace::Workspace;
@@ -36,6 +37,7 @@ pub struct EditorView {
   max_line: be_doc::Line,
 
   definition_history: Vec<(Cursor, PathBuf)>,
+  watcher:            WatcherHandle,
 
   progress_animation: Animation,
 }
@@ -64,6 +66,7 @@ impl EditorView {
       line_number_width: 0.0,
 
       definition_history: vec![],
+      watcher:            store.workspace.fs.add_handle(),
 
       progress_animation: Animation::linear(2.0),
     };
@@ -97,6 +100,14 @@ impl EditorView {
 
   pub fn layout(&mut self, layout: &mut Layout) {
     puffin::profile_function!();
+
+    for change in self.watcher.take_changes().iter() {
+      if let Some(f) = self.editor.file()
+        && layout.store.workspace.root.resolve_path(change) == f
+      {
+        self.editor.on_file_changed();
+      }
+    }
 
     if self.cached_scale != layout.scale() {
       self.cached_layouts.clear();

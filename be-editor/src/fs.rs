@@ -19,6 +19,9 @@ pub struct OpenedFile {
   /// So, to index into real editor history, use `history.len() -
   /// saved_history_position`.
   pub(crate) saved_history_position: usize,
+
+  /// Set if the file was modified underneath the editor session.
+  modified: bool,
 }
 
 impl EditorState {
@@ -53,6 +56,20 @@ impl EditorState {
 
     Ok(())
   }
+
+  pub fn on_file_changed(&mut self) {
+    let unsaved = self.unsaved();
+    if let Some(file) = &mut self.file {
+      if unsaved {
+        file.modified = true;
+      } else {
+        let p = file.path().to_path_buf();
+        self.open(&p).unwrap();
+      }
+    }
+  }
+
+  pub fn modified(&self) -> bool { self.file.as_ref().is_some_and(|f| f.modified) }
 }
 
 impl OpenedFile {
@@ -63,7 +80,7 @@ impl OpenedFile {
     let stat = path.metadata()?;
 
     let doc = Document::read(&path)?;
-    let file = OpenedFile { path, mtime: stat.mtime(), saved_history_position: 0 };
+    let file = OpenedFile { path, mtime: stat.mtime(), saved_history_position: 0, modified: false };
 
     Ok((file, doc))
   }
