@@ -111,7 +111,13 @@ impl Perform for TerminalState {
         self.title = title;
       }
       b"4" => unhandled!("set color index"),
+      // OSC 8: hyperlink. Format: OSC 8 ; params ; uri ST
       b"8" if params.len() > 2 => unhandled!("hyperline"),
+      // OSC 9: desktop notifications (ConEmu/Windows Terminal style).
+      // Format: OSC 9 ; message ST  (notification text)
+      // Also used for taskbar progress: OSC 9 ; 4 ; n  (n=0-100).
+      // Seen in log as params=[[57],[52],[48],[]] = "9;4;0" (progress indicator).
+      b"9" => unhandled!("desktop notification / progress"),
       b"10" => unhandled!("set foreground color"),
       b"11" => {
         if params.len() == 2 {
@@ -246,6 +252,12 @@ impl Perform for TerminalState {
       }
       (b'M', []) => unhandled!("delete lines"),
       (b'm', []) => self.set_graphics_mode(params),
+      // Kitty keyboard protocol: set/push/pop/query keyboard mode flags.
+      // These control how key events are encoded (e.g. distinguish modifiers,
+      // report key releases, etc.). To support KKP properly we'd need to
+      // maintain a mode-flag stack and encode key events accordingly.
+      // For now we acknowledge them silently; apps that require KKP (e.g.
+      // neovim with 'set termguicolors' + kitty term) may misbehave.
       (b'm', [b'>']) => unhandled!("set keyboard mode"),
       (b'm', [b'?']) => unhandled!("report graphics mode"),
       (b'n', []) => {
@@ -289,6 +301,10 @@ impl Perform for TerminalState {
       (b'u', [b'=']) => unhandled!("set keyboard mode"),
       (b'u', [b'>']) => unhandled!("push keyboard mode"),
       (b'u', [b'<']) => unhandled!("pop keyboard modes"),
+      // Kitty keyboard protocol: query current keyboard mode flags.
+      // Should respond with CSI ? flags u (where flags is a bitmask of active
+      // KKP flags). Until KKP is implemented, reply with 0 (no flags set).
+      (b'q', [b'>']) => unhandled!("query keyboard mode"),
       (b'u', []) => unhandled!("restore cursor position"),
       (b'X', []) => unhandled!("erase chars"),
       (b'Z', []) => unhandled!("move backward tabs"),
@@ -401,16 +417,29 @@ impl TerminalState {
       12 => self.cursor.blink = set,
       25 => self.cursor.visible = set,
       1000 => self.report_mouse = set,
+      // 1002/1003: mouse motion reporting. 1002 reports motion while a button
+      // is held; 1003 reports all motion. Both require forwarding mouse coords
+      // to the PTY in X10 (or SGR with mode 1006) format.
       1002 => unhandled!("report cell mouse motion"),
       1003 => unhandled!("report all mouse motion"),
+      // 1004: send \x1b[I on focus gain and \x1b[O on focus loss.
       1004 => unhandled!("report focus in out"),
       1005 => unhandled!("utf8 mouse"),
+      // 1006: use CSI < b ; x ; y M/m instead of the old X10 encoding.
+      // Required by most modern TUI apps when combined with 1000/1002/1003.
       1006 => unhandled!("sgr mouse"),
       1007 => unhandled!("alternate scroll"),
       1042 => unhandled!("urgency hints"),
       1049 => self.set_alt_screen(set),
       2004 => self.bracketed_paste = set,
+      // 2026: synchronized output (DEC private mode). When set, the terminal
+      // should buffer all rendering until reset (like a begin/end frame pair),
+      // eliminating flicker on full-screen redraws. Safe to silently ignore
+      // for correctness, but implementing it would improve TUI rendering quality.
       2026 => unhandled!("sync update"),
+      // 2031: enable sending dark/light mode on change.
+      // https://contour-terminal.org/vt-extensions/color-palette-update-notifications
+      2031 => unhandled!("dark/light mode"),
       _ => unhandled!("unknown"),
     }
   }
