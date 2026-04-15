@@ -21,6 +21,7 @@ features = ["CFArray", "CFString"]
 
 [dependencies]
 btree-slab = "0.6.1"
+crossbeam-channel = "0.5.15"
 log = "0.4.29"
 parking_lot = "0.12.5"
 relative-path = "2.0.1"

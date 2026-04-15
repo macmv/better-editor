@@ -1,5 +1,6 @@
-use std::{ffi::c_void, path::Path, sync::mpsc};
+use std::{ffi::c_void, path::Path};
 
+use crossbeam_channel::{Receiver, Sender};
 use dispatch2::DispatchQueue;
 use objc2_core_foundation::{CFArray, CFString};
 use objc2_core_services::*;
@@ -9,7 +10,7 @@ use crate::{DirectoryChanges, Waker, WorkspacePathBuf, WorkspaceRoot};
 
 pub struct FSEventsWatcher {
   root:   WorkspaceRoot,
-  rx:     mpsc::Receiver<Vec<Event>>,
+  rx:     Receiver<Box<[Event]>>,
   stream: FSEventStreamRef,
 }
 
@@ -32,13 +33,13 @@ impl Drop for FSEventsWatcher {
 }
 
 struct Context {
-  tx:    mpsc::Sender<Vec<Event>>,
+  tx:    Sender<Box<[Event]>>,
   waker: Waker,
 }
 
 impl FSEventsWatcher {
   pub fn new(root: &WorkspaceRoot, waker: Waker) -> Self {
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = crossbeam_channel::unbounded();
 
     let root_str = root.as_path().to_str().expect("workspace root must be valid UTF-8");
     let cf_path = CFString::from_str(root_str);

@@ -241,6 +241,7 @@ name = "be-fs"
 version = "0.1.0"
 dependencies = [
  "btree-slab",
+ "crossbeam-channel",
  "dispatch2",
  "expect-test",
  "inotify",
