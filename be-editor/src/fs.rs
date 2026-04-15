@@ -46,8 +46,8 @@ impl EditorState {
 
   pub fn save(&mut self) -> io::Result<()> {
     if let Some(file) = &mut self.file {
-      file.saved_history_position = self.history.len() - self.history_position;
       file.save(&self.doc)?;
+      file.saved_history_position = self.history.len() - self.history_position;
     } else {
       return Err(io::Error::new(io::ErrorKind::NotFound, "no file open"));
     }
