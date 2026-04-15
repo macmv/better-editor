@@ -296,7 +296,8 @@ impl EditorState {
   }
 
   pub fn unsaved(&self) -> bool {
-    let saved_history_position = self.file.as_ref().map_or(0, |f| f.saved_history_position);
+    let saved_history_position =
+      self.history.len() - self.file.as_ref().map_or(0, |f| f.saved_history_position);
 
     self.history_position != saved_history_position || self.current_edit.is_some()
   }

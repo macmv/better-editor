@@ -12,6 +12,12 @@ pub struct OpenedFile {
   path:  PathBuf,
   mtime: i64,
 
+  /// This is a little dumb, but: history is built in reverse on the editor. So,
+  /// while editting, the history says at zero, and undoing increases it. We
+  /// want the opposite behavior: we want a stable index into history.
+  ///
+  /// So, to index into real editor history, use `history.len() -
+  /// saved_history_position`.
   pub(crate) saved_history_position: usize,
 }
 
@@ -37,7 +43,7 @@ impl EditorState {
 
   pub fn save(&mut self) -> io::Result<()> {
     if let Some(file) = &mut self.file {
-      file.saved_history_position = self.history_position;
+      file.saved_history_position = self.history.len() - self.history_position;
       file.save(&self.doc)?;
     } else {
       return Err(io::Error::new(io::ErrorKind::NotFound, "no file open"));
