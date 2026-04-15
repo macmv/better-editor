@@ -295,6 +295,12 @@ impl EditorState {
     }
   }
 
+  pub fn unsaved(&self) -> bool {
+    let saved_history_position = self.file.as_ref().map_or(0, |f| f.saved_history_position);
+
+    self.history_position != saved_history_position || self.current_edit.is_some()
+  }
+
   fn remove_current_edit(&mut self) {
     if let Some(edit) = self.current_edit.take() {
       self.add_to_history(edit);

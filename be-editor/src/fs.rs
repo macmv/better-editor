@@ -11,6 +11,8 @@ use crate::EditorState;
 pub struct OpenedFile {
   path:  PathBuf,
   mtime: i64,
+
+  pub(crate) saved_history_position: usize,
 }
 
 impl EditorState {
@@ -35,6 +37,7 @@ impl EditorState {
 
   pub fn save(&mut self) -> io::Result<()> {
     if let Some(file) = &mut self.file {
+      file.saved_history_position = self.history_position;
       file.save(&self.doc)?;
     } else {
       return Err(io::Error::new(io::ErrorKind::NotFound, "no file open"));
@@ -54,7 +57,7 @@ impl OpenedFile {
     let stat = path.metadata()?;
 
     let doc = Document::read(&path)?;
-    let file = OpenedFile { path, mtime: stat.mtime() };
+    let file = OpenedFile { path, mtime: stat.mtime(), saved_history_position: 0 };
 
     Ok((file, doc))
   }

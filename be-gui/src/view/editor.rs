@@ -479,6 +479,11 @@ impl EditorView {
       render.draw_text(&layout, (20.0, render.size().height - line_height));
     }
 
+    if self.editor.unsaved() {
+      let center = (render.size().width - 70.0, render.size().height - line_height / 2.0);
+      render.fill(&Circle::new(center, 4.0), render.theme().text);
+    }
+
     if let Some(ft) = self.editor.file_type() {
       let layout = render.layout_text(
         Font::Ui,
