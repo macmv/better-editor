@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ffi::OsStr, fs};
+use std::{collections::HashMap, ffi::OsStr, fs, os::fd::AsRawFd};
 
 use btree_slab::{
   BTreeMap,
@@ -93,6 +93,47 @@ impl INotifyWatcher {
         }
       }
     }
+  }
+
+  /// Spawns a background thread that blocks until inotify events are ready,
+  /// then calls `waker`. Events are not consumed -- the main thread must still
+  /// call `poll()` to drain them. The thread exits when the fd is closed.
+  pub fn spawn(&self, waker: super::Waker) {
+    let fd = self.inotify.as_raw_fd();
+    // dup() so the thread owns a valid fd for the lifetime of the thread,
+    // independent of when the original Inotify is dropped.
+    let dup_fd = unsafe { libc::dup(fd) };
+    if dup_fd < 0 {
+      error!("inotify spawn: dup failed: {}", std::io::Error::last_os_error());
+      return;
+    }
+
+    std::thread::Builder::new()
+      .name("inotify-waker".into())
+      .spawn(move || {
+        loop {
+          // poll() checks readability without consuming events.
+          let mut pfd = libc::pollfd { fd: dup_fd, events: libc::POLLIN, revents: 0 };
+          let ret = unsafe { libc::poll(&mut pfd, 1, -1) };
+          if ret < 0 {
+            let err = std::io::Error::last_os_error();
+            if err.kind() == std::io::ErrorKind::Interrupted {
+              continue;
+            }
+            error!("inotify waker poll error: {}", err);
+            break;
+          }
+          if pfd.revents & libc::POLLNVAL != 0 {
+            warn!("inotify waker: fd closed");
+            break; // fd was closed
+          }
+          if pfd.revents & libc::POLLIN != 0 {
+            waker();
+          }
+        }
+        unsafe { libc::close(dup_fd) };
+      })
+      .unwrap();
   }
 
   /// Removes the watch and all children watches from `root`.

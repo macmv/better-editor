@@ -15,7 +15,11 @@ pub type Waker = Box<dyn Fn() + Send + Sync>;
 #[allow(unreachable_code)]
 pub fn default_watcher(root: &WorkspaceRoot, waker: Waker) -> Box<dyn Watcher> {
   #[cfg(target_os = "linux")]
-  return Box::new(INotifyWatcher::new(root));
+  {
+    let w = INotifyWatcher::new(root);
+    w.spawn(waker);
+    return Box::new(w);
+  }
 
   #[cfg(target_os = "macos")]
   return Box::new(FSEventsWatcher::new(root, waker));

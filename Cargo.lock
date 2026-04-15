@@ -245,6 +245,7 @@ dependencies = [
  "dispatch2",
  "expect-test",
  "inotify",
+ "libc",
  "log",
  "objc2-core-foundation",
  "objc2-core-services",
