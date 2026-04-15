@@ -480,7 +480,7 @@ impl EditorView {
     }
 
     if self.editor.unsaved() {
-      let center = (render.size().width - 70.0, render.size().height - line_height / 2.0);
+      let center = (render.size().width - 30.0, render.size().height - line_height / 2.0);
       render.fill(&Circle::new(center, 4.0), render.theme().text);
     }
 
