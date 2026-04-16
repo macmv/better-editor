@@ -58,6 +58,7 @@ impl TerminalView {
       Action::Move { count: _, m: Move::Single(Direction::Down) } => self.terminal.perform_down(),
       Action::Move { count: _, m: Move::Single(Direction::Left) } => self.terminal.perform_left(),
       Action::Move { count: _, m: Move::Single(Direction::Right) } => self.terminal.perform_right(),
+      Action::Edit { count: _, e: Edit::Insert('\n') } => self.terminal.perform_input('\r'),
       Action::Edit { count: _, e: Edit::Insert(c) } => self.terminal.perform_input(c),
       Action::Edit { count: _, e: Edit::Backspace } => self.terminal.perform_backspace(),
       Action::Edit { count: _, e: Edit::Delete(_) } => self.terminal.perform_delete(),
