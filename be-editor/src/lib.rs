@@ -648,8 +648,10 @@ impl EditorState {
         vec![(self.doc.byte_of_line(start), self.doc.byte_of_line_end(end))]
       }
       Mode::Visual(VisualMode::Block) => {
-        let start_column = self.cursor.target_column.min(selection.anchor().target_column);
-        let end_column = self.cursor.target_column.max(selection.anchor().target_column);
+        let start_column =
+          self.doc.visual_column(self.cursor).min(self.doc.visual_column(selection.anchor()));
+        let end_column =
+          self.doc.visual_column(self.cursor).max(self.doc.visual_column(selection.anchor()));
 
         (self.doc.line_of_byte(start_offset).0..=self.doc.line_of_byte(end_offset).0)
           .map(|line| {
