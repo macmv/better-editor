@@ -148,9 +148,13 @@ impl Action {
 
         (Mode::Visual(_), Key::Escape) => Ok(Action::SetMode { mode: Mode::Normal, delta: 0 }),
 
+        (Mode::Normal, Key::Char('0')) if count != 0 => {
+          count *= 10;
+          continue;
+        }
         (Mode::Normal, Key::Char(c @ '1'..='9')) => {
+          count *= 10;
           count += u32::from(c) - u32::from('0');
-
           continue;
         }
 
