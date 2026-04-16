@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashSet, ops::Range, path::PathBuf, rc::Rc
 use be_config::{Config, LanguageName};
 use be_doc::{Change, Column, Cursor, Document, Edit, Line, crop::RopeSlice};
 use be_git::{LineDiffSimilarity, Repo};
-use be_input::{Action, Clipboard, Direction, Mode, Move, VerticalDirection};
+use be_input::{Action, Clipboard, Direction, Mode, Move, VerticalDirection, VisualMode};
 use be_shared::SharedHandle;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -625,6 +625,57 @@ impl EditorState {
     self.search_text = None;
     self.damage_all = true;
     self.status = None;
+  }
+
+  /// Returns inclusive ranges. The `RangeInclusive` type is kinda annoying so
+  /// I'm just returning tuples.
+  //
+  // TODO: Add a Span type or something for this.
+  pub fn selection_ranges(&self) -> Vec<(usize, usize)> {
+    let Some(selection) = &self.selection else { return vec![] };
+
+    let cursor_offset = self.doc.cursor_offset(self.cursor);
+    let anchor_offset = self.doc.cursor_offset(selection.anchor());
+    let start_offset = cursor_offset.min(anchor_offset);
+    let end_offset = cursor_offset.max(anchor_offset);
+
+    match self.mode {
+      Mode::Visual(VisualMode::Character) => vec![(start_offset, end_offset)],
+      Mode::Visual(VisualMode::Line) => {
+        let start = self.doc.line_of_byte(start_offset);
+        let end = self.doc.line_of_byte(end_offset);
+
+        vec![(self.doc.byte_of_line(start), self.doc.byte_of_line_end(end))]
+      }
+      Mode::Visual(VisualMode::Block) => {
+        let start_column = self.cursor.target_column.min(selection.anchor().target_column);
+        let end_column = self.cursor.target_column.max(selection.anchor().target_column);
+
+        (self.doc.line_of_byte(start_offset).0..=self.doc.line_of_byte(end_offset).0)
+          .map(|line| {
+            let line = Line(line);
+
+            let start = self.doc.cursor_offset(Cursor {
+              line,
+              column: self.doc.column_from_visual(line, start_column),
+              target_column: be_doc::VisualColumn(0),
+            });
+            let end = self.doc.cursor_offset(Cursor {
+              line,
+              column: self.doc.column_from_visual(line, end_column),
+              target_column: be_doc::VisualColumn(0),
+            });
+
+            (start, end)
+          })
+          .collect()
+      }
+
+      _ => {
+        fatal!("cannot have a selection without being in visual mode");
+        vec![]
+      }
+    }
   }
 }
 
