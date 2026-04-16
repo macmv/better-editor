@@ -389,19 +389,10 @@ impl EditorView {
 
     let start_y = -(self.scroll.y % line_height);
 
-    if let Some(selection) = self.editor.selection() {
-      let anchor = selection.anchor();
-      let cursor = self.editor.cursor();
-
-      let (start, end) = if cursor.line > anchor.line {
-        (anchor, cursor)
-      } else if cursor.line < anchor.line {
-        (cursor, anchor)
-      } else if cursor.column > anchor.column {
-        (anchor, cursor)
-      } else {
-        (cursor, anchor)
-      };
+    let ranges = self.editor.selection_ranges();
+    for (start, end) in ranges {
+      let start = self.editor.doc().offset_to_cursor(start);
+      let end = self.editor.doc().offset_to_cursor(end);
 
       for line in start.line.as_usize()..=end.line.as_usize() {
         let layout = &self.cached_layouts[&line];
