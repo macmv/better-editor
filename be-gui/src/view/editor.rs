@@ -395,7 +395,10 @@ impl EditorView {
       let end = self.editor.doc().offset_to_cursor(end);
 
       for line in start.line.as_usize()..=end.line.as_usize() {
-        let layout = &self.cached_layouts[&line];
+        let Some(layout) = &self.cached_layouts.get(&line) else {
+          fatal!("no cached layout found for line {line}");
+          continue;
+        };
 
         if line >= self.min_line.as_usize() && line <= self.max_line.as_usize() {
           let start_column =
