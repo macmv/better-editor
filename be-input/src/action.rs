@@ -186,13 +186,22 @@ impl Action {
         (Mode::Normal, Key::Char('a')) => Ok(Action::SetMode { mode: Mode::Insert, delta: 1 }),
         (Mode::Normal, Key::Char('o')) => Ok(Action::Append { after: true }),
         (Mode::Normal, Key::Char('O')) => Ok(Action::Append { after: false }),
-        (Mode::Normal, Key::Char('v')) if key.control => {
+        (Mode::Visual(VisualMode::Block), Key::Char('v')) if key.control => {
+          Ok(Action::SetMode { mode: Mode::Normal, delta: 0 })
+        }
+        (Mode::Normal | Mode::Visual(_), Key::Char('v')) if key.control => {
           Ok(Action::SetMode { mode: Mode::Visual(VisualMode::Block), delta: 0 })
         }
-        (Mode::Normal, Key::Char('v')) => {
+        (Mode::Visual(VisualMode::Character), Key::Char('v')) => {
+          Ok(Action::SetMode { mode: Mode::Normal, delta: 0 })
+        }
+        (Mode::Normal | Mode::Visual(_), Key::Char('v')) => {
           Ok(Action::SetMode { mode: Mode::Visual(VisualMode::Character), delta: 0 })
         }
-        (Mode::Normal, Key::Char('V')) => {
+        (Mode::Visual(VisualMode::Line), Key::Char('V')) => {
+          Ok(Action::SetMode { mode: Mode::Normal, delta: 0 })
+        }
+        (Mode::Normal | Mode::Visual(_), Key::Char('V')) => {
           Ok(Action::SetMode { mode: Mode::Visual(VisualMode::Line), delta: 0 })
         }
         (Mode::Normal, Key::Char('R')) => Ok(Action::SetMode { mode: Mode::Replace, delta: 0 }),
