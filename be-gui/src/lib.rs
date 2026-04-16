@@ -529,12 +529,20 @@ impl State {
             self.views.views.remove(&active_view);
           }
           "e" => {
-            if let Some(editor) = self.active_editor() {
-              let _ = editor.open(std::path::Path::new(args), &mut store.workspace);
-              /*
-              .map(|()| format!("{}: opened",
-              self.file.as_ref().unwrap().path().display()));
-              */
+            if args.is_empty() {
+              if let Some(editor) = self.active_editor() {
+                if let Some(path) = editor.editor.file().map(|p| p.to_path_buf()) {
+                  let _ = editor.editor.open(&path);
+                }
+              }
+            } else {
+              let path = std::path::Path::new(args);
+              let path = if path.is_absolute() {
+                path.to_path_buf()
+              } else {
+                store.workspace.root.as_path().join(path)
+              };
+              self.open(&path, None, &mut store.workspace);
             }
           }
           "noh" => {
