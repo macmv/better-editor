@@ -289,7 +289,9 @@ impl EditorState {
     }
 
     if matches!(m, Mode::Visual(_)) {
-      self.selection = Some(Selection { anchor: self.cursor });
+      if self.selection.is_none() {
+        self.selection = Some(Selection { anchor: self.cursor });
+      }
     } else {
       self.selection = None;
     }
