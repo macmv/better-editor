@@ -29,6 +29,9 @@ pub use widget::{Widget, WidgetStore};
 #[macro_use]
 extern crate log;
 
+#[macro_use]
+extern crate be_macros;
+
 struct State {
   keys:   Vec<KeyStroke>,
   active: usize,

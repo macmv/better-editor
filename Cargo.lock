@@ -277,6 +277,7 @@ dependencies = [
  "be-icon-importer",
  "be-input",
  "be-lsp",
+ "be-macros",
  "be-shared",
  "be-terminal",
  "be-workspace",

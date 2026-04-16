@@ -15,6 +15,7 @@ winit = "0.30.12"
 skrifa = { version = "0.37", default-features = false }
 
 be-doc = { path = "../be-doc" }
+be-macros = { path = "../be-macros" }
 be-shared = { version = "0.1.0", path = "../be-shared" }
 be-config = { path = "../be-config" }
 be-input = { path = "../be-input" }

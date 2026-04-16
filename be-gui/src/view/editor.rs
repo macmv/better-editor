@@ -442,7 +442,10 @@ impl EditorView {
 
     if let Some(mode) = self.cursor_mode() {
       let line = self.cursor().line.as_usize();
-      let layout = &self.cached_layouts[&line];
+      let Some(layout) = &self.cached_layouts.get(&line) else {
+        fatal!("no cached layout found for line {line}");
+        return;
+      };
 
       if line >= self.min_line.as_usize() && line <= self.max_line.as_usize() {
         let cursor = layout.cursor(self.doc().cursor_column_offset(self.cursor()), mode)
