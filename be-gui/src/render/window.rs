@@ -162,7 +162,7 @@ impl winit::application::ApplicationHandler<Event> for App {
         if let Some(init) = &mut self.init
           && let Some(key) = init.keys.parse_key(key)
         {
-          init.app.state.on_key(key);
+          init.app.state.on_key(key, &mut init.app.store);
           init.window.request_redraw();
         }
       }

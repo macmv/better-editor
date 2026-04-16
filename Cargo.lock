@@ -313,6 +313,9 @@ dependencies = [
 [[package]]
 name = "be-input"
 version = "0.1.0"
+dependencies = [
+ "be-config",
+]
 
 [[package]]
 name = "be-lsp"

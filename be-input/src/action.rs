@@ -1,6 +1,7 @@
 use std::num::NonZero;
 
 use crate::{KeyStroke, Mode, VisualMode, key::Key};
+use be_config::Axis;
 
 pub enum Action {
   SetMode { mode: Mode, delta: i32 },
@@ -21,6 +22,7 @@ pub enum Action {
 pub enum Navigation {
   OpenSearch,
   Direction(Direction),
+  Split(Axis),
   Tab(u8),
 }
 
@@ -113,6 +115,8 @@ impl Action {
           Key::Char('j') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Down) }),
           Key::Char('k') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Up) }),
           Key::Char('l') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Right) }),
+          Key::Char('v') => Ok(Action::Navigate { nav: Navigation::Split(Axis::Vertical) }),
+          Key::Char('f') => Ok(Action::Navigate { nav: Navigation::Split(Axis::Horizontal) }),
           Key::Char(c @ '0'..='9') => Ok(Action::Navigate { nav: Navigation::Tab(c as u8 - b'0') }),
           _ => Err(ActionError::Unrecognized),
         },

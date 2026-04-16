@@ -52,7 +52,7 @@ pub struct SplitSettings {
   pub children: Vec<TabSettings>,
 }
 
-#[derive(Default, Clone, Config, serde::Deserialize)]
+#[derive(Default, Debug, Clone, Config, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Axis {
   #[default]

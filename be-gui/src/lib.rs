@@ -387,7 +387,7 @@ impl State {
     self.views.get_mut(self.tabs[self.active].content.active()).unwrap()
   }
 
-  fn on_key(&mut self, key: KeyStroke) {
+  fn on_key(&mut self, key: KeyStroke, store: &mut RenderStore) {
     self.keys.push(key);
 
     let temporary_underline = self.keys.len() == 1
@@ -399,7 +399,7 @@ impl State {
 
     match Action::from_input(self.mode(), &self.keys) {
       Ok(action) => {
-        self.perform_action(action);
+        self.perform_action(action, store);
         self.keys.clear();
       }
       Err(be_input::ActionError::Unrecognized) => self.keys.clear(),
@@ -410,7 +410,7 @@ impl State {
   fn active_tab(&self) -> &Tab { &self.tabs[self.active] }
   fn active_tab_mut(&mut self) -> &mut Tab { &mut self.tabs[self.active] }
 
-  fn perform_action(&mut self, action: Action) {
+  fn perform_action(&mut self, action: Action, store: &mut RenderStore) {
     match action {
       Action::Navigate { nav: Navigation::Tab(i) } => {
         let new_index = (i as usize).clamp(0, self.tabs.len() - 1);
@@ -444,6 +444,18 @@ impl State {
       Action::Navigate { nav: Navigation::OpenSearch } => {
         self.active_tab_mut().popup =
           Some(view::Popup::Search(view::Search::new(self.notify.clone())));
+      }
+      Action::Navigate { nav: Navigation::Split(axis) } => {
+        let new_view = self.split_active_view(store);
+        self.tabs[self.active].content.split(
+          match axis {
+            be_config::Axis::Horizontal => kurbo::Axis::Horizontal,
+            be_config::Axis::Vertical => kurbo::Axis::Vertical,
+          },
+          &mut self.views.views,
+          store,
+          new_view,
+        );
       }
       Action::SetMode { mode: be_input::Mode::Command, .. } => {
         self.active_tab_mut().popup =
