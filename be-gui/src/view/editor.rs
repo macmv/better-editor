@@ -400,13 +400,23 @@ impl EditorView {
           fatal!("no cached layout found for line {line}");
           continue;
         };
+        let line = be_doc::Line(line);
+
+        if self.editor.doc().line(line).is_empty() {
+          continue;
+        }
 
         let start_column =
-          if line == start.line.as_usize() { self.doc().cursor_column_offset(start) } else { 0 };
-        let end_column = if line == end.line.as_usize() {
-          self.doc().cursor_column_offset(end)
+          if line == start.line { self.doc().cursor_column_offset(start) } else { 0 };
+        let end_column = if line == end.line {
+          self.doc().cursor_column_offset(be_doc::Cursor {
+            column: end.column.clamp(be_doc::Column(
+              self.editor.doc().line(end.line).graphemes().count().saturating_sub(1),
+            )),
+            ..end
+          })
         } else {
-          self.doc().line(be_doc::Line(line)).byte_len().saturating_sub(1)
+          self.doc().line(line).byte_len().saturating_sub(1)
         };
 
         let start_x = layout.cursor(start_column, CursorMode::Block).x0;
@@ -414,9 +424,9 @@ impl EditorView {
         render.fill(
           &Rect::new(
             self.gutter_width() + start_x - self.scroll.x,
-            line as f64 * line_height - self.scroll.y,
+            line.as_usize() as f64 * line_height - self.scroll.y,
             self.gutter_width() + end_x - self.scroll.x,
-            (line + 1) as f64 * line_height - self.scroll.y,
+            (line.as_usize() + 1) as f64 * line_height - self.scroll.y,
           ),
           render.theme().background_raised_outline,
         );
