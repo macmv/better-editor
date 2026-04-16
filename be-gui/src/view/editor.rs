@@ -413,10 +413,10 @@ impl EditorView {
         let end_x = layout.cursor(end_column, CursorMode::Block).x1;
         render.fill(
           &Rect::new(
-            self.gutter_width() + start_x,
-            start_y + line as f64 * line_height,
-            self.gutter_width() + end_x,
-            start_y + (line + 1) as f64 * line_height,
+            self.gutter_width() + start_x - self.scroll.x,
+            line as f64 * line_height - self.scroll.y,
+            self.gutter_width() + end_x - self.scroll.x,
+            (line + 1) as f64 * line_height - self.scroll.y,
           ),
           render.theme().background_raised_outline,
         );
