@@ -152,24 +152,33 @@ impl LspClient {
     let task = Task::new();
 
     let completer = task.completer();
-    self
-      .tx
-      .send(LspRequest::Request(
-        Request {
-          id:     self.next_id,
-          method: T::METHOD,
-          params: RawValue::from_string(serde_json::to_string(&req).unwrap()).unwrap(),
-        },
-        Box::new(move |value| {
-          let result = serde_json::from_str(&value.get()).unwrap();
-          match completer.complete(result) {
-            Ok(()) => {}
-            Err(_) => {} // already completed. this is probably an error
+    let msg = LspRequest::Request(
+      Request {
+        id:     self.next_id,
+        method: T::METHOD,
+        params: RawValue::from_string(serde_json::to_string(&req).expect("serialize request"))
+          .expect("valid json"),
+      },
+      Box::new(move |value| {
+        let result = match serde_json::from_str(&value.get()) {
+          Ok(r) => r,
+          Err(e) => {
+            error!("failed to deserialize LSP response for {}: {}", T::METHOD, e);
+            return;
           }
-        }),
-      ))
-      .unwrap();
-    self.poller.notify().unwrap();
+        };
+        match completer.complete(result) {
+          Ok(()) => {}
+          Err(_) => {}
+        }
+      }),
+    );
+
+    if let Err(e) = self.tx.send(msg) {
+      error!("LSP worker is dead, dropping request {}: {}", T::METHOD, e);
+    } else if let Err(e) = self.poller.notify() {
+      error!("LSP poller notify failed: {}", e);
+    }
 
     self.next_id += 1;
 
@@ -177,14 +186,17 @@ impl LspClient {
   }
 
   pub fn notify<T: lsp::notification::Notification>(&mut self, req: T::Params) {
-    self
-      .tx
-      .send(LspRequest::Notification(Notification {
-        method: T::METHOD,
-        params: RawValue::from_string(serde_json::to_string(&req).unwrap()).unwrap(),
-      }))
-      .unwrap();
-    self.poller.notify().unwrap();
+    let msg = LspRequest::Notification(Notification {
+      method: T::METHOD,
+      params: RawValue::from_string(serde_json::to_string(&req).expect("serialize notification"))
+        .expect("valid json"),
+    });
+
+    if let Err(e) = self.tx.send(msg) {
+      error!("LSP worker is dead, dropping notification {}: {}", T::METHOD, e);
+    } else if let Err(e) = self.poller.notify() {
+      error!("LSP poller notify failed: {}", e);
+    }
   }
 
   pub fn shutdown(mut self) {
@@ -203,17 +215,25 @@ impl LspClient {
     }
 
     let thread = unsafe { ManuallyDrop::take(&mut self.worker_thread) };
-    thread.join().unwrap();
+    if let Err(e) = thread.join() {
+      error!("LSP worker thread panicked on shutdown: {:?}", e);
+    }
   }
 }
 
 impl LspWorker {
   pub fn run(mut self) {
+    if let Err(e) = self.run_inner() {
+      error!("LSP worker exited with error: {}", e);
+    }
+  }
+
+  fn run_inner(&mut self) -> io::Result<()> {
     const READ: usize = 0;
     const WRITE: usize = 1;
 
-    be_async::set_nonblocking(&self.reader.reader).unwrap();
-    be_async::set_nonblocking(&self.writer.writer).unwrap();
+    be_async::set_nonblocking(&self.reader.reader)?;
+    be_async::set_nonblocking(&self.writer.writer)?;
 
     // SAFETY: These are removed down below.
     unsafe {
@@ -234,41 +254,50 @@ impl LspWorker {
     'outer: loop {
       let mut events = Events::new();
 
-      self.poller.wait(&mut events, Some(std::time::Duration::from_millis(10000))).unwrap();
+      self.poller.wait(&mut events, Some(std::time::Duration::from_millis(10000)))?;
       for ev in events.iter() {
         match ev.key {
-          READ => {
-            while let Some(msg) = self.reader.recv() {
-              match msg {
-                Message::Request { id, method, params } => {
-                  let res = self.handle_request(&method, params);
-                  if let Some(res) = res {
-                    self.writer.response(id, &res);
+          READ => loop {
+            match self.reader.recv() {
+              Ok(Some(msg)) => {
+                match msg {
+                  Message::Request { id, method, params } => {
+                    let res = self.handle_request(&method, params);
+                    if let Some(res) = res {
+                      self.writer.response(id, &res)?;
+                    }
+                  }
+                  Message::Notification { method, params } => {
+                    self.handle_notification(&method, params);
+                  }
+                  Message::Response { id, result, .. } => {
+                    if let Some(completer) = self.pending.remove(&id) {
+                      completer(&result);
+                    }
+                  }
+                  Message::Error { id, .. } => {
+                    if let Some(_) = self.pending.remove(&id) {
+                      warn!("LSP error response for request {}", id);
+                    }
                   }
                 }
-                Message::Notification { method, params } => {
-                  self.handle_notification(&method, params);
-                }
-                Message::Response { id, result, .. } => {
-                  if let Some(completer) = self.pending.remove(&id) {
-                    completer(&result);
-                  }
-                }
-                Message::Error { id, .. } => {
-                  if let Some(_) = self.pending.remove(&id) {
-                    println!("error: {id}");
-                  }
-                }
-              }
 
-              self.on_message.lock()();
+                self.on_message.lock()();
+              }
+              Ok(None) => break,
+              Err(e) => {
+                error!("LSP connection error: {}", e);
+                break 'outer;
+              }
             }
-          }
+          },
           WRITE => {
             // TODO
           }
 
-          _ => panic!("unexpected event"),
+          _ => {
+            warn!("unexpected polling event key: {}", ev.key);
+          }
         }
       }
 
@@ -276,24 +305,26 @@ impl LspWorker {
         match self.rx.try_recv() {
           Ok(LspRequest::Request(req, completer)) => {
             self.pending.insert(req.id, completer);
-            self.writer.request(req);
+            self.writer.request(req)?;
           }
-          Ok(LspRequest::Notification(req)) => self.writer.notify(req),
+          Ok(LspRequest::Notification(req)) => self.writer.notify(req)?,
           Err(crossbeam_channel::TryRecvError::Empty) => break,
           Err(crossbeam_channel::TryRecvError::Disconnected) => break 'outer,
         }
       }
     }
 
-    self.poller.delete(&self.reader.reader).unwrap();
-    self.poller.delete(&self.writer.writer).unwrap();
+    let _ = self.poller.delete(&self.reader.reader);
+    let _ = self.poller.delete(&self.writer.writer);
+
+    Ok(())
   }
 }
 
 impl Writer {
   fn new(stdin: ChildStdin) -> Writer { Writer { writer: stdin } }
 
-  fn request(&mut self, request: Request) {
+  fn request(&mut self, request: Request) -> io::Result<()> {
     #[derive(serde::Serialize)]
     struct Request {
       jsonrpc: &'static str,
@@ -308,12 +339,13 @@ impl Writer {
       method:  request.method,
       params:  request.params,
     })
-    .unwrap();
+    .expect("serialize request");
 
-    write!(self.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content).unwrap();
+    write!(self.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content)?;
+    Ok(())
   }
 
-  fn response(&mut self, id: u64, result: &RawValue) {
+  fn response(&mut self, id: u64, result: &RawValue) -> io::Result<()> {
     #[derive(serde::Serialize)]
     struct Response<'a> {
       jsonrpc: &'static str,
@@ -321,12 +353,14 @@ impl Writer {
       result:  &'a RawValue,
     }
 
-    let content = serde_json::to_string(&Response { jsonrpc: "2.0", id, result }).unwrap();
+    let content =
+      serde_json::to_string(&Response { jsonrpc: "2.0", id, result }).expect("serialize response");
 
-    write!(self.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content).unwrap();
+    write!(self.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content)?;
+    Ok(())
   }
 
-  fn notify(&mut self, req: Notification) {
+  fn notify(&mut self, req: Notification) -> io::Result<()> {
     #[derive(serde::Serialize)]
     struct Notification {
       jsonrpc: &'static str,
@@ -339,9 +373,10 @@ impl Writer {
       method:  req.method,
       params:  req.params,
     })
-    .unwrap();
+    .expect("serialize notification");
 
-    write!(self.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content).unwrap();
+    write!(self.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content)?;
+    Ok(())
   }
 }
 
@@ -356,30 +391,35 @@ pub enum Message {
 impl Reader {
   fn new(stdout: ChildStdout) -> Reader { Reader { reader: stdout, read: VecDeque::new() } }
 
-  fn recv(&mut self) -> Option<Message> {
-    if let Some(msg) = self.decode() {
-      return Some(msg);
+  fn recv(&mut self) -> io::Result<Option<Message>> {
+    if let Some(msg) = self.decode()? {
+      return Ok(Some(msg));
     }
 
     loop {
       let mut buf = [0u8; 1024];
       match self.reader.read(&mut buf) {
-        Ok(0) => panic!("EOF"),
+        Ok(0) => {
+          return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "LSP server closed connection"));
+        }
         Ok(n) => self.read.extend(&buf[..n]),
         Err(e) if e.kind() == io::ErrorKind::WouldBlock => break,
-        Err(e) => panic!("{}", e),
+        Err(e) => return Err(e),
       }
     }
 
     self.decode()
   }
 
-  fn decode(&mut self) -> Option<Message> {
+  fn decode(&mut self) -> io::Result<Option<Message>> {
     let mut iter = self.read.iter();
     let mut prev = 0;
     let mut len = None;
     loop {
-      let terminator = iter.position(|c| *c == b'\n')? + 1;
+      let Some(pos) = iter.position(|c| *c == b'\n') else {
+        return Ok(None);
+      };
+      let terminator = pos + 1;
 
       let header = self.read.range(prev..prev + terminator).copied().collect::<Vec<u8>>();
       let header = String::from_utf8_lossy(&header);
@@ -396,23 +436,26 @@ impl Reader {
 
       match key {
         "Content-Length" => {
-          len = Some(value.parse::<u32>().unwrap());
+          len =
+            Some(value.parse::<u32>().map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?);
         }
 
         _ => {}
       }
     }
 
-    let Some(len) = len else { return None };
+    let Some(len) = len else { return Ok(None) };
 
     if self.read.len() < prev + len as usize {
-      return None;
+      return Ok(None);
     }
 
     self.read.drain(..prev);
     let msg = self.read.drain(..len as usize).collect::<Vec<u8>>();
 
-    Some(serde_json::from_slice::<Message>(&msg).unwrap())
+    serde_json::from_slice::<Message>(&msg)
+      .map(Some)
+      .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
   }
 }
 

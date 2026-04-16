@@ -400,13 +400,22 @@ impl LspWorker {
         f: fn(&mut LspState, R::Params) -> R::Result,
       ) -> &mut Self {
         if self.method == R::METHOD {
-          let params =
-            serde_json::from_str::<R::Params>(self.params.as_ref().unwrap().get()).unwrap();
+          let Some(raw) = self.params.as_ref() else {
+            warn!("request {} has no params", R::METHOD);
+            return self;
+          };
+          let params = match serde_json::from_str::<R::Params>(raw.get()) {
+            Ok(p) => p,
+            Err(e) => {
+              warn!("failed to deserialize params for {}: {}", R::METHOD, e);
+              return self;
+            }
+          };
 
           let result = f(&mut self.worker.state.lock(), params);
 
           self.result =
-            Some(RawValue::from_string(serde_json::to_string(&result).unwrap()).unwrap());
+            RawValue::from_string(serde_json::to_string(&result).expect("serialize result")).ok();
         }
 
         self
@@ -438,8 +447,17 @@ impl LspWorker {
         f: fn(&mut LspState, R::Params),
       ) -> &mut Self {
         if self.method == R::METHOD {
-          let params =
-            serde_json::from_str::<R::Params>(self.params.as_ref().unwrap().get()).unwrap();
+          let Some(raw) = self.params.as_ref() else {
+            warn!("notification {} has no params", R::METHOD);
+            return self;
+          };
+          let params = match serde_json::from_str::<R::Params>(raw.get()) {
+            Ok(p) => p,
+            Err(e) => {
+              warn!("failed to deserialize params for {}: {}", R::METHOD, e);
+              return self;
+            }
+          };
 
           f(&mut self.worker.state.lock(), params);
 
@@ -474,7 +492,13 @@ fn on_work_done_progress_create(state: &mut LspState, params: lsp::WorkDoneProgr
 }
 
 fn on_publish_diagnostics(state: &mut LspState, params: lsp::PublishDiagnosticsParams) {
-  let path = params.uri.to_file_path().unwrap();
+  let path = match params.uri.to_file_path() {
+    Some(p) => p,
+    None => {
+      warn!("publish diagnostics: URI is not a file path: {}", params.uri);
+      return;
+    }
+  };
 
   let encoding = state.position_encoding();
   let Some(file) = state.file_mut(&path) else { return };
@@ -496,7 +520,13 @@ fn on_publish_diagnostics(state: &mut LspState, params: lsp::PublishDiagnosticsP
 }
 
 fn on_progress(state: &mut LspState, params: lsp::ProgressParams) {
-  let work = serde_json::from_str::<lsp::WorkDoneProgress>(params.value.get()).unwrap();
+  let work = match serde_json::from_str::<lsp::WorkDoneProgress>(params.value.get()) {
+    Ok(w) => w,
+    Err(e) => {
+      warn!("failed to parse progress params: {}", e);
+      return;
+    }
+  };
 
   let token = match params.token {
     lsp::ProgressToken::Integer(n) => n.to_string(),
