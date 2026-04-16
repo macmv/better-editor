@@ -339,6 +339,7 @@ fn word_kind(c: char) -> WordKind {
 mod tests {
   use crate::tests::*;
   use be_input::Move;
+  use std::num::NonZero;
 
   #[test]
   fn next_word() {
@@ -481,6 +482,18 @@ mod tests {
       fn foo{
       ⟦ ⟧ bar
       }
+    "#]);
+  }
+
+  #[test]
+  fn goto_line() {
+    let mut editor = editor("1\n2\n3\n4\n");
+    editor.perform_move(Move::FileEnd, Some(NonZero::new(2).unwrap()));
+    editor.check(expect![@r#"
+      1
+      ⟦2⟧
+      3
+      4
     "#]);
   }
 }
