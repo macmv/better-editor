@@ -276,7 +276,8 @@ impl TerminalView {
 
     let mut prev = 0;
     for ((foreground, style), i) in line.specific_styles(|j, s| {
-      let foreground = if self.inverted_at(i, j) {
+      let invert = self.selection_inverted_at(i, j) ^ s.flags.contains(StyleFlags::INVERSE);
+      let foreground = if invert {
         Some(terminal_color(theme, s.background).unwrap_or(theme.background))
       } else {
         terminal_color(theme, s.foreground)
@@ -301,7 +302,8 @@ impl TerminalView {
     let mut background = vec![];
     let mut prev = 0.0;
     for (color, i) in line.specific_styles(|j, s| {
-      if self.inverted_at(i, j) {
+      let invert = self.selection_inverted_at(i, j) ^ s.flags.contains(StyleFlags::INVERSE);
+      if invert {
         Some(terminal_color(&render.store.theme, s.foreground).unwrap_or(render.store.theme.text))
       } else {
         terminal_color(&render.store.theme, s.background)
@@ -332,7 +334,7 @@ impl TerminalView {
     }
   }
 
-  fn inverted_at(&self, row: usize, col: usize) -> bool {
+  fn selection_inverted_at(&self, row: usize, col: usize) -> bool {
     if let Some((start, end)) = self.selection {
       if row < start.row || row > end.row {
         false
