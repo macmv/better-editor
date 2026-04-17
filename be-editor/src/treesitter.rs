@@ -126,7 +126,9 @@ impl EditorState {
       highlighter
         .parser
         .parse_with_options(
-          &mut |i, _| self.doc.range(i..).chunks().next().unwrap_or(""),
+          &mut |i, _| {
+            if i >= self.doc.len() { "" } else { self.doc.range(i..).chunks().next().unwrap_or("") }
+          },
           highlighter.tree.as_ref(),
           None,
         )
@@ -141,7 +143,9 @@ impl Highlighter {
       self
         .parser
         .parse_with_options(
-          &mut |i, _| doc.range(i..).chunks().next().unwrap_or(""),
+          &mut |i, _| {
+            if i >= doc.len() { "" } else { doc.range(i..).chunks().next().unwrap_or("") }
+          },
           self.tree.as_ref(),
           None,
         )
