@@ -29,7 +29,7 @@ impl GitRepo {
     let entry = head.get_path(rel).ok()?;
     let blob = self.repo.find_blob(entry.id()).unwrap();
 
-    Some(Document { rope: be_doc::crop::Rope::from(String::from_utf8_lossy(blob.content())) })
+    Some(Document::from(String::from_utf8_lossy(blob.content())))
   }
 
   pub fn is_ignored(&self, path: &Path) -> Result<bool, git2::Error> {

@@ -19,7 +19,7 @@ extern crate be_macros;
 
 #[derive(Default, Clone)]
 pub struct Document {
-  pub rope: Rope,
+  rope: Rope,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -43,6 +43,9 @@ pub struct VisualColumn(pub usize);
 
 impl From<&str> for Document {
   fn from(s: &str) -> Document { Document { rope: Rope::from(s) } }
+}
+impl From<std::borrow::Cow<'_, str>> for Document {
+  fn from(s: std::borrow::Cow<'_, str>) -> Document { Document { rope: Rope::from(s) } }
 }
 
 impl Cursor {
@@ -75,6 +78,11 @@ impl fmt::Debug for Document {
 impl Document {
   pub fn new() -> Document { Document { rope: Rope::new() } }
 
+  pub fn len(&self) -> usize { self.rope.byte_len() }
+
+  // TODO: Should Document impl Display?
+  pub fn to_string(&self) -> String { self.rope.to_string() }
+
   #[track_caller]
   pub fn line(&self, line: Line) -> RopeSlice<'_> {
     if line.0 >= self.len_lines() {
@@ -84,6 +92,8 @@ impl Document {
 
     self.rope.line(line.0)
   }
+
+  pub fn raw_lines(&self) -> crop::iter::RawLines<'_> { self.rope.raw_lines() }
 
   #[track_caller]
   pub fn line_with_terminator(&self, line: Line) -> RopeSlice<'_> {

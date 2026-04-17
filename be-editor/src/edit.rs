@@ -58,7 +58,7 @@ impl EditorState {
           if self.cursor.line == 0 {
             self.doc.byte_of_line_end(self.cursor.line)
           } else {
-            self.doc.rope.byte_len()
+            self.doc.len()
           }
         } else {
           self.doc.byte_of_line(self.cursor.line + 1)

@@ -227,7 +227,7 @@ impl EditorView {
         } else {
           let line = self
             .line_for_mouse(store, pos.y)
-            .unwrap_or_else(|| be_doc::Line(self.doc().rope.lines().len().saturating_sub(1)));
+            .unwrap_or_else(|| be_doc::Line(self.doc().len_lines().saturating_sub(1)));
           let Some(layout) = self.cached_layouts.get(&line.0) else {
             return crate::CursorKind::Default;
           };
@@ -291,7 +291,7 @@ impl EditorView {
 
     let line_region_y = self.scroll.y + y;
     let line = (line_region_y / line_height).floor() as usize;
-    if line < self.doc().rope.lines().len() { Some(be_doc::Line(line)) } else { None }
+    if line < self.doc().len_lines() { Some(be_doc::Line(line)) } else { None }
   }
 
   fn layout_editor(&mut self, layout: &mut Layout) {
@@ -309,7 +309,7 @@ impl EditorView {
           .line
           .as_usize()
           .saturating_sub(scroll_offset)
-          .clamp(0, self.doc().rope.lines().len());
+          .clamp(0, self.doc().len_lines());
 
         self.scroll.y = target_line as f64 * line_height;
       } else if self.cursor().line.as_usize() > max_fully_visible_row {
@@ -318,7 +318,7 @@ impl EditorView {
           .line
           .as_usize()
           .saturating_add(scroll_offset + 1)
-          .clamp(0, self.doc().rope.lines().len());
+          .clamp(0, self.doc().len_lines());
 
         self.scroll.y = (target_line as f64 * line_height) - layout.size().height;
       }
@@ -326,16 +326,16 @@ impl EditorView {
 
     self.min_line = be_doc::Line(
       ((self.scroll.y / line_height).floor() as usize)
-        .clamp(0, self.doc().rope.lines().len().saturating_sub(1)),
+        .clamp(0, self.doc().len_lines().saturating_sub(1)),
     );
     self.max_line = be_doc::Line(
       (((self.scroll.y + layout.size().height) / line_height).ceil() as usize)
-        .clamp(0, self.doc().rope.lines().len().saturating_sub(1)),
+        .clamp(0, self.doc().len_lines().saturating_sub(1)),
     );
 
     let start = self.doc().byte_of_line(self.min_line);
     let end = if self.max_line.as_usize() >= self.doc().len_lines() {
-      self.doc().rope.byte_len()
+      self.doc().len()
     } else {
       self.doc().byte_of_line(self.max_line + 1)
     };
@@ -366,7 +366,7 @@ impl EditorView {
       self.line_numbers.push(number_layout);
 
       i += 1;
-      index += self.doc().rope.byte_slice(index..).raw_lines().next().unwrap().byte_len();
+      index += self.doc().range(index..).raw_lines().next().unwrap().byte_len();
     }
 
     if self.focused()
@@ -723,7 +723,7 @@ impl EditorView {
       std::collections::hash_map::Entry::Vacant(entry) => entry,
     };
 
-    let line = self.editor.doc().rope.byte_slice(index..).raw_lines().next()?;
+    let line = self.editor.doc().range(index..).raw_lines().next()?;
     let max_index = index + line.byte_len();
 
     let line_string = line.to_string();

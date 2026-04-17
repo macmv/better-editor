@@ -96,10 +96,10 @@ impl EditorState {
   }
 
   pub(crate) fn offset_to_ts_point(&mut self, offset: usize) -> tree_sitter::Point {
-    let row = self.doc.rope.line_of_byte(offset);
-    let column = offset - self.doc.byte_of_line(be_doc::Line(row));
+    let row = self.doc.line_of_byte(offset);
+    let column = offset - self.doc.byte_of_line(row);
 
-    tree_sitter::Point { row, column }
+    tree_sitter::Point { row: row.as_usize(), column }
   }
 
   pub(crate) fn on_change_highlight(
@@ -126,7 +126,7 @@ impl EditorState {
       highlighter
         .parser
         .parse_with_options(
-          &mut |i, _| self.doc.rope.byte_slice(i..).chunks().next().unwrap_or(""),
+          &mut |i, _| self.doc.range(i..).chunks().next().unwrap_or(""),
           highlighter.tree.as_ref(),
           None,
         )
@@ -141,7 +141,7 @@ impl Highlighter {
       self
         .parser
         .parse_with_options(
-          &mut |i, _| doc.rope.byte_slice(i..).chunks().next().unwrap_or(""),
+          &mut |i, _| doc.range(i..).chunks().next().unwrap_or(""),
           self.tree.as_ref(),
           None,
         )
@@ -173,7 +173,7 @@ impl<'a> TextProvider<&'a str> for RopeProvider<'a> {
   type I = be_doc::crop::iter::Chunks<'a>;
 
   fn text(&mut self, node: Node) -> Self::I {
-    let slice = self.doc.rope.byte_slice(node.byte_range());
+    let slice = self.doc.range(node.byte_range());
     slice.chunks()
   }
 }
@@ -366,7 +366,7 @@ mod tests {
 
     let doc = "fn main() {}".into();
     highlighter.reparse(&doc);
-    let highlights = highlighter.highlights(&doc, 0..doc.rope.byte_len()).unwrap();
+    let highlights = highlighter.highlights(&doc, 0..doc.len()).unwrap();
 
     assert_eq!(
       highlights.collect::<Vec<_>>(),

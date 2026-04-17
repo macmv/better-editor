@@ -35,19 +35,17 @@ impl LspState {
   }
 
   pub fn encode_position(&self, doc: &Document, pos: usize) -> types::Position {
-    let line = doc.rope.line_of_byte(pos);
+    let line = doc.line_of_byte(pos);
 
     let character = match self.position_encoding() {
-      PositionEncoding::Utf8 => (pos - doc.byte_of_line(be_doc::Line(line))) as u32,
-      PositionEncoding::Utf16 => doc
-        .rope
-        .byte_slice(pos - doc.byte_of_line(be_doc::Line(line))..pos)
-        .chars()
-        .map(|c| c.len_utf16())
-        .sum::<usize>() as u32,
+      PositionEncoding::Utf8 => (pos - doc.byte_of_line(line)) as u32,
+      PositionEncoding::Utf16 => {
+        doc.range(pos - doc.byte_of_line(line)..pos).chars().map(|c| c.len_utf16()).sum::<usize>()
+          as u32
+      }
     };
 
-    types::Position { line: line as u32, character }
+    types::Position { line: line.0 as u32, character }
   }
 
   pub fn encode_cursor(&self, doc: &Document, cursor: Cursor) -> types::Position {
@@ -129,7 +127,7 @@ pub fn decode_position(encoding: PositionEncoding, doc: &Document, pos: types::P
   character = character.clamp(0, doc.line(line).byte_len());
   let offset = doc.byte_of_line(line) + character as usize;
   // the `clamp()` calls above should catch this.
-  assert!(offset <= doc.rope.byte_len(), "offset out of bounds");
+  assert!(offset <= doc.len(), "offset out of bounds");
   offset
 }
 
@@ -168,7 +166,7 @@ impl LspCommand for DidOpenTextDocument {
       text_document: types::TextDocumentItem {
         version:     0,
         uri:         doc_uri(&self.path),
-        text:        self.doc.rope.to_string(),
+        text:        self.doc.to_string(),
         language_id: self.language_id.clone(),
       },
     });

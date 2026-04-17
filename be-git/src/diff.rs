@@ -132,7 +132,7 @@ impl<'a> TokenSource for DocLines<'a> {
     fn(be_doc::crop::RopeSlice<'a>) -> RopeSliceHash<'a>,
   >;
 
-  fn tokenize(&self) -> Self::Tokenizer { self.0.rope.raw_lines().map(|l| RopeSliceHash(l)) }
+  fn tokenize(&self) -> Self::Tokenizer { self.0.raw_lines().map(|l| RopeSliceHash(l)) }
 
   fn estimate_tokens(&self) -> u32 {
     // Like imara_diff::ByteLines, but we don't actually read anything.

@@ -75,7 +75,7 @@ impl Repo {
 
     if let Ok(rel) = path.strip_prefix(&self.root) {
       if let Some(file) = self.files.get_mut(rel) {
-        file.current = be_doc::Document { rope: doc.rope.clone() };
+        file.current = doc.clone();
       } else {
         error!("unknown path: {}", path.display());
       }
@@ -132,9 +132,7 @@ impl Repo {
 }
 
 impl ChangedFile {
-  fn new(doc: Document) -> Self {
-    ChangedFile { original: Some(be_doc::Document { rope: doc.rope.clone() }), current: doc }
-  }
+  fn new(doc: Document) -> Self { ChangedFile { original: Some(doc.clone()), current: doc } }
 
   fn changes(&self) -> diff::LineDiffSimilarity {
     if let Some(original) = &self.original {
