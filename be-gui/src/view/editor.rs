@@ -20,10 +20,10 @@ pub struct EditorView {
   scroll: Point,
   focus:  Focus,
 
-  // This is kinda hacky but ah well.
-  pub(crate) temporary_underline: bool,
-  cached_layouts:                 HashMap<usize, TextLayout>,
-  cached_scale:                   f64,
+  /// Set after typing an incomplete action, like 'd' or 'r'
+  pub(crate) temporary_mode: Option<Mode>,
+  cached_layouts:            HashMap<usize, TextLayout>,
+  cached_scale:              f64,
 
   line_numbers:      Vec<TextLayout>,
   line_number_width: f64,
@@ -53,12 +53,12 @@ const LINE_NUMBER_MARGIN_RIGHT: f64 = 10.0;
 impl EditorView {
   pub fn new(store: &mut RenderStore) -> Self {
     let mut view = EditorView {
-      editor:              store.workspace.new_editor(),
-      scroll:              Point::ZERO,
-      focus:               Focus::Unfocused { cursor: Cursor::default() },
-      temporary_underline: false,
-      cached_layouts:      HashMap::new(),
-      cached_scale:        0.0,
+      editor:         store.workspace.new_editor(),
+      scroll:         Point::ZERO,
+      focus:          Focus::Unfocused { cursor: Cursor::default() },
+      temporary_mode: None,
+      cached_layouts: HashMap::new(),
+      cached_scale:   0.0,
 
       min_line:          be_doc::Line(0),
       max_line:          be_doc::Line(0),
@@ -513,14 +513,16 @@ impl EditorView {
 
     let rect =
       RoundedRect::new(render.size().width - 18.0, 2.0, render.size().width - 2.0, 18.0, 3.0);
-    let (mode_color, mode_char) = match self.editor.mode() {
-      _ if !self.focused() => (render.theme().mode_normal, 'N'),
-      _ if self.temporary_underline => (render.theme().mode_replace, 'R'),
-      Mode::Normal => (render.theme().mode_normal, 'N'),
-      Mode::Insert => (render.theme().mode_insert, 'I'),
-      Mode::Replace => (render.theme().mode_replace, 'R'),
-      Mode::Visual(_) => (render.theme().mode_visual, 'V'),
-      Mode::Command => (render.theme().mode_command, 'C'), // TODO: Remove
+    let (mode_color, mode_char) = if !self.focused() {
+      (render.theme().mode_normal, 'N')
+    } else {
+      match self.temporary_mode.unwrap_or(self.editor.mode()) {
+        Mode::Normal => (render.theme().mode_normal, 'N'),
+        Mode::Insert => (render.theme().mode_insert, 'I'),
+        Mode::Replace => (render.theme().mode_replace, 'R'),
+        Mode::Visual(_) => (render.theme().mode_visual, 'V'),
+        Mode::Command => (render.theme().mode_command, 'C'), // TODO: Remove
+      }
     };
     render.fill(&rect, mode_color);
     let mode_text = mode_char.to_string();
@@ -792,7 +794,7 @@ impl EditorView {
     }
 
     match self.editor.mode() {
-      Mode::Normal if self.temporary_underline => Some(CursorMode::Underline),
+      Mode::Normal if self.temporary_mode.is_some() => Some(CursorMode::Underline),
       Mode::Normal | Mode::Visual(_) => Some(CursorMode::Block),
       Mode::Insert => Some(CursorMode::Line),
       Mode::Replace => Some(CursorMode::Underline),

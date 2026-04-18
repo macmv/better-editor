@@ -393,11 +393,8 @@ impl State {
   fn on_key(&mut self, key: KeyStroke, store: &mut RenderStore) {
     self.keys.push(key);
 
-    let temporary_underline = self.keys.len() == 1
-      && matches!(self.keys[0].key, be_input::Key::Char('r' | 'c' | 'd'))
-      && !self.keys[0].control;
     if let ViewContent::Editor(e) = &mut self.active_view_mut().content {
-      e.temporary_underline = temporary_underline;
+      e.temporary_mode = None;
     }
 
     match Action::from_input(self.mode(), &self.keys) {
@@ -406,7 +403,21 @@ impl State {
         self.keys.clear();
       }
       Err(be_input::ActionError::Unrecognized) => self.keys.clear(),
-      Err(be_input::ActionError::Incomplete) => {}
+      Err(be_input::ActionError::Incomplete) => {
+        let has_temporary = self.keys.len() == 1 && !self.keys[0].control;
+
+        if has_temporary {
+          let temporary_mode = match self.keys[0].key {
+            be_input::Key::Char('r') => Some(be_input::Mode::Replace),
+            be_input::Key::Char('c' | 'd') => Some(be_input::Mode::Normal),
+            _ => None,
+          };
+
+          if let ViewContent::Editor(e) = &mut self.active_view_mut().content {
+            e.temporary_mode = temporary_mode;
+          }
+        }
+      }
     }
   }
 
