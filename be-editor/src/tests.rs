@@ -13,7 +13,7 @@ pub fn editor(src: &str) -> TestEditor { TestEditor(EditorState::from(src)) }
 
 impl TestEditor {
   fn state(&self) -> String {
-    let mut s = self.0.doc.rope.to_string();
+    let mut s = self.0.doc.to_string();
     let cursor_offset = self.0.doc.cursor_offset(self.0.cursor);
 
     let g = s[cursor_offset..].graphemes(true).next().unwrap();
