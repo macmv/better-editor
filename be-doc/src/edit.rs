@@ -48,7 +48,7 @@ impl Change {
 
 impl Document {
   pub fn apply(&mut self, change: &Change) {
-    self.rope.replace(change.range.clone(), &change.text);
+    self.snap.rope.replace(change.range.clone(), &change.text);
   }
 }
 

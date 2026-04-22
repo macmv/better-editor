@@ -5,7 +5,7 @@ use std::{
 
 use crop::RopeBuilder;
 
-use crate::Document;
+use crate::{Document, DocumentSnapshot};
 
 impl Document {
   pub fn read_lossy(reader: &mut impl std::io::Read) -> io::Result<Document> {
@@ -49,7 +49,7 @@ impl Document {
       }
     }
 
-    Ok(Document { rope: builder.build() })
+    Ok(Document { snap: DocumentSnapshot { rope: builder.build() } })
   }
 
   pub fn write(&self, writer: &mut impl std::io::Write) -> io::Result<()> {
