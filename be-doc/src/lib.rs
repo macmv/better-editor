@@ -9,10 +9,12 @@ use unicode_width::UnicodeWidthStr;
 mod edit;
 mod fs;
 mod search;
+mod snap;
 
 pub use crop;
 pub use edit::{Change, Edit};
 pub use search::FindIter;
+pub use snap::DocumentSnapshot;
 
 #[macro_use]
 extern crate be_macros;
@@ -82,6 +84,8 @@ impl Document {
 
   // TODO: Should Document impl Display?
   pub fn to_string(&self) -> String { self.rope.to_string() }
+
+  pub fn snapshot(&self) -> DocumentSnapshot { DocumentSnapshot { rope: self.rope.clone() } }
 
   #[track_caller]
   pub fn line(&self, line: Line) -> RopeSlice<'_> {

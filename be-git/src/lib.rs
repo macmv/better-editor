@@ -3,7 +3,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use be_doc::Document;
+use be_doc::{Document, DocumentSnapshot};
 use git::GitRepo;
 
 #[macro_use]
@@ -27,8 +27,8 @@ pub struct Repo {
 }
 
 struct ChangedFile {
-  original: Option<Document>,
-  current:  Document,
+  original: Option<DocumentSnapshot>,
+  current:  DocumentSnapshot,
 }
 
 impl Repo {
@@ -57,17 +57,17 @@ impl Repo {
       let file = if let Some(git) = &self.git {
         ChangedFile {
           original: git.lookup_in_head(&path),
-          current:  Document::read(&path).unwrap(),
+          current:  Document::read(&path).unwrap().snapshot(),
         }
       } else {
-        ChangedFile::new(Document::read(&path).unwrap())
+        ChangedFile::new(Document::read(&path).unwrap().snapshot())
       };
 
       self.files.insert(rel.to_path_buf(), file);
     }
   }
 
-  pub fn update_file(&mut self, path: &Path, doc: &Document) {
+  pub fn update_file(&mut self, path: &Path, doc: DocumentSnapshot) {
     let Ok(path) = path.canonicalize() else {
       error!("unknown path: {}", path.display());
       return;
@@ -75,7 +75,7 @@ impl Repo {
 
     if let Ok(rel) = path.strip_prefix(&self.root) {
       if let Some(file) = self.files.get_mut(rel) {
-        file.current = doc.clone();
+        file.current = doc;
       } else {
         error!("unknown path: {}", path.display());
       }
@@ -132,7 +132,9 @@ impl Repo {
 }
 
 impl ChangedFile {
-  fn new(doc: Document) -> Self { ChangedFile { original: Some(doc.clone()), current: doc } }
+  fn new(doc: DocumentSnapshot) -> Self {
+    ChangedFile { original: Some(doc.clone()), current: doc }
+  }
 
   fn changes(&self) -> diff::LineDiffSimilarity {
     if let Some(original) = &self.original {
@@ -140,7 +142,7 @@ impl ChangedFile {
     } else {
       // NB: This kinda sucks. However, diffing is slow, so this probably doesn't
       // incur much cost. This should be cached at a higher level honestly.
-      diff::line_diff_similarity(&be_doc::Document::new(), &self.current)
+      diff::line_diff_similarity(&be_doc::Document::new().snapshot(), &self.current)
     }
   }
 

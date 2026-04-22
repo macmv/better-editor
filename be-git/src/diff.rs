@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use be_doc::{Document, crop::RopeSlice};
+use be_doc::{DocumentSnapshot, crop::RopeSlice};
 use imara_diff::{Algorithm, Diff, InternedInput, TokenSource};
 use siphasher::sip::SipHasher;
 
@@ -31,13 +31,13 @@ pub struct LineHunkSimilarity {
   pub changes: Vec<Change>,
 }
 
-pub fn line_diff(before: &Document, after: &Document) -> LineDiff {
+pub fn line_diff(before: &DocumentSnapshot, after: &DocumentSnapshot) -> LineDiff {
   line_diff_inner(before, after).0
 }
 
 fn line_diff_inner<'a>(
-  before: &'a Document,
-  after: &'a Document,
+  before: &'a DocumentSnapshot,
+  after: &'a DocumentSnapshot,
 ) -> (LineDiff, InternedInput<RopeSliceHash<'a>>) {
   let input = InternedInput::new(DocLines(before), DocLines(after));
   let mut diff = Diff::compute(Algorithm::Histogram, &input);
@@ -46,7 +46,10 @@ fn line_diff_inner<'a>(
   (LineDiff { diff }, input)
 }
 
-pub fn line_diff_similarity<'a>(before: &'a Document, after: &'a Document) -> LineDiffSimilarity {
+pub fn line_diff_similarity<'a>(
+  before: &'a DocumentSnapshot,
+  after: &'a DocumentSnapshot,
+) -> LineDiffSimilarity {
   let input = InternedInput::new(DocLines(before), DocLines(after));
   let mut diff = Diff::compute(Algorithm::Histogram, &input);
   diff.postprocess_no_heuristic(&input);
@@ -109,7 +112,7 @@ impl LineHunk {
   }
 }
 
-struct DocLines<'a>(&'a Document);
+struct DocLines<'a>(&'a DocumentSnapshot);
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct RopeSliceHash<'a>(be_doc::crop::RopeSlice<'a>);
 
@@ -466,7 +469,7 @@ mod tests {
   fn bar() {
     use imara_diff::{Algorithm, Diff, InternedInput};
 
-    let before = Document::from(
+    let before = DocumentSnapshot::from(
       r#"
 fn foo() -> Bar {
   let a = 3;
@@ -474,7 +477,7 @@ fn foo() -> Bar {
 "#,
     );
 
-    let after = Document::from(
+    let after = DocumentSnapshot::from(
       r#"
 fn foo() -> Bar {
   let b = 3;
@@ -506,8 +509,8 @@ fn foo() -> Bar {
 }
 "#;
 
-    let before = Document::from(before);
-    let after = Document::from(after);
+    let before = DocumentSnapshot::from(before);
+    let after = DocumentSnapshot::from(after);
     let diff = line_diff(&before, &after);
     assert_eq!(diff.changes().collect::<Vec<_>>()[0].range, 2..3);
   }
@@ -537,8 +540,8 @@ fn foo() -> Bar {
 }
 "#;
 
-    let before = Document::from(before);
-    let after = Document::from(after);
+    let before = DocumentSnapshot::from(before);
+    let after = DocumentSnapshot::from(after);
     let diff = line_diff_similarity(&before, &after);
 
     assert_eq!(diff.hunks[0].before, 2..5);

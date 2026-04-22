@@ -426,7 +426,7 @@ impl EditorState {
 
     if let Some(repo) = &mut *self.repo {
       if let Some(file) = &self.file.as_ref() {
-        repo.update_file(file.path(), &self.doc);
+        repo.update_file(file.path(), self.doc.snapshot());
       }
     }
   }
