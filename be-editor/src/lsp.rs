@@ -1,6 +1,6 @@
 use std::{cell::RefCell, ops::Range, rc::Rc};
 
-use be_doc::{Change, Edit};
+use be_doc::{Change, DocumentSnapshot, Edit};
 use be_lsp::{LanguageClientState, LanguageServerKey, TextEdit, command, types};
 use be_task::Task;
 
@@ -70,7 +70,7 @@ impl EditorState {
 
     self.lsp.client.send(&command::DidOpenTextDocument {
       path:        self.file.as_ref().unwrap().path().to_path_buf(),
-      doc:         self.doc.clone(),
+      doc:         self.doc.snapshot(),
       language_id: "rust".into(),
     });
   }
@@ -146,7 +146,7 @@ impl EditorState {
     }
   }
 
-  pub(crate) fn lsp_notify_change(&mut self, change: &crate::Change) {
+  pub(crate) fn lsp_notify_change(&mut self, change: &crate::Change, before: DocumentSnapshot) {
     let Some(file) = &self.file else { return };
 
     self.lsp.document_version += 1;
@@ -154,7 +154,8 @@ impl EditorState {
     self.lsp.client.send(&command::DidChangeTextDocument {
       path:              file.path().to_path_buf(),
       version:           self.lsp.document_version,
-      doc_before_change: self.doc.clone(),
+      doc_before_change: before,
+      doc_after_change:  self.doc.snapshot(),
       changes:           vec![change.clone()],
     });
   }

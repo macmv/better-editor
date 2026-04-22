@@ -4,7 +4,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use be_doc::{Change, Cursor, Document};
+use be_doc::{Change, Cursor, DocumentSnapshot};
 use be_task::Task;
 use serde_json::value::RawValue;
 
@@ -27,14 +27,14 @@ fn doc_id(path: &Path) -> types::TextDocumentIdentifier {
 }
 
 impl LspState {
-  pub fn encode_range(&self, doc: &Document, range: Range<usize>) -> types::Range {
+  pub fn encode_range(&self, doc: &DocumentSnapshot, range: Range<usize>) -> types::Range {
     types::Range {
       start: self.encode_position(doc, range.start),
       end:   self.encode_position(doc, range.end),
     }
   }
 
-  pub fn encode_position(&self, doc: &Document, pos: usize) -> types::Position {
+  pub fn encode_position(&self, doc: &DocumentSnapshot, pos: usize) -> types::Position {
     let line = doc.line_of_byte(pos);
 
     let character = match self.position_encoding() {
@@ -48,7 +48,7 @@ impl LspState {
     types::Position { line: line.0 as u32, character }
   }
 
-  pub fn encode_cursor(&self, doc: &Document, cursor: Cursor) -> types::Position {
+  pub fn encode_cursor(&self, doc: &DocumentSnapshot, cursor: Cursor) -> types::Position {
     types::Position {
       line:      cursor.line.as_usize() as u32,
       character: {
@@ -95,7 +95,7 @@ impl LspState {
 
 pub fn decode_range(
   encoding: PositionEncoding,
-  doc: &Document,
+  doc: &DocumentSnapshot,
   range: types::Range,
 ) -> Range<usize> {
   Range {
@@ -104,7 +104,11 @@ pub fn decode_range(
   }
 }
 
-pub fn decode_position(encoding: PositionEncoding, doc: &Document, pos: types::Position) -> usize {
+pub fn decode_position(
+  encoding: PositionEncoding,
+  doc: &DocumentSnapshot,
+  pos: types::Position,
+) -> usize {
   let line = be_doc::Line((pos.line as usize).clamp(0, doc.len_lines() - 1));
 
   let mut character = match encoding {
@@ -139,7 +143,7 @@ pub enum PositionEncoding {
 
 pub struct DidOpenTextDocument {
   pub path:        PathBuf,
-  pub doc:         Document,
+  pub doc:         DocumentSnapshot,
   pub language_id: String,
 }
 
@@ -176,10 +180,16 @@ impl LspCommand for DidOpenTextDocument {
 }
 
 pub struct DidChangeTextDocument {
-  pub path:              PathBuf,
-  pub version:           u32,
-  pub doc_before_change: Document,
-  pub changes:           Vec<Change>,
+  pub path:    PathBuf,
+  pub version: u32,
+  pub changes: Vec<Change>,
+
+  // This is real dumb, but: we need the doc before to encode ranges, and we need the doc after to
+  // update the `FileState`.
+  //
+  // TODO: Get rid of one of these.
+  pub doc_before_change: DocumentSnapshot,
+  pub doc_after_change:  DocumentSnapshot,
 }
 
 impl LspCommand for DidChangeTextDocument {
@@ -193,10 +203,7 @@ impl LspCommand for DidChangeTextDocument {
     let content_changes = {
       let mut state = client.state.lock();
       let file = state.file_mut(&self.path)?;
-      file.doc = self.doc_before_change.clone();
-      for change in &self.changes {
-        file.doc.apply(change);
-      }
+      file.doc = self.doc_after_change.clone();
       file.version = self.version;
 
       self

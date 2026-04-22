@@ -1,4 +1,4 @@
-use be_doc::Document;
+use be_doc::DocumentSnapshot;
 use be_task::Task;
 use parking_lot::Mutex;
 use polling::{Events, Poller};
@@ -38,12 +38,12 @@ pub struct LspState {
 #[derive(Default)]
 pub struct FileState {
   pub version:     u32,
-  pub doc:         Document,
+  pub doc:         DocumentSnapshot,
   pub diagnostics: Vec<Diagnostic>,
 }
 
-impl From<Document> for FileState {
-  fn from(value: Document) -> Self { FileState { doc: value, ..Default::default() } }
+impl From<DocumentSnapshot> for FileState {
+  fn from(value: DocumentSnapshot) -> Self { FileState { doc: value, ..Default::default() } }
 }
 
 enum LspRequest {

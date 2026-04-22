@@ -418,10 +418,11 @@ impl EditorState {
       self.damage_all = true;
     }
 
-    self.lsp_notify_change(&change);
+    let before = self.doc.snapshot();
 
     self.doc.apply(&change);
 
+    self.lsp_notify_change(&change, before);
     self.on_change_highlight(&change, start_pos, end_pos);
 
     if let Some(repo) = &mut *self.repo {
