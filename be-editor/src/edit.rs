@@ -127,6 +127,18 @@ impl EditorState {
 
   // Perform the move after 'd' or 'c'.
   fn perform_delete_move(&mut self, m: Move, count: Option<NonZero<u32>>) {
+    if matches!(self.mode, Mode::Visual(_)) {
+      // TODO: Handle box selection.
+      if let Some((s, e)) = self.selection_ranges().first() {
+        let text = self.doc.range(s..=e);
+        self.copied = text.to_string();
+        self.change(Change::remove(*s..*s + text.byte_len()));
+        self.clamp_cursor();
+      }
+      self.set_mode(Mode::Normal);
+      return;
+    }
+
     if matches!(m, Move::Single(Direction::Right)) {
       let range = self.doc.grapheme_slice(self.cursor, 1);
       if !self.doc.range(range.clone()).chars().any(|c| c == '\n') {

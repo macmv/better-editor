@@ -185,6 +185,7 @@ impl Action {
 
         // === visual ===
         (Mode::Visual(_), Key::Char('y' | 'Y')) => Ok(Action::Yank),
+        (Mode::Visual(_), Key::Char('x' | 'd')) => e!(Delete(Move::Single(Direction::Right))),
 
         // === modes ===
         (Mode::Normal, Key::Char('i')) => Ok(Action::SetMode { mode: Mode::Insert, delta: 0 }),
