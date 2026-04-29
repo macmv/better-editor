@@ -491,7 +491,7 @@ impl State {
   fn layout_tabs(&mut self, layout: &mut Layout) {
     let mut tab_layout = self.tab_layout.begin(layout);
 
-    let mut row = vec![];
+    let mut left = vec![];
 
     for (i, tab) in self.tabs.iter().enumerate() {
       let button = tab_layout.add_widget(crate::widget::Button::new(&tab.title));
@@ -500,13 +500,29 @@ impl State {
         self.active = i;
       }
 
-      row.push(button.id);
+      left.push(button.id);
     }
 
-    let root = tab_layout
+    let mut right = vec![];
+    right.push(tab_layout.add_widget(crate::widget::Text::new("Rust")).id);
+
+    let left = tab_layout
       .add_widget(
-        crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, row).gap(5.0),
+        crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, left).gap(5.0),
       )
+      .id;
+    let right = tab_layout
+      .add_widget(
+        crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, right).gap(5.0),
+      )
+      .id;
+    let root = tab_layout
+      .add_widget(crate::widget::Stack::new(
+        Axis::Horizontal,
+        Align::SpaceBetween,
+        Justify::Center,
+        vec![left, right],
+      ))
       .id;
     tab_layout.finish(root);
   }
