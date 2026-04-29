@@ -602,6 +602,9 @@ impl State {
 
         self.tabs[self.active].popup = None;
       }
+      Event::Workspace(WorkspaceEvent::Editor(be_editor::EditorEvent::SavedFile(path))) => {
+        // TODO
+      }
       Event::Exit => return true,
     }
 

@@ -54,6 +54,10 @@ impl EditorState {
 
     self.lsp_notify_did_save();
 
+    if let (Some(send), Some(file)) = (&self.send, &self.file) {
+      send(crate::EditorEvent::SavedFile(file.path().to_path_buf()));
+    }
+
     Ok(())
   }
 

@@ -72,6 +72,7 @@ pub enum EditorEvent {
   // `EditorView::layout` and do it directly in there. But also, this nicely only affects the
   // active view, so maybe it's fine as-is.
   RecordDefinition(PathBuf, Cursor),
+  SavedFile(PathBuf),
 }
 
 #[derive(Default)]
