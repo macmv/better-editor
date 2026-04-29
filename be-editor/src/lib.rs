@@ -194,7 +194,7 @@ impl EditorState {
       self.cursor.line.0 += 1;
     }
 
-    self.cursor.column.0 = target_column as usize;
+    self.move_to_col(Column(target_column as usize));
   }
 
   pub fn move_to(&mut self, cursor: Cursor) {
