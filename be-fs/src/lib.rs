@@ -1,5 +1,6 @@
 use std::{
   collections::VecDeque,
+  path::Path,
   sync::{Arc, Weak, atomic::AtomicUsize},
 };
 
@@ -110,6 +111,8 @@ impl WorkspaceWatcher {
       handles: vec![],
     }
   }
+
+  pub fn notify_saved(&mut self, path: &Path) { self.watcher.notify_saved(path); }
 
   pub fn add_handle(&mut self) -> WatcherHandle {
     let latest_version = self.state.lock().latest_version();

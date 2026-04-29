@@ -105,11 +105,7 @@ impl EditorView {
       if let Some(f) = self.editor.file()
         && layout.store.workspace.root.resolve_path(change) == f
       {
-        // FIXME: Linux doesn't exclude events from ourselves, so we end up re-reading
-        // the file any time we save.
-        if !cfg!(target_os = "linux") {
-          self.editor.on_file_changed();
-        }
+        self.editor.on_file_changed();
       }
     }
 

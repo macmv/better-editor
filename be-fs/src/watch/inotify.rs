@@ -1,4 +1,11 @@
-use std::{collections::HashMap, ffi::OsStr, fs, os::fd::AsRawFd};
+use std::{
+  collections::HashMap,
+  ffi::OsStr,
+  fs,
+  os::fd::AsRawFd,
+  path::PathBuf,
+  time::{Duration, Instant},
+};
 
 use btree_slab::{
   BTreeMap,
@@ -14,6 +21,7 @@ pub struct INotifyWatcher {
   inotify:       Inotify,
   watch:         BTreeMap<WorkspacePathBuf, WatchDescriptor>,
   reverse_watch: HashMap<WatchDescriptor, WorkspacePathBuf>,
+  recent_saves:  HashMap<PathBuf, Instant>,
 }
 
 impl INotifyWatcher {
@@ -24,6 +32,7 @@ impl INotifyWatcher {
       inotify,
       watch: BTreeMap::new(),
       reverse_watch: HashMap::new(),
+      recent_saves: HashMap::new(),
     };
     watcher.add_watch_tree_for(WorkspacePath::new(""));
     watcher
@@ -226,7 +235,15 @@ impl Watcher for INotifyWatcher {
       self.remove_watch_tree_for(&path);
     }
 
+    let now = Instant::now();
+    self.recent_saves.retain(|_, t| now.duration_since(*t) < Duration::from_millis(100));
+    changes.retain(|p| !self.recent_saves.contains_key(&self.root.resolve_path(p)));
+
     changes
+  }
+
+  fn notify_saved(&mut self, path: &std::path::Path) {
+    self.recent_saves.insert(path.to_path_buf(), Instant::now());
   }
 }
 

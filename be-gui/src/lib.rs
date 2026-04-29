@@ -603,7 +603,7 @@ impl State {
         self.tabs[self.active].popup = None;
       }
       Event::Workspace(WorkspaceEvent::Editor(be_editor::EditorEvent::SavedFile(path))) => {
-        // TODO
+        store.workspace.fs.notify_saved(&path);
       }
       Event::Exit => return true,
     }

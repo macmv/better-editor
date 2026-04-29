@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::{DirectoryChanges, WorkspaceRoot};
 
 #[cfg(target_os = "linux")]
@@ -29,4 +31,5 @@ pub fn default_watcher(root: &WorkspaceRoot, waker: Waker) -> Box<dyn Watcher> {
 
 pub trait Watcher {
   fn poll(&mut self) -> DirectoryChanges;
+  fn notify_saved(&mut self, path: &Path) { let _ = path; }
 }
