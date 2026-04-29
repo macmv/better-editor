@@ -45,6 +45,8 @@ struct KeyState {
   right_control: bool,
   left_alt:      bool,
   right_alt:     bool,
+  left_shift:    bool,
+  right_shift:   bool,
 }
 
 impl winit::application::ApplicationHandler<Event> for App {
@@ -126,7 +128,8 @@ impl winit::application::ApplicationHandler<Event> for App {
       WindowEvent::KeyboardInput {
         event:
           winit::event::KeyEvent {
-            logical_key: winit::keyboard::Key::Named(key @ (NamedKey::Control | NamedKey::Alt)),
+            logical_key:
+              winit::keyboard::Key::Named(key @ (NamedKey::Control | NamedKey::Alt | NamedKey::Shift)),
             location,
             state,
             ..
@@ -141,6 +144,8 @@ impl winit::application::ApplicationHandler<Event> for App {
             }
             (NamedKey::Alt, winit::keyboard::KeyLocation::Left) => &mut init.keys.left_alt,
             (NamedKey::Alt, winit::keyboard::KeyLocation::Right) => &mut init.keys.right_alt,
+            (NamedKey::Shift, winit::keyboard::KeyLocation::Left) => &mut init.keys.left_shift,
+            (NamedKey::Shift, winit::keyboard::KeyLocation::Right) => &mut init.keys.right_shift,
 
             _ => unreachable!(),
           };
@@ -331,6 +336,7 @@ impl KeyState {
 
     key.map(|key| KeyStroke {
       key,
+      shift: self.left_shift || self.right_shift,
       control: self.left_control || self.right_control,
       alt: self.left_alt || self.right_alt,
     })

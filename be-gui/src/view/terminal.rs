@@ -65,7 +65,8 @@ impl TerminalView {
       Action::Control { char: c @ 'a'..='z' } => self.terminal.perform_control(c as u8 - b'a' + 1),
       // Bit of a hack, but we're in "insert" mode, so escape sends us this.
       Action::SetMode { mode: Mode::Normal, .. } => self.terminal.perform_escape(),
-      Action::Tab => self.terminal.perform_tab(),
+      Action::Tab { shift: false } => self.terminal.perform_tab(),
+      Action::Tab { shift: true } => self.terminal.perform_shift_tab(),
 
       Action::Copy => {
         self.copy();

@@ -15,6 +15,7 @@ pub enum Key {
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct KeyStroke {
   pub key:     Key,
+  pub shift:   bool,
   pub control: bool,
   pub alt:     bool,
 }
