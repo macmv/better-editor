@@ -185,7 +185,7 @@ impl DocumentSnapshot {
     };
     let end = match range.end_bound() {
       std::ops::Bound::Unbounded => self.rope.byte_len(),
-      std::ops::Bound::Included(end) => self.clamp_inclusive(*end),
+      std::ops::Bound::Included(end) => self.clamp_inclusive(*end) + 1,
       std::ops::Bound::Excluded(end) => self.clamp_exclusive(*end),
     };
 
