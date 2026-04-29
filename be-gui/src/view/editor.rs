@@ -389,6 +389,50 @@ impl EditorView {
 
     let start_y = -(self.scroll.y % line_height);
 
+    let ranges = self.editor.selection_ranges();
+    for (start, end) in ranges {
+      let start = self.editor.doc().offset_to_cursor(start);
+      let end = self.editor.doc().offset_to_cursor(end);
+
+      for line in start.line.max(self.min_line).as_usize()..=end.line.min(self.max_line).as_usize()
+      {
+        let Some(layout) = &self.cached_layouts.get(&line) else {
+          fatal!("no cached layout found for line {line}");
+          continue;
+        };
+        let line = be_doc::Line(line);
+
+        if self.editor.doc().line(line).is_empty() {
+          continue;
+        }
+
+        let start_column =
+          if line == start.line { self.doc().cursor_column_offset(start) } else { 0 };
+        let end_column = if line == end.line {
+          self.doc().cursor_column_offset(be_doc::Cursor {
+            column: end.column.clamp(be_doc::Column(
+              self.editor.doc().line(end.line).graphemes().count().saturating_sub(1),
+            )),
+            ..end
+          })
+        } else {
+          self.doc().line(line).byte_len().saturating_sub(1)
+        };
+
+        let start_x = layout.cursor(start_column, CursorMode::Block).x0;
+        let end_x = layout.cursor(end_column, CursorMode::Block).x1;
+        render.fill(
+          &Rect::new(
+            self.gutter_width() + start_x - self.scroll.x,
+            line.as_usize() as f64 * line_height - self.scroll.y,
+            self.gutter_width() + end_x - self.scroll.x,
+            (line.as_usize() + 1) as f64 * line_height - self.scroll.y,
+          ),
+          render.theme().background_raised_outline,
+        );
+      }
+    }
+
     let mut y = start_y;
     for i in self.min_line.as_usize()..=self.max_line.as_usize() {
       if self.cached_layouts.get(&i).is_none() {
