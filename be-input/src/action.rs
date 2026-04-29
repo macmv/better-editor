@@ -14,8 +14,8 @@ pub enum Action {
   Navigate { nav: Navigation },
   Autocomplete,
   MoveCompletion { next: bool },
-  Copy,
-  Paste,
+  ClipboardCopy,
+  ClipboardPaste,
 }
 
 #[derive(Debug)]
@@ -128,8 +128,8 @@ impl Action {
           }
         }
 
-        (Mode::Insert, Key::Char('C')) if key.control => Ok(Action::Copy),
-        (Mode::Insert, Key::Char('V')) if key.control => Ok(Action::Paste),
+        (Mode::Insert, Key::Char('C')) if key.control => Ok(Action::ClipboardCopy),
+        (Mode::Insert, Key::Char('V')) if key.control => Ok(Action::ClipboardPaste),
 
         (Mode::Insert, Key::Char(' ')) if key.control => Ok(Action::Autocomplete),
         (Mode::Insert, Key::Char('p')) if key.control => Ok(Action::MoveCompletion { next: false }),

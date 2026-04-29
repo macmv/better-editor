@@ -68,11 +68,11 @@ impl TerminalView {
       Action::Tab { shift: false } => self.terminal.perform_tab(),
       Action::Tab { shift: true } => self.terminal.perform_shift_tab(),
 
-      Action::Copy => {
+      Action::ClipboardCopy => {
         self.copy();
         return; // Don't clear the selection.
       }
-      Action::Paste => self.terminal.perform_paste(&self.clipboard.paste()),
+      Action::ClipboardPaste => self.terminal.perform_paste(&self.clipboard.paste()),
 
       _ => {}
     }

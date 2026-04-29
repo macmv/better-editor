@@ -382,8 +382,8 @@ impl EditorState {
       Action::Control { .. } => {} // only really used for the terminal
       Action::Tab { .. } => {}     // TODO
 
-      Action::Copy => {} // TODO: Get at selection bytes.
-      Action::Paste => {
+      Action::ClipboardCopy => {} // TODO: Get at selection bytes.
+      Action::ClipboardPaste => {
         // TODO: Do we de-duplicate with 'p'?
         let text = self.clipboard.paste();
         if !text.is_empty() {
