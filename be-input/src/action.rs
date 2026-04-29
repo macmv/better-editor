@@ -184,7 +184,7 @@ impl Action {
         (Mode::Normal, Key::Char('~')) => e!(SwitchCase),
 
         // === visual ===
-        (Mode::Visual(_), Key::Char('y')) => Ok(Action::Yank),
+        (Mode::Visual(_), Key::Char('y' | 'Y')) => Ok(Action::Yank),
 
         // === modes ===
         (Mode::Normal, Key::Char('i')) => Ok(Action::SetMode { mode: Mode::Insert, delta: 0 }),
