@@ -382,6 +382,14 @@ impl EditorState {
       Action::Control { .. } => {} // only really used for the terminal
       Action::Tab { .. } => {}     // TODO
 
+      Action::Yank => {
+        // TODO: Handle box selection.
+        if let Some((s, e)) = self.selection_ranges().first() {
+          let text = self.doc.range(s..=e);
+          self.copied = text.to_string();
+          self.set_mode(Mode::Normal);
+        }
+      }
       Action::ClipboardCopy => {} // TODO: Get at selection bytes.
       Action::ClipboardPaste => {
         // TODO: Do we de-duplicate with 'p'?

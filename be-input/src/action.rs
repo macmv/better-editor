@@ -14,6 +14,7 @@ pub enum Action {
   Navigate { nav: Navigation },
   Autocomplete,
   MoveCompletion { next: bool },
+  Yank,
   ClipboardCopy,
   ClipboardPaste,
 }
@@ -180,6 +181,9 @@ impl Action {
         (Mode::Normal, Key::Char('u')) => e!(Undo),
         (Mode::Normal, Key::Char('r')) if key.control => e!(Redo),
         (Mode::Normal, Key::Char('~')) => e!(SwitchCase),
+
+        // === visual ===
+        (Mode::Visual(_), Key::Char('y')) => Ok(Action::Yank),
 
         // === modes ===
         (Mode::Normal, Key::Char('i')) => Ok(Action::SetMode { mode: Mode::Insert, delta: 0 }),
