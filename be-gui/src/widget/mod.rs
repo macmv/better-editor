@@ -11,9 +11,11 @@ mod border;
 mod button;
 mod padding;
 mod stack;
+mod text;
 
 pub use button::Button;
 pub use stack::{Align, Justify, Stack};
+pub use text::Text;
 
 use crate::{CursorKind, Layout, MouseEvent, Render, RenderStore, WidgetId, WidgetPath};
 
