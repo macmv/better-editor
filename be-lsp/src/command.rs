@@ -341,6 +341,46 @@ impl LspCommand for GotoDefinition {
   }
 }
 
+pub struct GotoReferences {
+  pub path:   PathBuf,
+  pub cursor: Cursor,
+}
+
+impl LspCommand for GotoReferences {
+  type Result = Option<Vec<(types::Uri, Range<usize>)>>;
+
+  fn is_capable(&self, caps: &types::ServerCapabilities) -> bool {
+    caps.references_provider.is_some()
+  }
+
+  fn send(&self, client: &mut LspClient) -> Option<Task<Option<Vec<(types::Uri, Range<usize>)>>>> {
+    let (position, encoding, doc) = {
+      let state = client.state.lock();
+      let file = state.file(&self.path)?;
+      (state.encode_cursor(&file.doc, self.cursor), state.position_encoding(), file.doc.clone())
+    };
+
+    Some(
+      client
+        .request::<types::request::TextDocumentReferences>(types::ReferenceParams {
+          text_document_position_params: types::TextDocumentPositionParams {
+            text_document: doc_id(&self.path),
+            position,
+          },
+          ..Default::default()
+        })
+        .map(move |defs| {
+          defs.map(|defs| {
+            defs
+              .into_iter()
+              .map(|loc| (loc.uri, decode_range(encoding, &doc, loc.range)))
+              .collect::<Vec<_>>()
+          })
+        }),
+    )
+  }
+}
+
 pub struct DocumentFormat {
   pub path: PathBuf,
 }

@@ -255,6 +255,11 @@ impl EditorState {
           self.lsp_request_goto_definition();
         }
       }
+      Move::GotoReference => {
+        if self.lsp.goto_references.is_none() {
+          self.lsp_request_goto_references();
+        }
+      }
 
       Move::BackDefinition => unreachable!("handled in editor view"),
 

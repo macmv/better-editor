@@ -137,6 +137,7 @@ impl EditorState {
 
     self.lsp_update_diagnostics();
     self.lsp_update_goto_definition();
+    self.lsp_update_goto_references();
     self.lsp_update_completions();
     self.update_save_task();
 

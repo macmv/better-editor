@@ -14,6 +14,7 @@ pub struct LspState {
   document_version:       u32,
   pub completions:        CompletionsState,
   pub goto_definition:    Option<Task<Option<Vec<(types::Uri, Range<usize>)>>>>,
+  pub goto_references:    Option<Task<Option<Vec<(types::Uri, Range<usize>)>>>>,
   pub(crate) diagnostics: Vec<Diagnostic>,
 
   // FIXME: ew.
@@ -120,6 +121,24 @@ impl EditorState {
         }
 
         self.lsp.goto_definition = None;
+      }
+    }
+  }
+
+  pub(crate) fn lsp_update_goto_references(&mut self) {
+    if let Some(task) = &self.lsp.goto_references {
+      if let Some(Some(defs)) = task.completed() {
+        if defs.len() == 1 {
+          self.lsp_goto_location(&defs[0].0, defs[0].1.start);
+        } else {
+          warn!("unhandled multiple references: {defs:?}");
+          // This is dumb but ah well.
+          if !defs.is_empty() {
+            self.lsp_goto_location(&defs[0].0, defs[0].1.start);
+          }
+        }
+
+        self.lsp.goto_references = None;
       }
     }
   }
@@ -277,6 +296,17 @@ impl EditorState {
     });
 
     self.lsp.goto_definition = task;
+  }
+
+  pub(crate) fn lsp_request_goto_references(&mut self) {
+    let Some(file) = &self.file else { return };
+
+    let task = self.lsp.client.send_first_capable(&command::GotoReferences {
+      path:   file.path().to_path_buf(),
+      cursor: self.cursor,
+    });
+
+    self.lsp.goto_references = task;
   }
 
   pub(crate) fn lsp_update_completions(&mut self) {
