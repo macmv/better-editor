@@ -12,12 +12,14 @@ pub struct Stack {
   sizes:    Vec<Rect>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
 pub enum Align {
   Start,
   Center,
   End,
+
+  SpaceBetween,
 }
 
 #[derive(Clone, Copy)]
@@ -60,12 +62,22 @@ impl Widget for Stack {
     }
 
     let mut main = match (self.axis, self.align) {
-      (_, Align::Start) => 0.0,
+      (_, Align::Start | Align::SpaceBetween) => 0.0,
       (Axis::Horizontal, Align::Center) => (layout.current_bounds().width() - size.width) / 2.0,
       (Axis::Horizontal, Align::End) => layout.current_bounds().width() - size.width,
       (Axis::Vertical, Align::Center) => (layout.current_bounds().height() - size.height) / 2.0,
       (Axis::Vertical, Align::End) => layout.current_bounds().height() - size.height,
     };
+    let gap = if self.align == Align::SpaceBetween {
+      let remaining_space = match self.axis {
+        Axis::Horizontal => layout.current_bounds().width() - size.width,
+        Axis::Vertical => layout.current_bounds().height() - size.height,
+      };
+      remaining_space / (self.children.len() - 1) as f64
+    } else {
+      self.gap
+    };
+
     for (&child, bounds) in self.children.iter().zip(self.sizes.iter_mut()) {
       match self.axis {
         Axis::Horizontal => {
@@ -79,7 +91,7 @@ impl Widget for Stack {
             Justify::End => layout.current_bounds().height() - size.height,
           };
           bounds.y1 = bounds.y0 + cross_width;
-          main += main_width + self.gap;
+          main += main_width + gap;
         }
         Axis::Vertical => {
           let main_width = bounds.height();
@@ -92,7 +104,7 @@ impl Widget for Stack {
             Justify::End => layout.current_bounds().width() - size.width,
           };
           bounds.x1 = bounds.x0 + cross_width;
-          main += main_width + self.gap;
+          main += main_width + gap;
         }
       };
 
