@@ -79,7 +79,8 @@ pub(crate) struct LspWorker {
 type Completer = Box<dyn FnOnce(&RawValue) + Send>;
 
 struct Writer {
-  writer: ChildStdin,
+  writer:  ChildStdin,
+  pending: VecDeque<u8>,
 }
 
 struct Reader {
@@ -292,7 +293,7 @@ impl LspWorker {
             }
           },
           WRITE => {
-            // TODO
+            self.writer.flush_pending()?;
           }
 
           _ => {
@@ -322,7 +323,7 @@ impl LspWorker {
 }
 
 impl Writer {
-  fn new(stdin: ChildStdin) -> Writer { Writer { writer: stdin } }
+  fn new(stdin: ChildStdin) -> Writer { Writer { writer: stdin, pending: VecDeque::new() } }
 
   fn request(&mut self, request: Request) -> io::Result<()> {
     #[derive(serde::Serialize)]
@@ -341,8 +342,7 @@ impl Writer {
     })
     .expect("serialize request");
 
-    write!(self.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content)?;
-    Ok(())
+    self.write_msg(&content)
   }
 
   fn response(&mut self, id: u64, result: &RawValue) -> io::Result<()> {
@@ -356,8 +356,7 @@ impl Writer {
     let content =
       serde_json::to_string(&Response { jsonrpc: "2.0", id, result }).expect("serialize response");
 
-    write!(self.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content)?;
-    Ok(())
+    self.write_msg(&content)
   }
 
   fn notify(&mut self, req: Notification) -> io::Result<()> {
@@ -375,7 +374,33 @@ impl Writer {
     })
     .expect("serialize notification");
 
-    write!(self.writer, "Content-Length: {}\r\n\r\n{}", content.len(), content)?;
+    self.write_msg(&content)
+  }
+
+  fn write_msg(&mut self, content: &str) -> io::Result<()> {
+    let header = format!("Content-Length: {}\r\n\r\n", content.len());
+    self.pending.extend(header.as_bytes());
+    self.pending.extend(content.as_bytes());
+    self.flush_pending()
+  }
+
+  fn flush_pending(&mut self) -> io::Result<()> {
+    loop {
+      let (first, second) = self.pending.as_slices();
+      // Pick the first non-empty contiguous slice.
+      let slice = if !first.is_empty() { first } else { second };
+      if slice.is_empty() {
+        break;
+      }
+      match self.writer.write(slice) {
+        Ok(0) => return Err(io::Error::new(io::ErrorKind::WriteZero, "LSP stdin closed")),
+        Ok(n) => {
+          self.pending.drain(..n);
+        }
+        Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(()),
+        Err(e) => return Err(e),
+      }
+    }
     Ok(())
   }
 }
