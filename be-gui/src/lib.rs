@@ -2,7 +2,7 @@ mod render;
 
 use std::{collections::HashMap, hash::Hash};
 
-use be_doc::Cursor;
+use be_editor::CursorOrLsp;
 use be_input::{Action, KeyStroke, Navigation};
 use be_workspace::{Workspace, WorkspaceEvent};
 use kurbo::{Axis, Point, Rect, Size};
@@ -326,12 +326,18 @@ impl State {
     );
   }
 
-  fn open(&mut self, path: &std::path::Path, cursor: Option<Cursor>, workspace: &mut Workspace) {
+  fn open(
+    &mut self,
+    path: &std::path::Path,
+    cursor: Option<CursorOrLsp>,
+    workspace: &mut Workspace,
+  ) {
     if let ViewContent::Editor(e) = &mut self.active_view_mut().content {
       let res = e.open(path, workspace);
       if let Some(cursor) = cursor
         && res.is_ok()
       {
+        let cursor = cursor.into_cursor(e.editor.doc());
         e.editor.move_to(cursor);
       }
 
@@ -348,6 +354,7 @@ impl State {
       if let Some(cursor) = cursor
         && res.is_ok()
       {
+        let cursor = cursor.into_cursor(e.editor.doc());
         e.editor.move_to(cursor);
       }
 

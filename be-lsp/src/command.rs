@@ -298,17 +298,20 @@ pub struct GotoDefinition {
 }
 
 impl LspCommand for GotoDefinition {
-  type Result = Option<Vec<(types::Uri, Range<usize>)>>;
+  type Result = Option<Vec<(types::Uri, PositionEncoding, types::Position)>>;
 
   fn is_capable(&self, caps: &types::ServerCapabilities) -> bool {
     caps.definition_provider.is_some()
   }
 
-  fn send(&self, client: &mut LspClient) -> Option<Task<Option<Vec<(types::Uri, Range<usize>)>>>> {
-    let (position, encoding, doc) = {
+  fn send(
+    &self,
+    client: &mut LspClient,
+  ) -> Option<Task<Option<Vec<(types::Uri, PositionEncoding, types::Position)>>>> {
+    let (position, encoding) = {
       let state = client.state.lock();
       let file = state.file(&self.path)?;
-      (state.encode_cursor(&file.doc, self.cursor), state.position_encoding(), file.doc.clone())
+      (state.encode_cursor(&file.doc, self.cursor), state.position_encoding())
     };
 
     Some(
@@ -323,17 +326,16 @@ impl LspCommand for GotoDefinition {
         .map(move |defs| {
           defs.map(|defs| match defs {
             types::Or2::A(def) => match def {
-              types::Definition::Many(defs) => defs
-                .into_iter()
-                .map(|loc| (loc.uri, decode_range(encoding, &doc, loc.range)))
-                .collect::<Vec<_>>(),
+              types::Definition::Many(defs) => {
+                defs.into_iter().map(|loc| (loc.uri, encoding, loc.range.start)).collect::<Vec<_>>()
+              }
               types::Definition::Location(loc) => {
-                vec![(loc.uri, decode_range(encoding, &doc, loc.range))]
+                vec![(loc.uri, encoding, loc.range.start)]
               }
             },
             types::Or2::B(locs) => locs
               .into_iter()
-              .map(|loc| (loc.target_uri, decode_range(encoding, &doc, loc.target_range)))
+              .map(|loc| (loc.target_uri, encoding, loc.target_range.start))
               .collect::<Vec<_>>(),
           })
         }),
@@ -347,17 +349,20 @@ pub struct GotoReferences {
 }
 
 impl LspCommand for GotoReferences {
-  type Result = Option<Vec<(types::Uri, Range<usize>)>>;
+  type Result = Option<Vec<(types::Uri, PositionEncoding, types::Position)>>;
 
   fn is_capable(&self, caps: &types::ServerCapabilities) -> bool {
     caps.references_provider.is_some()
   }
 
-  fn send(&self, client: &mut LspClient) -> Option<Task<Option<Vec<(types::Uri, Range<usize>)>>>> {
-    let (position, encoding, doc) = {
+  fn send(
+    &self,
+    client: &mut LspClient,
+  ) -> Option<Task<Option<Vec<(types::Uri, PositionEncoding, types::Position)>>>> {
+    let (position, encoding) = {
       let state = client.state.lock();
       let file = state.file(&self.path)?;
-      (state.encode_cursor(&file.doc, self.cursor), state.position_encoding(), file.doc.clone())
+      (state.encode_cursor(&file.doc, self.cursor), state.position_encoding())
     };
 
     Some(
@@ -371,10 +376,7 @@ impl LspCommand for GotoReferences {
         })
         .map(move |defs| {
           defs.map(|defs| {
-            defs
-              .into_iter()
-              .map(|loc| (loc.uri, decode_range(encoding, &doc, loc.range)))
-              .collect::<Vec<_>>()
+            defs.into_iter().map(|loc| (loc.uri, encoding, loc.range.start)).collect::<Vec<_>>()
           })
         }),
     )

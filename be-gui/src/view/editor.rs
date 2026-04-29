@@ -173,7 +173,7 @@ impl EditorView {
             self.editor.move_to(cursor);
           } else {
             if let Some(send) = &self.editor.send {
-              send(EditorEvent::OpenFile(path, Some(cursor)));
+              send(EditorEvent::OpenFile(path, Some(cursor.into())));
             }
           }
         }

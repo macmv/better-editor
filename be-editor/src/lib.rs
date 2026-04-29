@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashSet, ops::Range, path::PathBuf, rc::Rc};
 
 use be_config::{Config, LanguageName};
-use be_doc::{Change, Column, Cursor, Document, Edit, Line, crop::RopeSlice};
+use be_doc::{Change, Column, Cursor, Document, DocumentSnapshot, Edit, Line, crop::RopeSlice};
 use be_git::{LineDiffSimilarity, Repo};
 use be_input::{Action, Clipboard, Direction, Mode, Move, VerticalDirection, VisualMode};
 use be_shared::SharedHandle;
@@ -73,12 +73,23 @@ pub struct Selection {
 #[derive(Debug)]
 pub enum EditorEvent {
   RunCommand(String),
-  OpenFile(PathBuf, Option<Cursor>),
+  OpenFile(PathBuf, Option<CursorOrLsp>),
   // NB: This is moderately dumb. Ideally, we'd pick the 'goto definition' even up in
   // `EditorView::layout` and do it directly in there. But also, this nicely only affects the
   // active view, so maybe it's fine as-is.
   RecordDefinition(PathBuf, Cursor),
   SavedFile(PathBuf),
+}
+
+#[derive(Debug)]
+pub enum CursorOrLsp {
+  Cursor(Cursor),
+  // TODO: Need a type to store both of these, and to handle encoding/decoding.
+  Lsp { encoding: be_lsp::command::PositionEncoding, pos: be_lsp::types::Position },
+}
+
+impl From<Cursor> for CursorOrLsp {
+  fn from(cursor: Cursor) -> Self { CursorOrLsp::Cursor(cursor) }
 }
 
 #[derive(Default)]
@@ -685,6 +696,17 @@ impl EditorState {
       _ => {
         fatal!("cannot have a selection without being in visual mode");
         vec![]
+      }
+    }
+  }
+}
+
+impl CursorOrLsp {
+  pub fn into_cursor(self, doc: &DocumentSnapshot) -> Cursor {
+    match self {
+      CursorOrLsp::Cursor(cursor) => cursor,
+      CursorOrLsp::Lsp { encoding, pos } => {
+        doc.offset_to_cursor(be_lsp::command::decode_position(encoding, doc, pos))
       }
     }
   }

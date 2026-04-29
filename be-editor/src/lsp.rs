@@ -4,7 +4,7 @@ use be_doc::{Change, DocumentSnapshot, Edit};
 use be_lsp::{LanguageClientState, LanguageServerKey, TextEdit, command, types};
 use be_task::Task;
 
-use crate::{EditorState, HighlightKey, highlight::Highlight};
+use crate::{CursorOrLsp, EditorState, HighlightKey, highlight::Highlight};
 
 #[derive(Default)]
 pub struct LspState {
@@ -13,8 +13,10 @@ pub struct LspState {
 
   document_version:       u32,
   pub completions:        CompletionsState,
-  pub goto_definition:    Option<Task<Option<Vec<(types::Uri, Range<usize>)>>>>,
-  pub goto_references:    Option<Task<Option<Vec<(types::Uri, Range<usize>)>>>>,
+  pub goto_definition:
+    Option<Task<Option<Vec<(types::Uri, be_lsp::command::PositionEncoding, types::Position)>>>>,
+  pub goto_references:
+    Option<Task<Option<Vec<(types::Uri, be_lsp::command::PositionEncoding, types::Position)>>>>,
   pub(crate) diagnostics: Vec<Diagnostic>,
 
   // FIXME: ew.
@@ -115,7 +117,7 @@ impl EditorState {
     if let Some(task) = &self.lsp.goto_definition {
       if let Some(Some(defs)) = task.completed() {
         if defs.len() == 1 {
-          self.lsp_goto_location(&defs[0].0, defs[0].1.start);
+          self.lsp_goto_location(&defs[0].0, defs[0].1, defs[0].2.clone());
         } else {
           warn!("unhandled multiple definitions: {defs:?}");
         }
@@ -129,12 +131,12 @@ impl EditorState {
     if let Some(task) = &self.lsp.goto_references {
       if let Some(Some(defs)) = task.completed() {
         if defs.len() == 1 {
-          self.lsp_goto_location(&defs[0].0, defs[0].1.start);
+          self.lsp_goto_location(&defs[0].0, defs[0].1, defs[0].2.clone());
         } else {
           warn!("unhandled multiple references: {defs:?}");
           // This is dumb but ah well.
           if !defs.is_empty() {
-            self.lsp_goto_location(&defs[0].0, defs[0].1.start);
+            self.lsp_goto_location(&defs[0].0, defs[0].1, defs[0].2.clone());
           }
         }
 
@@ -143,10 +145,14 @@ impl EditorState {
     }
   }
 
-  fn lsp_goto_location(&mut self, uri: &types::Uri, pos: usize) {
+  fn lsp_goto_location(
+    &mut self,
+    uri: &types::Uri,
+    encoding: be_lsp::command::PositionEncoding,
+    pos: types::Position,
+  ) {
     let Some(def_path) = uri.to_file_path() else { return };
 
-    let cursor = self.doc.offset_to_cursor(pos);
     if let Some(file) = &self.file
       && let Some(send) = &self.send
     {
@@ -156,11 +162,13 @@ impl EditorState {
     if let Some(file) = &self.file
       && file.path() == def_path
     {
+      let cursor =
+        self.doc.offset_to_cursor(be_lsp::command::decode_position(encoding, &self.doc, pos));
       self.move_to_line(cursor.line);
       self.move_to_col(cursor.column);
     } else {
       if let Some(send) = &self.send {
-        send(crate::EditorEvent::OpenFile(def_path, Some(cursor)));
+        send(crate::EditorEvent::OpenFile(def_path, Some(CursorOrLsp::Lsp { encoding, pos })));
       }
     }
   }
