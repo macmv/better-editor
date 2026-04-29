@@ -181,6 +181,8 @@ impl EditorState {
         self.move_line_rel(self.copied.chars().filter(|c| *c == '\n').count() as i32);
       }
     } else {
+      // FIXME: Pasting at the end of a line leaves the cursor one character too far
+      // back, because this move(1) is a hack.
       if after {
         self.move_graphemes(1);
       }
