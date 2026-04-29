@@ -2,7 +2,7 @@ use std::fmt;
 
 use btree_slab::BTreeMap;
 
-use crate::WorkspacePathBuf;
+use crate::{WorkspacePath, WorkspacePathBuf};
 
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct DirectoryChanges {
@@ -25,6 +25,12 @@ impl DirectoryChanges {
 
   pub fn merge_with(&mut self, other: &DirectoryChanges) {
     self.changes.extend(other.changes.iter().map(|(c, _)| (c.clone(), ())));
+    self.deduplicate();
+  }
+
+  pub fn retain(&mut self, mut f: impl FnMut(&WorkspacePath) -> bool) {
+    let kept: Vec<WorkspacePathBuf> = self.changes.keys().filter(|p| f(p)).cloned().collect();
+    self.changes = BTreeMap::from_iter(kept.into_iter().map(|p| (p, ())));
     self.deduplicate();
   }
 
