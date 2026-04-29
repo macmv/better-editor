@@ -50,12 +50,12 @@ impl Widget for Stack {
       match self.axis {
         Axis::Horizontal => {
           self.sizes.push(Rect::from_origin_size((size.width, 0.0), child_size));
-          size.width += child_size.width + self.gap;
+          size.width += child_size.width;
           size.height = child_size.height.max(size.height);
         }
         Axis::Vertical => {
           self.sizes.push(Rect::from_origin_size((0.0, size.height), child_size));
-          size.height += child_size.height + self.gap;
+          size.height += child_size.height;
           size.width = child_size.width.max(size.width);
         }
       }
@@ -73,8 +73,16 @@ impl Widget for Stack {
         Axis::Horizontal => layout.current_bounds().width() - size.width,
         Axis::Vertical => layout.current_bounds().height() - size.height,
       };
+      match self.axis {
+        Axis::Horizontal => size.width = layout.current_bounds().width(),
+        Axis::Vertical => size.height = layout.current_bounds().height(),
+      }
       remaining_space / (self.children.len() - 1) as f64
     } else {
+      match self.axis {
+        Axis::Horizontal => size.width += self.gap * (self.children.len() - 1) as f64,
+        Axis::Vertical => size.height += self.gap * (self.children.len() - 1) as f64,
+      }
       self.gap
     };
 
