@@ -40,11 +40,14 @@ pub struct TerminalState {
   grid:       Grid,
   pub cursor: Cursor,
 
-  scrollback:   Vec<OwnedLine>,
-  size:         Size,
+  scrollback: Vec<OwnedLine>,
+  size:       Size,
+
+  // VT100 "scroll region" concept. Used by htop.
   scroll_start: usize,
   scroll_end:   usize,
 
+  // Alternate screen. Used by most fullscreen apps. Disables scrolling while active.
   alt_grid:   Grid,
   alt_screen: bool,
   alt_cursor: Cursor,
