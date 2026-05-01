@@ -398,7 +398,7 @@ impl Notify {
   pub fn exit(&self) { self.proxy.send_event(Event::Exit).unwrap(); }
 
   fn workspace_event(&self, ev: be_workspace::WorkspaceEvent) {
-    self.proxy.send_event(Event::Workspace(ev)).unwrap();
+    let _ = self.proxy.send_event(Event::Workspace(ev));
   }
 }
 
