@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::ops::{Deref, DerefMut, Range};
 
 use crate::{Position, Size, Style};
 
@@ -14,8 +14,6 @@ pub struct Cell {
 }
 
 pub struct OwnedLine {
-  // TODO: Scrollback!
-  #[allow(unused)]
   cells: Vec<Cell>,
 }
 
@@ -166,6 +164,16 @@ impl Line {
       self.line.swap(i - 1, i);
     }
   }
+}
+
+impl Deref for OwnedLine {
+  type Target = Line;
+
+  fn deref(&self) -> &Line { Line::from_slice(&self.cells) }
+}
+
+impl DerefMut for OwnedLine {
+  fn deref_mut(&mut self) -> &mut Line { Line::from_mut(&mut self.cells) }
 }
 
 impl Iterator for StyleIter<'_> {
