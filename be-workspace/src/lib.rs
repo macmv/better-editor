@@ -8,7 +8,7 @@ use std::{
 };
 
 use be_config::Config;
-use be_editor::{EditorEvent, EditorState};
+use be_editor::{EditorEvent, EditorState, SearchState};
 use be_fs::{WorkspaceRoot, WorkspaceWatcher};
 use be_git::Repo;
 use be_input::Clipboard;
@@ -24,6 +24,7 @@ pub struct Workspace {
   pub repo:      SharedHandle<Option<Repo>>,
   pub lsp:       Rc<RefCell<LanguageServerStore>>,
   pub clipboard: SharedHandle<Clipboard>,
+  pub search:    SharedHandle<SearchState>,
 
   notifier: Arc<Mutex<Box<dyn Fn(WorkspaceEvent) + Send>>>,
 
@@ -67,6 +68,7 @@ impl Workspace {
       repo: SharedHandle::new(Some(repo)),
       lsp: Rc::new(RefCell::new(lsp)),
       clipboard: SharedHandle::new(Clipboard::dummy()),
+      search: SharedHandle::default(),
 
       notifier,
 
@@ -87,6 +89,7 @@ impl Workspace {
       move |ev| (notifier.lock())(WorkspaceEvent::Editor(ev))
     }));
     editor.clipboard = self.clipboard.clone();
+    editor.search = self.search.clone();
 
     let handle = SharedHandle::new(editor);
 

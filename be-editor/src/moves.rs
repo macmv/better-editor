@@ -202,7 +202,7 @@ impl EditorState {
       }
 
       Move::Result(dir) => {
-        if let Some(search) = self.search_text.as_ref() {
+        if let Some(search) = self.search.query.as_ref() {
           for _ in 0..count.unwrap_or(1) {
             let offset = self.doc.cursor_offset(self.cursor) + 1;
             if let Some(res) = match dir {

@@ -100,7 +100,7 @@ impl EditorState {
       range: range.clone(),
     }));
 
-    if let Some(text) = &self.search_text {
+    if let Some(text) = &self.search.query {
       iterators.push(HighlightIter::Search(SearchResults { iter: self.doc.find(text) }));
     }
 

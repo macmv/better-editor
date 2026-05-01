@@ -42,10 +42,11 @@ pub struct EditorState {
 
   selection: Option<Selection>,
 
-  file:        Option<OpenedFile>,
-  status:      Option<Status>,
-  command:     Option<CommandState>,
-  search_text: Option<String>,
+  file:    Option<OpenedFile>,
+  status:  Option<Status>,
+  command: Option<CommandState>,
+
+  pub search: SharedHandle<SearchState>,
 
   filetype:   Option<LanguageName>,
   highligher: Option<treesitter::Highlighter>,
@@ -64,6 +65,11 @@ pub struct EditorState {
   pub clipboard: SharedHandle<Clipboard>,
 
   pub changes: Option<LineDiffSimilarity>,
+}
+
+#[derive(Default)]
+pub struct SearchState {
+  pub query: Option<String>,
 }
 
 pub struct Selection {
@@ -473,7 +479,7 @@ impl EditorState {
 
     match command.mode {
       CommandMode::Search => {
-        self.search_text = Some(command.text);
+        self.search.query = Some(command.text);
         self.damage_all = true;
         self.status = None;
       }
@@ -642,7 +648,7 @@ impl EditorState {
   }
 
   pub fn clear_search(&mut self) {
-    self.search_text = None;
+    self.search.query = None;
     self.damage_all = true;
     self.status = None;
   }
