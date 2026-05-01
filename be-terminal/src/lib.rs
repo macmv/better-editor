@@ -338,7 +338,7 @@ impl Terminal {
     }
   }
 
-  pub fn line(&self, index: usize) -> Option<Line<'_>> { self.state.grid.line(index) }
+  pub fn line(&self, index: usize) -> Option<&Line> { self.state.grid.line(index) }
 
   pub fn update(&mut self) -> bool {
     loop {

@@ -19,8 +19,9 @@ pub struct OwnedLine {
   cells: Vec<Cell>,
 }
 
-pub struct Line<'a> {
-  line: &'a [Cell],
+#[repr(transparent)]
+pub struct Line {
+  line: [Cell],
 }
 
 pub struct LineMut<'a> {
@@ -65,8 +66,8 @@ impl Grid {
     self.lines[pos.row][pos.col].style = style;
   }
 
-  pub fn line(&self, index: usize) -> Option<Line<'_>> {
-    self.lines.get(index).map(|line| Line { line })
+  pub fn line(&self, index: usize) -> Option<&Line> {
+    self.lines.get(index).map(|line| Line::from_slice(line))
   }
 
   pub fn line_mut(&mut self, index: usize) -> LineMut<'_> {
@@ -128,7 +129,12 @@ impl<'a> LineMut<'a> {
   }
 }
 
-impl Line<'_> {
+impl Line {
+  pub fn from_slice<'a>(line: &'a [Cell]) -> &'a Self {
+    // SAFETY: `Line` is repr(transparent)
+    unsafe { std::mem::transmute(line) }
+  }
+
   pub fn to_string(&self) -> String { self.slice_to_string(..) }
 
   pub fn slice_to_string<R>(&self, range: R) -> String
@@ -145,7 +151,7 @@ impl Line<'_> {
   }
 
   pub fn styles(&self) -> StyleIter<'_> {
-    StyleIter { line: self.line, prev: Style::default(), index: 0, offset: 0, done: false }
+    StyleIter { line: &self.line, prev: Style::default(), index: 0, offset: 0, done: false }
   }
 
   pub fn specific_styles<T, F>(&self, f: F) -> SpecificStyleIter<'_, F, T>
@@ -153,7 +159,7 @@ impl Line<'_> {
     F: Fn(usize, Style) -> T,
   {
     SpecificStyleIter {
-      line:   self.line,
+      line:   &self.line,
       prev:   None,
       index:  0,
       offset: 0,
