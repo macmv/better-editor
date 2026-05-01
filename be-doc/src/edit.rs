@@ -33,8 +33,12 @@ impl Edit {
 
 impl Change {
   pub fn insert(at: usize, text: &str) -> Self { Change { range: at..at, text: text.to_string() } }
-  pub fn remove(range: Range<usize>) -> Self { Change { range, text: String::new() } }
+  pub fn remove(range: Range<usize>) -> Self {
+    assert!(range.start <= range.end, "invalid change: start {} > end {}", range.start, range.end);
+    Change { range, text: String::new() }
+  }
   pub fn replace(range: Range<usize>, text: &str) -> Self {
+    assert!(range.start <= range.end, "invalid change: start {} > end {}", range.start, range.end);
     Change { range, text: text.to_string() }
   }
 
