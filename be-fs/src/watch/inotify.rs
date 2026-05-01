@@ -96,7 +96,7 @@ impl INotifyWatcher {
         {
           // TODO: Paths that are watched should be triggered by handles. We should not
           // greedily watch paths.
-          if !rel.starts_with("target") && !rel.starts_with(".git") {
+          if !rel.starts_with("target") {
             stack.push(WorkspacePathBuf::from(&rel));
           }
         }
