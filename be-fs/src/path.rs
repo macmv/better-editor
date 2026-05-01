@@ -64,6 +64,14 @@ impl Borrow<WorkspacePath> for WorkspacePathBuf {
   fn borrow(&self) -> &WorkspacePath { self }
 }
 
+impl PartialEq<str> for WorkspacePathBuf {
+  fn eq(&self, other: &str) -> bool { self.path == other }
+}
+
+impl PartialEq<str> for WorkspacePath {
+  fn eq(&self, other: &str) -> bool { self.path == other }
+}
+
 impl WorkspacePath {
   pub fn new<S>(s: &S) -> &WorkspacePath
   where
