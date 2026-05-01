@@ -31,11 +31,11 @@ impl Pane {
   pub fn layout(&self, views: &mut HashMap<ViewId, View>, layout: &mut Layout) {
     match self {
       Pane::View(id) => {
-        let view = views.get_mut(id).unwrap();
+        let view = views.get_mut(id).expect("pane references view not in views map");
         view.bounds = layout.current_bounds();
 
         layout.active = Some(*id);
-        views.get_mut(id).unwrap().layout(layout);
+        views.get_mut(id).expect("pane references view not in views map").layout(layout);
         layout.active = None;
       }
       Pane::Split(split) => split.layout(views, layout),
