@@ -33,7 +33,7 @@ pub struct CompletionsState {
   clear_on_message: bool,
 
   visible_completions: Vec<String>,
-  active:              Option<usize>,
+  active:              usize,
 }
 
 pub struct SaveTask {
@@ -258,28 +258,28 @@ impl EditorState {
     }
 
     let max = self.lsp.completions.visible_completions.len() - 1;
+    let active = &mut self.lsp.completions.active;
 
-    if let Some(active) = &mut self.lsp.completions.active {
-      if next {
-        if *active == max {
-          *active = 0;
-        } else {
-          *active += 1;
-        }
+    if next {
+      if *active == max {
+        *active = 0;
       } else {
-        if *active == 0 {
-          *active = max;
-        } else {
-          *active -= 1;
-        }
+        *active += 1;
       }
     } else {
-      self.lsp.completions.active = Some(if next { 0 } else { max });
+      if *active == 0 {
+        *active = max;
+      } else {
+        *active -= 1;
+      }
     }
   }
 
   pub(crate) fn accept_completion(&mut self) {
-    let Some(active) = self.lsp.completions.active else { return };
+    if !self.lsp.completions.show {
+      return;
+    }
+    let active = self.lsp.completions.active;
     let Some(text) = self.lsp.completions.visible_completions.get(active) else { return };
 
     let range = self.current_range_for_completions();
@@ -288,12 +288,18 @@ impl EditorState {
     self.move_col_rel(to_move as i32);
 
     self.lsp.completions.show = false;
-    self.lsp.completions.active = None;
+    self.lsp.completions.active = 0;
     self.lsp.completions.tasks.clear();
     self.lsp.completions.visible_completions.clear();
   }
 
-  pub fn active_completion(&self) -> Option<usize> { self.lsp.completions.active }
+  pub fn active_completion(&self) -> Option<usize> {
+    if self.lsp.completions.show && !self.lsp.completions.visible_completions.is_empty() {
+      Some(self.lsp.completions.active)
+    } else {
+      None
+    }
+  }
 
   pub(crate) fn lsp_request_goto_definition(&mut self) {
     let Some(file) = &self.file else { return };
@@ -351,6 +357,11 @@ impl EditorState {
         .collect();
     } else {
       self.lsp.completions.visible_completions.clear();
+    }
+
+    let len = self.lsp.completions.visible_completions.len();
+    if len > 0 {
+      self.lsp.completions.active = self.lsp.completions.active.min(len - 1);
     }
   }
 
