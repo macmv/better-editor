@@ -135,6 +135,11 @@ impl Line {
     unsafe { std::mem::transmute(line) }
   }
 
+  pub fn from_mut<'a>(line: &'a mut [Cell]) -> &'a mut Self {
+    // SAFETY: `Line` is repr(transparent)
+    unsafe { std::mem::transmute(line) }
+  }
+
   pub fn to_string(&self) -> String { self.slice_to_string(..) }
 
   pub fn slice_to_string<R>(&self, range: R) -> String
