@@ -24,10 +24,6 @@ pub struct Line {
   line: [Cell],
 }
 
-pub struct LineMut<'a> {
-  line: &'a mut [Cell],
-}
-
 pub struct StyleIter<'a> {
   line:   &'a [Cell],
   prev:   Style,
@@ -70,8 +66,8 @@ impl Grid {
     self.lines.get(index).map(|line| Line::from_slice(line))
   }
 
-  pub fn line_mut(&mut self, index: usize) -> LineMut<'_> {
-    LineMut { line: self.lines.get_mut(index).expect("line out of bounds") }
+  pub fn line_mut(&mut self, index: usize) -> &mut Line {
+    Line::from_mut(self.lines.get_mut(index).expect("line out of bounds"))
   }
 
   pub fn resize(&mut self, size: Size) {
@@ -86,7 +82,7 @@ impl Grid {
 
   pub fn clear(&mut self, style: Style) {
     for line in &mut self.lines {
-      LineMut { line }.clear(style);
+      Line::from_mut(line).clear(style);
     }
   }
 
@@ -106,26 +102,6 @@ impl Grid {
     self.line_mut(range.end - 1).clear(Style::default());
 
     line
-  }
-}
-
-impl<'a> LineMut<'a> {
-  pub fn clear(&mut self, style: Style) {
-    let cell = Cell { c: ' ', style };
-    self.line.fill(cell);
-  }
-
-  pub fn clear_range(&mut self, range: std::ops::RangeInclusive<usize>, style: Style) {
-    for i in range {
-      self.line[i].c = ' ';
-      self.line[i].style = style;
-    }
-  }
-
-  pub(crate) fn shift_right_from(&mut self, col: usize) {
-    for i in (col + 1..self.line.len()).rev() {
-      self.line.swap(i - 1, i);
-    }
   }
 }
 
@@ -170,6 +146,24 @@ impl Line {
       offset: 0,
       func:   f,
       done:   false,
+    }
+  }
+
+  pub fn clear(&mut self, style: Style) {
+    let cell = Cell { c: ' ', style };
+    self.line.fill(cell);
+  }
+
+  pub fn clear_range(&mut self, range: std::ops::RangeInclusive<usize>, style: Style) {
+    for i in range {
+      self.line[i].c = ' ';
+      self.line[i].style = style;
+    }
+  }
+
+  pub(crate) fn shift_right_from(&mut self, col: usize) {
+    for i in (col + 1..self.line.len()).rev() {
+      self.line.swap(i - 1, i);
     }
   }
 }
