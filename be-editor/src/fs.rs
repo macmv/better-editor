@@ -68,7 +68,12 @@ impl EditorState {
         file.modified = true;
       } else {
         let p = file.path().to_path_buf();
-        self.open(&p).unwrap();
+        if let Err(e) = self.open(&p) {
+          warn!("failed to reload file on change: {e}");
+          if let Some(file) = &mut self.file {
+            file.modified = true;
+          }
+        }
       }
     }
   }
