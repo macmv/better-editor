@@ -149,6 +149,7 @@ impl Action {
         (Mode::Insert | Mode::Command, Key::ArrowRight) => m!(Single(Direction::Right)),
 
         (Mode::Visual(_), Key::Escape) => Ok(Action::SetMode { mode: Mode::Normal, delta: 0 }),
+        (Mode::Replace, Key::Escape) => Ok(Action::SetMode { mode: Mode::Normal, delta: -1 }),
 
         (Mode::Normal, Key::Char('0')) if count != 0 => {
           count *= 10;
