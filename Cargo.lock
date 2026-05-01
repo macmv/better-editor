@@ -902,6 +902,7 @@ dependencies = [
 [[package]]
 name = "expect-test"
 version = "0.1.0"
+source = "git+https://github.com/macmv/expect-test?rev=6a120346f02d36002b50fe81bb9e19fa911577db#6a120346f02d36002b50fe81bb9e19fa911577db"
 dependencies = [
  "parking_lot",
  "pretty_assertions",
