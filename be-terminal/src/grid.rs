@@ -60,6 +60,17 @@ impl Grid {
     self.lines[pos.row][pos.col].style = style;
   }
 
+  pub fn replace_char(&mut self, pos: Position, c: char) {
+    if pos.row >= self.lines.len() {
+      return;
+    }
+    if pos.col >= self.lines[pos.row].len() {
+      return;
+    }
+
+    self.lines[pos.row][pos.col].c = c;
+  }
+
   pub fn line(&self, index: usize) -> Option<&Line> {
     self.lines.get(index).map(|line| Line::from_slice(line))
   }

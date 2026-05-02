@@ -327,7 +327,13 @@ impl Perform for TerminalState {
           self.cursor = saved;
         }
       }
-      (b'X', []) => unhandled!("erase chars"),
+      (b'X', []) => {
+        for i in self.cursor.col
+          ..(next_param_or(1) as usize + self.cursor.col).clamp(self.cursor.col + 1, self.size.cols)
+        {
+          self.grid.replace_char(crate::Position { row: self.cursor.row, col: i }, ' ');
+        }
+      }
       (b'Z', []) => unhandled!("move backward tabs"),
       _ => unhandled!(),
     }
