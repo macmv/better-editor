@@ -55,18 +55,24 @@ pub struct TerminalState {
   alt_cursor:       Cursor,
   alt_saved_cursor: Option<Cursor>,
 
-  pub title:                   String,
-  pub report_mouse:            bool,
-  pub mouse_motion:            bool,
-  pub mouse_all_motion:        bool,
-  pub report_focus:            bool,
-  pub mouse_utf8:              bool,
-  pub cursor_keys:             bool,
-  pub bracketed_paste:         bool,
-  pub keypad_application_mode: bool,
+  pub title: String,
+  pub flags: TerminalFlags,
 
   pending_writes: Vec<u8>,
   charsets:       [Charset; 4],
+}
+
+bitflags::bitflags! {
+  pub struct TerminalFlags: u8 {
+    const REPORT_MOUSE            = 1 << 0;
+    const MOUSE_MOTION            = 1 << 1;
+    const MOUSE_ALL_MOTION        = 1 << 2;
+    const REPORT_FOCUS            = 1 << 3;
+    const MOUSE_UTF8              = 1 << 4;
+    const CURSOR_KEYS             = 1 << 5;
+    const BRACKETED_PASTE         = 1 << 6;
+    const KEYPAD_APPLICATION_MODE = 1 << 7;
+  }
 }
 
 #[derive(Clone, Copy)]
@@ -211,28 +217,28 @@ impl Terminal {
   pub fn perform_tab(&mut self) { self.pty.input(control::C0::HT.into()); }
   pub fn perform_shift_tab(&mut self) { self.pty.input_str("\x1b[Z"); }
   pub fn perform_up(&mut self) {
-    if self.state.cursor_keys {
+    if self.state.flags.contains(TerminalFlags::CURSOR_KEYS) {
       self.pty.input_str("\x1bOA");
     } else {
       self.pty.input_str("\x1b[A");
     }
   }
   pub fn perform_down(&mut self) {
-    if self.state.cursor_keys {
+    if self.state.flags.contains(TerminalFlags::CURSOR_KEYS) {
       self.pty.input_str("\x1bOB");
     } else {
       self.pty.input_str("\x1b[B");
     }
   }
   pub fn perform_left(&mut self) {
-    if self.state.cursor_keys {
+    if self.state.flags.contains(TerminalFlags::CURSOR_KEYS) {
       self.pty.input_str("\x1bOD");
     } else {
       self.pty.input_str("\x1b[D");
     }
   }
   pub fn perform_right(&mut self) {
-    if self.state.cursor_keys {
+    if self.state.flags.contains(TerminalFlags::CURSOR_KEYS) {
       self.pty.input_str("\x1bOC");
     } else {
       self.pty.input_str("\x1b[C");
@@ -242,7 +248,7 @@ impl Terminal {
   ///
   /// `button` is 0=left, 1=middle, 2=right. Only sent when mode 1000 is active.
   pub fn perform_mouse_button(&mut self, col: usize, row: usize, button: u8, pressed: bool) {
-    if self.state.report_mouse {
+    if self.state.flags.contains(TerminalFlags::REPORT_MOUSE) {
       let code = if pressed { button } else { 3 };
       self.send_mouse_report(col, row, code);
     }
@@ -252,7 +258,7 @@ impl Terminal {
   ///
   /// Only sent when mode 1000 is active.
   pub fn perform_mouse_scroll(&mut self, col: usize, row: usize, dy: i32) {
-    if self.state.report_mouse {
+    if self.state.flags.contains(TerminalFlags::REPORT_MOUSE) {
       // Scroll buttons: 64=wheel-up, 65=wheel-down (before the +32 offset in
       // send_mouse_report).
       let code = if dy > 0 { 64 } else { 65 };
@@ -268,7 +274,7 @@ impl Terminal {
   pub fn viewport_offset(&self) -> usize { self.state.viewport_offset }
 
   pub fn is_fractional_scrolling(&self) -> bool {
-    !self.state.report_mouse && !self.state.alt_screen
+    !self.state.flags.contains(TerminalFlags::REPORT_MOUSE) && !self.state.alt_screen
   }
 
   /// Report mouse motion to the PTY.
@@ -276,9 +282,9 @@ impl Terminal {
   /// `held` is the button currently held (0=left, 1=middle, 2=right), or None.
   /// Sent when mode 1002 (held button) or 1003 (all motion) is active.
   pub fn perform_mouse_move(&mut self, col: usize, row: usize, held: Option<u8>) {
-    let report = if self.state.mouse_all_motion {
+    let report = if self.state.flags.contains(TerminalFlags::MOUSE_ALL_MOTION) {
       true
-    } else if self.state.mouse_motion {
+    } else if self.state.flags.contains(TerminalFlags::MOUSE_MOTION) {
       held.is_some()
     } else {
       false
@@ -295,7 +301,7 @@ impl Terminal {
   ///
   /// Only sent when mode 1004 is active.
   pub fn perform_focus_event(&mut self, focus: bool) {
-    if self.state.report_focus {
+    if self.state.flags.contains(TerminalFlags::REPORT_FOCUS) {
       if focus {
         self.pty.input_str("\x1b[I");
       } else {
@@ -305,7 +311,7 @@ impl Terminal {
   }
 
   fn send_mouse_report(&mut self, col: usize, row: usize, button_code: u8) {
-    if self.state.mouse_utf8 {
+    if self.state.flags.contains(TerminalFlags::MOUSE_UTF8) {
       // Mode 1005: encode each of the three values as a UTF-8 codepoint.
       let mut buf = vec![0x1b, b'[', b'M'];
       push_utf8_coord(&mut buf, 32 + u32::from(button_code));
@@ -330,7 +336,7 @@ impl Terminal {
 
   pub fn perform_paste(&mut self, s: &str) {
     // Source: alacritty
-    if self.state.bracketed_paste {
+    if self.state.flags.contains(TerminalFlags::BRACKETED_PASTE) {
       self.pty.input_str("\x1b[200~");
 
       // Write filtered escape sequences.
@@ -443,14 +449,7 @@ impl TerminalState {
       alt_saved_cursor: None,
 
       title: String::new(),
-      report_mouse: false,
-      mouse_motion: false,
-      mouse_all_motion: false,
-      report_focus: false,
-      mouse_utf8: false,
-      cursor_keys: false,
-      bracketed_paste: false,
-      keypad_application_mode: false,
+      flags: TerminalFlags::empty(),
 
       pending_writes: vec![],
       charsets: [Charset::Ascii; 4],

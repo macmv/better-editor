@@ -1,6 +1,8 @@
 use anstyle_parse::{Params, Perform};
 
-use crate::{BuiltinColor, Charset, Style, StyleFlags, TerminalColor, TerminalState};
+use crate::{
+  BuiltinColor, Charset, Style, StyleFlags, TerminalColor, TerminalFlags, TerminalState,
+};
 
 impl Perform for TerminalState {
   fn print(&mut self, c: char) {
@@ -83,8 +85,8 @@ impl Perform for TerminalState {
           self.cursor = saved;
         }
       }
-      (b'=', []) => self.keypad_application_mode = true,
-      (b'>', []) => self.keypad_application_mode = false,
+      (b'=', []) => self.flags.set(TerminalFlags::KEYPAD_APPLICATION_MODE, true),
+      (b'>', []) => self.flags.set(TerminalFlags::KEYPAD_APPLICATION_MODE, false),
       // String terminator, do nothing (parser handles as string terminator).
       (b'\\', []) => (),
       _ => unhandled!(),
@@ -437,29 +439,29 @@ impl TerminalState {
     }
 
     match mode {
-      1 => self.cursor_keys = set,
+      1 => self.flags.set(TerminalFlags::CURSOR_KEYS, true),
       3 => unhandled!("column mode"),
       6 => unhandled!("origin"),
       7 => unhandled!("line wrap"),
       12 => self.cursor.blink = set,
       25 => self.cursor.visible = set,
-      1000 => self.report_mouse = set,
+      1000 => self.flags.set(TerminalFlags::REPORT_MOUSE, set),
       1001 => unhandled!("highlight mouse tracking"),
       // 1002: report motion while a button is held; 1003: report all motion.
       // Both use X10 (or SGR with mode 1006) encoding.
-      1002 => self.mouse_motion = set,
-      1003 => self.mouse_all_motion = set,
+      1002 => self.flags.set(TerminalFlags::MOUSE_MOTION, set),
+      1003 => self.flags.set(TerminalFlags::MOUSE_ALL_MOTION, set),
       // 1004: send \x1b[I on focus gain and \x1b[O on focus loss.
-      1004 => self.report_focus = set,
+      1004 => self.flags.set(TerminalFlags::REPORT_FOCUS, set),
       // 1005: encode mouse coords as UTF-8 codepoints instead of raw bytes.
-      1005 => self.mouse_utf8 = set,
+      1005 => self.flags.set(TerminalFlags::MOUSE_UTF8, set),
       // 1006: use CSI < b ; x ; y M/m instead of the old X10 encoding.
       // Required by most modern TUI apps when combined with 1000/1002/1003.
       1006 => unhandled!("sgr mouse"),
       1007 => unhandled!("alternate scroll"),
       1042 => unhandled!("urgency hints"),
       1049 => self.set_alt_screen(set),
-      2004 => self.bracketed_paste = set,
+      2004 => self.flags.set(TerminalFlags::BRACKETED_PASTE, set),
       // 2026: synchronized output (DEC private mode). When set, the terminal
       // should buffer all rendering until reset (like a begin/end frame pair),
       // eliminating flicker on full-screen redraws. Safe to silently ignore
