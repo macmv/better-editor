@@ -135,6 +135,7 @@ impl Action {
 
         (Mode::Insert, Key::Char(' ')) if key.control => Ok(Action::Autocomplete),
         (Mode::Insert, Key::Char('p')) if key.control => Ok(Action::MoveCompletion { next: false }),
+        (Mode::Insert, Key::Char('n')) if key.control => Ok(Action::MoveCompletion { next: true }),
         (Mode::Insert, Key::Char(c)) if key.control => Ok(Action::Control { char: c }),
         (Mode::Insert, Key::Tab) => Ok(Action::Tab { shift: key.shift }),
 
