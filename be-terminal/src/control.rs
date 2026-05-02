@@ -74,9 +74,15 @@ impl Perform for TerminalState {
       (b'c', []) => unhandled!("reset state"),
       (b'g', []) => {} // Visual bell, ignore.
       (b'0', &[index]) => self.set_charset(index, Charset::LineDrawing),
-      (b'7', []) => unhandled!("save cursor position"),
+      (b'7', []) => {
+        self.saved_cursor = Some(self.cursor);
+      }
       (b'8', [b'#']) => unhandled!("show test screen"),
-      (b'8', []) => unhandled!("restore cursor position"),
+      (b'8', []) => {
+        if let Some(saved) = self.saved_cursor {
+          self.cursor = saved;
+        }
+      }
       (b'=', []) => self.keypad_application_mode = true,
       (b'>', []) => self.keypad_application_mode = false,
       // String terminator, do nothing (parser handles as string terminator).
@@ -290,7 +296,9 @@ impl Perform for TerminalState {
           self.grid.scroll_up(self.scroll_start..self.scroll_end);
         }
       }
-      (b's', []) => unhandled!("save cursor position"),
+      (b's', []) => {
+        self.saved_cursor = Some(self.cursor);
+      }
       (b'T', []) => {
         for _ in 0..next_param_or(1) {
           self.grid.scroll_down(self.scroll_start..self.scroll_end);
@@ -305,7 +313,11 @@ impl Perform for TerminalState {
       // Should respond with CSI ? flags u (where flags is a bitmask of active
       // KKP flags). Until KKP is implemented, reply with 0 (no flags set).
       (b'q', [b'>']) => unhandled!("query keyboard mode"),
-      (b'u', []) => unhandled!("restore cursor position"),
+      (b'u', []) => {
+        if let Some(saved) = self.saved_cursor {
+          self.cursor = saved;
+        }
+      }
       (b'X', []) => unhandled!("erase chars"),
       (b'Z', []) => unhandled!("move backward tabs"),
       _ => unhandled!(),
@@ -459,6 +471,7 @@ impl TerminalState {
       self.cursor = self.alt_cursor;
       self.alt_grid.clear(Default::default());
       self.alt_cursor = Default::default();
+      self.alt_saved_cursor = None;
     }
   }
 

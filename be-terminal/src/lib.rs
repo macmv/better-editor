@@ -37,9 +37,10 @@ pub struct Cursor {
 }
 
 pub struct TerminalState {
-  grid:       Grid,
-  pub cursor: Cursor,
-  size:       Size,
+  grid:         Grid,
+  pub cursor:   Cursor,
+  saved_cursor: Option<Cursor>,
+  size:         Size,
 
   scrollback:      Vec<OwnedLine>,
   viewport_offset: usize, // 0 is live, >0 is scrolled back.
@@ -49,9 +50,10 @@ pub struct TerminalState {
   scroll_end:   usize,
 
   // Alternate screen. Used by most fullscreen apps. Disables scrolling while active.
-  alt_grid:   Grid,
-  alt_screen: bool,
-  alt_cursor: Cursor,
+  alt_grid:         Grid,
+  alt_screen:       bool,
+  alt_cursor:       Cursor,
+  alt_saved_cursor: Option<Cursor>,
 
   pub title:                   String,
   pub report_mouse:            bool,
@@ -428,6 +430,7 @@ impl TerminalState {
     TerminalState {
       grid: Grid::new(size),
       cursor: Cursor::default(),
+      saved_cursor: None,
       scrollback: vec![],
       viewport_offset: 0,
       scroll_start: 0,
@@ -437,6 +440,7 @@ impl TerminalState {
       alt_grid: Grid::new(size),
       alt_screen: false,
       alt_cursor: Cursor::default(),
+      alt_saved_cursor: None,
 
       title: String::new(),
       report_mouse: false,
