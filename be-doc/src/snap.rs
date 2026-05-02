@@ -189,6 +189,11 @@ impl DocumentSnapshot {
       std::ops::Bound::Excluded(end) => self.clamp_exclusive(*end),
     };
 
+    if start > end {
+      fatal!("start is after end for range: {start}..{end}");
+      return self.rope.byte_slice(0..0);
+    }
+
     self.rope.byte_slice(start..end)
   }
 
