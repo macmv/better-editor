@@ -145,11 +145,7 @@ impl TerminalView {
 
       MouseEvent::Scroll { pos, delta } => {
         let cell = self.mouse_to_pos(pos);
-        if delta.y < 0.0 {
-          self.terminal.perform_mouse_scroll(cell.col, cell.row, true);
-        } else if delta.y > 0.0 {
-          self.terminal.perform_mouse_scroll(cell.col, cell.row, false);
-        }
+        self.terminal.perform_mouse_scroll(cell.col, cell.row, (delta.y / 20.0) as i32);
       }
 
       MouseEvent::Leave => {
@@ -266,7 +262,7 @@ impl TerminalView {
     //   return Some(&mut self.cached_layouts[i]);
     // }
 
-    let line = self.terminal.line(i)?;
+    let line = self.terminal.visible_line(i)?;
     let line_string = line.to_string();
 
     let theme = &render.store.theme;
@@ -360,7 +356,7 @@ impl TerminalView {
     let mut buf = String::new();
 
     for row in start.row..=end.row {
-      let Some(line) = self.terminal.line(row) else { continue };
+      let Some(line) = self.terminal.visible_line(row) else { continue };
       let slice = if row == start.row && row == end.row {
         line.slice_to_string(start.col..end.col)
       } else if row == start.row {

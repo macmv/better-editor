@@ -39,9 +39,10 @@ pub struct Cursor {
 pub struct TerminalState {
   grid:       Grid,
   pub cursor: Cursor,
-
-  scrollback: Vec<OwnedLine>,
   size:       Size,
+
+  scrollback:      Vec<OwnedLine>,
+  viewport_offset: usize, // 0 is live, >0 is scrolled back.
 
   // VT100 "scroll region" concept. Used by htop.
   scroll_start: usize,
@@ -248,12 +249,16 @@ impl Terminal {
   /// Report a scroll-wheel event to the PTY.
   ///
   /// Only sent when mode 1000 is active.
-  pub fn perform_mouse_scroll(&mut self, col: usize, row: usize, up: bool) {
+  pub fn perform_mouse_scroll(&mut self, col: usize, row: usize, dy: i32) {
     if self.state.report_mouse {
       // Scroll buttons: 64=wheel-up, 65=wheel-down (before the +32 offset in
       // send_mouse_report).
-      let code = if up { 64 } else { 65 };
+      let code = if dy > 0 { 64 } else { 65 };
       self.send_mouse_report(col, row, code);
+    } else if !self.state.alt_screen {
+      self.state.viewport_offset = self.state.viewport_offset.saturating_add_signed(dy as isize);
+
+      self.state.viewport_offset = self.state.viewport_offset.clamp(0, self.state.scrollback.len());
     }
   }
 
@@ -341,7 +346,14 @@ impl Terminal {
     }
   }
 
-  pub fn line(&self, index: usize) -> Option<&Line> { self.state.grid.line(index) }
+  pub fn visible_line(&self, index: usize) -> Option<&Line> {
+    let abs_line = self.state.scrollback.len() + index - self.state.viewport_offset;
+    if abs_line < self.state.scrollback.len() {
+      Some(&*self.state.scrollback[abs_line])
+    } else {
+      self.state.grid.line(abs_line - self.state.scrollback.len())
+    }
+  }
 
   pub fn update(&mut self) -> bool {
     loop {
@@ -400,6 +412,7 @@ impl TerminalState {
       grid: Grid::new(size),
       cursor: Cursor::default(),
       scrollback: vec![],
+      viewport_offset: 0,
       scroll_start: 0,
       scroll_end: size.rows,
       size,
