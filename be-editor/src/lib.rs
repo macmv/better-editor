@@ -434,7 +434,13 @@ impl EditorState {
 
   fn damage_line(&mut self, line: Line) { self.damages.insert(line); }
 
+  #[track_caller]
   fn damage_range(&mut self, range: Range<usize>) {
+    if range.end < range.start {
+      fatal!("damage range is inverted: {range:?}");
+      return;
+    }
+
     let start_line = self.doc.line_of_byte(range.start);
     let end_line = self.doc.line_of_byte(range.end);
 
