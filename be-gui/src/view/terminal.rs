@@ -260,9 +260,11 @@ impl TerminalView {
   }
 
   fn layout_line(&mut self, render: &mut Render, i: usize) -> Option<&mut LineLayout> {
-    if self.cached_layouts.len() < i {
-      return Some(&mut self.cached_layouts[i]);
-    }
+    // TODO: Use cached layouts!!
+    //
+    // if i < self.cached_layouts.len() {
+    //   return Some(&mut self.cached_layouts[i]);
+    // }
 
     let line = self.terminal.line(i)?;
     let line_string = line.to_string();
