@@ -15,6 +15,11 @@ pub struct TerminalView {
   set_waker: bool,
   focused:   bool,
 
+  // Scroll offset. Note that this is inverted compared to the editor. Terminals scroll backwards
+  // as much as they want, but always have a fixed bottom. So 0 means no scroll, and 1 means shift
+  // everything _down_ 1 line (which would be offset=-1 in the editor).
+  viewport_offset: f64, // 0..1, partial line offset
+
   size:           be_terminal::Size,
   character_size: kurbo::Size,
 
@@ -37,18 +42,19 @@ struct LineLayout {
 impl TerminalView {
   pub fn new(workspace: &Workspace) -> Self {
     TerminalView {
-      terminal:       Terminal::new(be_terminal::Size { rows: 40, cols: 80 }),
-      set_waker:      false,
-      focused:        false,
-      size:           be_terminal::Size { rows: 40, cols: 80 },
-      character_size: kurbo::Size::ZERO,
-      cached_layouts: vec![],
-      cached_scale:   0.0,
-      clipboard:      workspace.clipboard.clone(),
-      drag_start:     None,
-      selection:      None,
-      mouse_held:     None,
-      mouse_pos:      None,
+      terminal:        Terminal::new(be_terminal::Size { rows: 40, cols: 80 }),
+      set_waker:       false,
+      focused:         false,
+      viewport_offset: 0.0,
+      size:            be_terminal::Size { rows: 40, cols: 80 },
+      character_size:  kurbo::Size::ZERO,
+      cached_layouts:  vec![],
+      cached_scale:    0.0,
+      clipboard:       workspace.clipboard.clone(),
+      drag_start:      None,
+      selection:       None,
+      mouse_held:      None,
+      mouse_pos:       None,
     }
   }
 
@@ -145,7 +151,21 @@ impl TerminalView {
 
       MouseEvent::Scroll { pos, delta } => {
         let cell = self.mouse_to_pos(pos);
-        self.terminal.perform_mouse_scroll(cell.col, cell.row, (delta.y / 20.0) as i32);
+        if self.terminal.is_fractional_scrolling() {
+          // TODO: Constant for line_height = 20.0
+          self.viewport_offset += delta.y / 20.0;
+          let terminal_offset = self.terminal.viewport_offset();
+          self.viewport_offset = self.viewport_offset.clamp(
+            -(terminal_offset as isize) as f64,
+            (self.terminal.maximum_offset() - terminal_offset) as f64,
+          );
+
+          let lines = self.viewport_offset.floor() as isize;
+          self.viewport_offset -= lines as f64;
+          self.terminal.perform_mouse_scroll(cell.col, cell.row, lines as i32);
+        } else {
+          self.terminal.perform_mouse_scroll(cell.col, cell.row, (delta.y / 20.0) as i32);
+        }
       }
 
       MouseEvent::Leave => {
@@ -217,20 +237,23 @@ impl TerminalView {
     );
 
     let character_size = self.character_size;
+    let viewport_offset = self.viewport_offset;
 
-    for line in 0..self.size.rows {
-      let Some(layout) = self.layout_line(render, line) else { break };
+    let start = if viewport_offset > 0.0 { -1 } else { 0 };
+    for line in start..self.size.rows as isize {
+      let y = line as f64 * character_size.height + viewport_offset * 20.0;
+      let Some(layout) = self.layout_line(render, line) else { continue };
 
       for range in &layout.background {
         render.fill(
           &Rect::from_origin_size(
-            (range.0.round(), (line as f64 * character_size.height).round()),
+            (range.0.round(), y.round()),
             ((range.1 - range.0).ceil(), character_size.height.ceil()),
           ),
           range.2,
         );
       }
-      render.draw_text(&layout.layout, (0.0, line as f64 * character_size.height));
+      render.draw_text(&layout.layout, (0.0, y));
     }
 
     if self.terminal.state().cursor.visible {
@@ -255,14 +278,17 @@ impl TerminalView {
     self.terminal.perform_focus_event(focus);
   }
 
-  fn layout_line(&mut self, render: &mut Render, i: usize) -> Option<&mut LineLayout> {
+  fn layout_line(&mut self, render: &mut Render, i: isize) -> Option<&mut LineLayout> {
     // TODO: Use cached layouts!!
     //
     // if i < self.cached_layouts.len() {
     //   return Some(&mut self.cached_layouts[i]);
     // }
 
-    let line = self.terminal.visible_line(i)?;
+    let line = match usize::try_from(i) {
+      Ok(i) => self.terminal.visible_line(i)?,
+      Err(_) => self.terminal.scrollback_line(-i as usize + self.terminal.viewport_offset() - 1)?,
+    };
     let line_string = line.to_string();
 
     let theme = &render.store.theme;
@@ -317,13 +343,14 @@ impl TerminalView {
 
     let layout = LineLayout { layout, background };
 
-    if self.cached_layouts.len() == i {
+    // TODO: Real caching!! It should also be based off the real, scrollback
+    // position.
+    if self.cached_layouts.is_empty() {
       self.cached_layouts.push(layout);
     } else {
-      self.cached_layouts[i] = layout;
+      self.cached_layouts[0] = layout;
     }
-
-    Some(&mut self.cached_layouts[i])
+    Some(&mut self.cached_layouts[0])
   }
 
   fn mouse_to_pos(&self, mouse: Point) -> Position {
@@ -333,7 +360,12 @@ impl TerminalView {
     }
   }
 
-  fn selection_inverted_at(&self, row: usize, col: usize) -> bool {
+  fn selection_inverted_at(&self, row: isize, col: usize) -> bool {
+    if row < 0 {
+      return false;
+    }
+    let row = row as usize;
+
     if let Some((start, end)) = self.selection {
       if row < start.row || row > end.row {
         false

@@ -262,6 +262,13 @@ impl Terminal {
     }
   }
 
+  pub fn maximum_offset(&self) -> usize { self.state.scrollback.len() }
+  pub fn viewport_offset(&self) -> usize { self.state.viewport_offset }
+
+  pub fn is_fractional_scrolling(&self) -> bool {
+    !self.state.report_mouse && !self.state.alt_screen
+  }
+
   /// Report mouse motion to the PTY.
   ///
   /// `held` is the button currently held (0=left, 1=middle, 2=right), or None.
@@ -352,6 +359,16 @@ impl Terminal {
       Some(&*self.state.scrollback[abs_line])
     } else {
       self.state.grid.line(abs_line - self.state.scrollback.len())
+    }
+  }
+
+  /// Returns a line from the scrollback. The most recent line is index 0. Used
+  /// to render partial lines.
+  pub fn scrollback_line(&self, index: usize) -> Option<&Line> {
+    if index < self.state.scrollback.len() {
+      Some(&*self.state.scrollback[self.state.scrollback.len() - index - 1])
+    } else {
+      None
     }
   }
 
