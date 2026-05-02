@@ -56,14 +56,14 @@ pub struct TerminalState {
   alt_saved_cursor: Option<Cursor>,
 
   pub title: String,
-  pub flags: TerminalFlags,
+  flags:     TerminalFlags,
 
   pending_writes: Vec<u8>,
   charsets:       [Charset; 4],
 }
 
 bitflags::bitflags! {
-  pub struct TerminalFlags: u8 {
+  struct TerminalFlags: u8 {
     const REPORT_MOUSE            = 1 << 0;
     const MOUSE_MOTION            = 1 << 1;
     const MOUSE_ALL_MOTION        = 1 << 2;
