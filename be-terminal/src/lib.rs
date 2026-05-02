@@ -441,6 +441,7 @@ impl TerminalState {
       self.scroll_end = size.rows;
     }
     self.size = size;
+    // TODO: Evict lines to `scrollback` when shrinking.
     self.grid.resize(size);
     self.alt_grid.resize(size);
     self.cursor.row = self.cursor.row.clamp(0, size.rows - 1);
