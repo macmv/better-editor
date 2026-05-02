@@ -245,7 +245,16 @@ impl Perform for TerminalState {
         param => unhandled!("clear line with {}", param),
       },
       (b'k', [b' ']) => unhandled!("set scp"),
-      (b'L', []) => unhandled!("insert blank lines"),
+      (b'L', []) => {
+        let count = (next_param_or(1) as usize).clamp(1, self.size.rows - self.cursor.row);
+        for i in (self.cursor.row..=self.size.rows.saturating_sub(count + 1)).rev() {
+          self.grid.swap(i, i + count);
+        }
+        for i in self.cursor.row..self.cursor.row + count {
+          self.grid.line_mut(i).clear(Default::default());
+        }
+        self.cursor.col = 0;
+      }
       (b'l', []) => {
         for param in params_iter.map(|param| param[0]) {
           self.set_mode(param, false);

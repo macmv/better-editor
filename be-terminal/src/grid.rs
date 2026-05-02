@@ -84,6 +84,8 @@ impl Grid {
     }
   }
 
+  pub fn swap(&mut self, a: usize, b: usize) { self.lines.swap(a, b); }
+
   pub fn scroll_down(&mut self, range: Range<usize>) {
     for line in (range.start + 1..range.end).rev() {
       self.lines.swap(line, line - 1);
