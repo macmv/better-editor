@@ -288,7 +288,13 @@ impl Perform for TerminalState {
           arg => unhandled!("unknown device status query: {arg}"),
         };
       }
-      (b'P', []) => unhandled!("delete chars"),
+      (b'P', []) => {
+        self.grid.line_mut(self.cursor.row).delete_chars_at(
+          self.cursor.col,
+          next_param_or(1) as usize,
+          self.cursor.style,
+        );
+      }
       (b'p', [b'$']) => unhandled!("report mode"),
       (b'p', [b'?', b'$']) => unhandled!("report private mode"),
       (b'q', [b' ']) => unhandled!("set cursor style"),

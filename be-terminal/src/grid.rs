@@ -177,6 +177,18 @@ impl Line {
       self.line.swap(i - 1, i);
     }
   }
+
+  pub(crate) fn delete_chars_at(&mut self, col: usize, count: usize, style: Style) {
+    let len = self.line.len();
+    let count = count.min(len.saturating_sub(col));
+    for i in col..len - count {
+      self.line[i] = self.line[i + count];
+    }
+    let fill = Cell { c: ' ', style };
+    for i in len - count..len {
+      self.line[i] = fill;
+    }
+  }
 }
 
 impl Deref for OwnedLine {
