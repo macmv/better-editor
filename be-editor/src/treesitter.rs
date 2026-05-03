@@ -263,23 +263,6 @@ fn install_grammar(
         .unwrap(),
     )
     .fatal()?;
-    check_status(
-      std::process::Command::new("cc")
-        .args([
-          "-Isrc",
-          "-std=c11",
-          "-fPIC",
-          "-O3",
-          "-c",
-          "-o",
-          source_path.join("scanner.o").to_str().unwrap(),
-          source_path.join("scanner.c").to_str().unwrap(),
-        ])
-        .current_dir(&grammar_path)
-        .status()
-        .unwrap(),
-    )
-    .fatal()?;
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     compile_error!("tree sitter not setup for target os");
@@ -292,7 +275,6 @@ fn install_grammar(
       "-shared",
       "-Wl,-soname,libtree-sitter.so",
       source_path.join("parser.o").to_str().unwrap(),
-      source_path.join("scanner.o").to_str().unwrap(),
       "-o",
       so_name,
     ]);
@@ -303,7 +285,6 @@ fn install_grammar(
       "-dynamiclib",
       "-Wl,-install_name,libtree-sitter.dylib",
       source_path.join("parser.o").to_str().unwrap(),
-      source_path.join("scanner.o").to_str().unwrap(),
       "-o",
       so_name,
     ]);
