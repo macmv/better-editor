@@ -76,11 +76,20 @@ pub fn load_grammar(config: &Config, ft: LanguageName) -> Option<Highlighter> {
   let mut parser = Parser::new();
   parser.set_language(&language.language).fatal()?;
 
-  let highlights_query = Query::new(
-    &language.language,
-    &std::fs::read_to_string(grammar_path.join(&grammar.highlights.first())).fatal()?,
-  )
-  .fatal()?;
+  let highlights_query = match &grammar.highlights {
+    StringOrStrings::String(s) => {
+      Query::new(&language.language, &std::fs::read_to_string(grammar_path.join(s)).fatal()?)
+        .fatal()?
+    }
+
+    StringOrStrings::Vec(highlights) => highlights.iter().find_map(|h| {
+      // Find the first file that exists.
+      let file = std::fs::read_to_string(grammar_path.join(h)).ok()?;
+
+      // Skip any invalid queries, panic in debug mode.
+      Query::new(&language.language, &file).fatal()
+    })?,
+  };
 
   Some(Highlighter { parser, tree: None, highlights_query, _language: language })
 }
@@ -343,15 +352,6 @@ impl Drop for LoadedLanguage {
     unsafe {
       ManuallyDrop::drop(&mut self.language);
       libc::dlclose(self.object);
-    }
-  }
-}
-
-impl StringOrStrings {
-  fn first(&self) -> &str {
-    match self {
-      StringOrStrings::String(s) => s,
-      StringOrStrings::Vec(v) => &v[0],
     }
   }
 }
