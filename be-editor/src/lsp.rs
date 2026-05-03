@@ -71,6 +71,15 @@ impl EditorState {
     };
     self.lsp.client.set(key, server);
 
+    // NB: This spits out an error for all the servers that haven't seen this file
+    // yet. But, it ensures DidOpen behaves.
+    //
+    // I think this should just all get merged into a single command? Not entirely
+    // sure.
+    self.lsp.client.send(&command::DidCloseTextDocument {
+      path: self.file.as_ref().unwrap().path().to_path_buf(),
+    });
+
     self.lsp.client.send(&command::DidOpenTextDocument {
       path:        self.file.as_ref().unwrap().path().to_path_buf(),
       doc:         self.doc.snapshot(),
