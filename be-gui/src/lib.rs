@@ -1,6 +1,10 @@
 mod render;
 
-use std::{collections::HashMap, hash::Hash};
+use std::{
+  collections::HashMap,
+  hash::Hash,
+  ops::{Index, IndexMut},
+};
 
 use be_editor::CursorOrLsp;
 use be_input::{Action, KeyStroke, Navigation};
@@ -667,6 +671,16 @@ impl ViewCollection {
   pub fn visible_mut(&mut self) -> impl Iterator<Item = &mut View> {
     self.views.values_mut().filter(|v| v.visible())
   }
+}
+
+impl Index<ViewId> for ViewCollection {
+  type Output = View;
+
+  fn index(&self, id: ViewId) -> &View { self.views.get(&id).unwrap() }
+}
+
+impl IndexMut<ViewId> for ViewCollection {
+  fn index_mut(&mut self, id: ViewId) -> &mut View { self.views.get_mut(&id).unwrap() }
 }
 
 impl MouseEvent {
