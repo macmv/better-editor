@@ -1,0 +1,5 @@
+display-name = "C"
+extensions = ["c"]
+
+[tree-sitter]
+repo = "https://github.com/tree-sitter/tree-sitter-c"
