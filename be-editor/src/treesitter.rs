@@ -246,50 +246,67 @@ fn install_grammar(
   let so_path = grammar_path.join(so_name);
   let source_path = grammar_path.join(inner_path).join("src");
   if !so_path.exists() {
+    let include = format!("-I{}", source_path.display());
+
     check_status(
       std::process::Command::new("cc")
-        .args([
-          "-Isrc",
-          "-std=c11",
-          "-fPIC",
-          "-O3",
-          "-c",
-          "-o",
-          source_path.join("parser.o").to_str().unwrap(),
-          source_path.join("parser.c").to_str().unwrap(),
-        ])
+        .args([&include as &str, "-std=c11", "-fPIC", "-O3", "-c", "-o"])
+        .arg(source_path.join("parser.o"))
+        .arg(source_path.join("parser.c"))
         .current_dir(&grammar_path)
         .status()
         .unwrap(),
     )
     .fatal()?;
 
+    let mut obj_files = vec![source_path.join("parser.o")];
+    let mut has_cpp = false;
+
+    if source_path.join("scanner.c").exists() {
+      check_status(
+        std::process::Command::new("cc")
+          .args([&include as &str, "-std=c11", "-fPIC", "-O3", "-c", "-o"])
+          .arg(source_path.join("scanner.o"))
+          .arg(source_path.join("scanner.c"))
+          .current_dir(&grammar_path)
+          .status()
+          .unwrap(),
+      )
+      .fatal()?;
+      obj_files.push(source_path.join("scanner.o"));
+    } else if source_path.join("scanner.cc").exists() {
+      has_cpp = true;
+      check_status(
+        std::process::Command::new("c++")
+          .args([&include as &str, "-std=c++14", "-fPIC", "-O3", "-c", "-o"])
+          .arg(source_path.join("scanner.o"))
+          .arg(source_path.join("scanner.cc"))
+          .current_dir(&grammar_path)
+          .status()
+          .unwrap(),
+      )
+      .fatal()?;
+      obj_files.push(source_path.join("scanner.o"));
+    }
+
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     compile_error!("tree sitter not setup for target os");
 
-    let mut cmd = std::process::Command::new("cc");
+    let linker = if has_cpp { "c++" } else { "cc" };
+    let mut cmd = std::process::Command::new(linker);
 
     #[cfg(target_os = "linux")]
-    cmd.args([
-      "-O3",
-      "-shared",
-      "-Wl,-soname,libtree-sitter.so",
-      source_path.join("parser.o").to_str().unwrap(),
-      "-o",
-      so_name,
-    ]);
+    cmd.args(["-O3", "-shared", "-Wl,-soname,libtree-sitter.so"]);
 
     #[cfg(target_os = "macos")]
-    cmd.args([
-      "-O3",
-      "-dynamiclib",
-      "-Wl,-install_name,libtree-sitter.dylib",
-      source_path.join("parser.o").to_str().unwrap(),
-      "-o",
-      so_name,
-    ]);
+    cmd.args(["-O3", "-dynamiclib", "-Wl,-install_name,libtree-sitter.dylib"]);
 
-    cmd.current_dir(&grammar_path).status().unwrap();
+    for obj in &obj_files {
+      cmd.arg(obj);
+    }
+    cmd.arg("-o").arg(so_name);
+
+    check_status(cmd.current_dir(&grammar_path).status().unwrap()).fatal()?;
   }
 
   Some(grammar_path)
