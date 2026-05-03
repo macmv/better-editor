@@ -384,10 +384,7 @@ impl FileTree {
 
     for change in self.watcher.take_changes().iter() {
       if change.starts_with(WorkspacePath::new(".git")) {
-        // TODO: Refresh the entire tree. Unfortunately, non-write operations (even git
-        // status) writes to .git, so we need refresh() to not collapse everything.
-        //
-        // ItemMut::Directory(&mut self.tree).refresh();
+        ItemMut::Directory(&mut self.tree).refresh();
         continue;
       }
 
