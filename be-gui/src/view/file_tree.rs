@@ -337,9 +337,48 @@ impl Directory {
       }
     }
 
-    items.sort_unstable();
+    if let Some(prev) = &mut self.items {
+      prev.retain(|p| items.iter().any(|it| p.name() == it.name()));
+      for it in items {
+        if !prev.iter().any(|p| p.name() == it.name()) {
+          prev.push(it);
+        }
+      }
+      prev.sort_unstable();
+    } else {
+      items.sort_unstable();
+      self.items = Some(items);
+    }
+  }
 
-    self.items = Some(items);
+  // TODO: Deduplicate with open()
+  fn item(&mut self, path: &WorkspacePath) -> Option<ItemMut<'_>> {
+    let mut curr = self;
+
+    let mut components = path.components().peekable();
+
+    while let Some(component) = components.next() {
+      match component {
+        be_fs::Component::Normal(name) => {
+          let Some(items) = curr.items.as_mut() else { return None };
+
+          match items.iter_mut().find(|it| *it.name() == *name) {
+            // If we're done with the path, then break and update `active`. Otherwise, we
+            // found a file early, and the path is invalid.
+            Some(it) if components.peek().is_none() => return Some(it.as_mut()),
+            Some(Item::Directory(dir)) => {
+              curr = dir;
+            }
+            // Item wasn't found; bail
+            _ => return None,
+          }
+        }
+
+        _ => return None,
+      }
+    }
+
+    Some(ItemMut::Directory(curr))
   }
 }
 
@@ -384,17 +423,17 @@ impl FileTree {
 
     for change in self.watcher.take_changes().iter() {
       if change.starts_with(WorkspacePath::new(".git")) {
-        ItemMut::Directory(&mut self.tree).refresh();
+        ItemMut::Directory(&mut self.tree).refresh(&self.root);
         continue;
       }
 
       if let Some(parent) = change.parent()
-        && let Some(mut it) = self.item(parent)
+        && let Some(mut it) = self.tree.item(parent)
       {
-        it.refresh();
+        it.refresh(&self.root);
       }
-      if let Some(mut it) = self.item(change) {
-        it.refresh();
+      if let Some(mut it) = self.tree.item(change) {
+        it.refresh(&self.root);
       }
     }
 
@@ -405,36 +444,6 @@ impl FileTree {
   }
 
   pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
-
-  // TODO: Deduplicate with open()
-  fn item(&mut self, path: &WorkspacePath) -> Option<ItemMut<'_>> {
-    let mut curr = &mut self.tree;
-
-    let mut components = path.components().peekable();
-
-    while let Some(component) = components.next() {
-      match component {
-        be_fs::Component::Normal(name) => {
-          let Some(items) = curr.items.as_mut() else { return None };
-
-          match items.iter_mut().find(|it| *it.name() == *name) {
-            // If we're done with the path, then break and update `active`. Otherwise, we
-            // found a file early, and the path is invalid.
-            Some(it) if components.peek().is_none() => return Some(it.as_mut()),
-            Some(Item::Directory(dir)) => {
-              curr = dir;
-            }
-            // Item wasn't found; bail
-            _ => return None,
-          }
-        }
-
-        _ => return None,
-      }
-    }
-
-    Some(ItemMut::Directory(curr))
-  }
 }
 
 struct TreeDraw {
@@ -505,12 +514,17 @@ impl ItemMut<'_> {
     }
   }
 
-  fn refresh(&mut self) {
+  fn refresh(&mut self, root: &WorkspaceRoot) {
     match self {
       ItemMut::Directory(d) => {
         d.status = None;
-        for it in d.items.iter_mut().flatten() {
-          it.as_mut().refresh();
+        if d.expanded {
+          d.populate(root);
+          for it in d.items.iter_mut().flatten() {
+            it.as_mut().refresh(root);
+          }
+        } else {
+          d.items = None;
         }
       }
       ItemMut::File(f) => {
