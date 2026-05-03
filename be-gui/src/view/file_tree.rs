@@ -511,9 +511,10 @@ impl ItemMut<'_> {
   fn refresh(&mut self) {
     match self {
       ItemMut::Directory(d) => {
-        dbg!(&d.path);
-        d.items = None;
         d.status = None;
+        for it in d.items.iter_mut().flatten() {
+          it.as_mut().refresh();
+        }
       }
       ItemMut::File(f) => {
         f.status = None;
