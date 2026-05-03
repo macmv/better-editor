@@ -178,6 +178,30 @@ impl LspCommand for DidOpenTextDocument {
     None
   }
 }
+pub struct DidCloseTextDocument {
+  pub path: PathBuf,
+}
+
+impl LspCommand for DidCloseTextDocument {
+  type Result = Infallible;
+
+  fn is_capable(&self, caps: &types::ServerCapabilities) -> bool {
+    caps.text_document_sync.is_some()
+  }
+
+  fn send(&self, client: &mut LspClient) -> Option<Task<Infallible>> {
+    if client.state.lock().files.remove(&self.path).is_none() {
+      error!("file was not opened: {}", self.path.display());
+      return None;
+    }
+
+    client.notify::<types::notification::TextDocumentDidClose>(types::DidCloseTextDocumentParams {
+      text_document: types::TextDocumentIdentifier { uri: doc_uri(&self.path) },
+    });
+
+    None
+  }
+}
 
 pub struct DidChangeTextDocument {
   pub path:    PathBuf,
