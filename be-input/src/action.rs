@@ -130,8 +130,14 @@ impl Action {
           }
         }
 
+        #[cfg(not(target_os = "macos"))]
         (Mode::Insert, Key::Char('C')) if key.control => Ok(Action::ClipboardCopy),
+        #[cfg(not(target_os = "macos"))]
         (Mode::Insert, Key::Char('V')) if key.control => Ok(Action::ClipboardPaste),
+        #[cfg(target_os = "macos")]
+        (Mode::Insert, Key::Char('c')) if key.sup => Ok(Action::ClipboardCopy),
+        #[cfg(target_os = "macos")]
+        (Mode::Insert, Key::Char('v')) if key.sup => Ok(Action::ClipboardPaste),
 
         (Mode::Insert, Key::Char(' ')) if key.control => Ok(Action::Autocomplete),
         (Mode::Insert, Key::Char('p')) if key.control => Ok(Action::MoveCompletion { next: false }),
