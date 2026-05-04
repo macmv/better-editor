@@ -41,6 +41,8 @@ struct Init {
 
 #[derive(Default)]
 struct KeyState {
+  left_super:    bool,
+  right_super:   bool,
   left_control:  bool,
   right_control: bool,
   left_alt:      bool,
@@ -129,7 +131,9 @@ impl winit::application::ApplicationHandler<Event> for App {
         event:
           winit::event::KeyEvent {
             logical_key:
-              winit::keyboard::Key::Named(key @ (NamedKey::Control | NamedKey::Alt | NamedKey::Shift)),
+              winit::keyboard::Key::Named(
+                key @ (NamedKey::Super | NamedKey::Control | NamedKey::Alt | NamedKey::Shift),
+              ),
             location,
             state,
             ..
@@ -138,6 +142,8 @@ impl winit::application::ApplicationHandler<Event> for App {
       } => {
         if let Some(init) = &mut self.init {
           let key = match (key, location) {
+            (NamedKey::Super, winit::keyboard::KeyLocation::Left) => &mut init.keys.left_super,
+            (NamedKey::Super, winit::keyboard::KeyLocation::Right) => &mut init.keys.right_super,
             (NamedKey::Control, winit::keyboard::KeyLocation::Left) => &mut init.keys.left_control,
             (NamedKey::Control, winit::keyboard::KeyLocation::Right) => {
               &mut init.keys.right_control
@@ -336,6 +342,7 @@ impl KeyState {
 
     key.map(|key| KeyStroke {
       key,
+      sup: self.left_super || self.right_super,
       shift: self.left_shift || self.right_shift,
       control: self.left_control || self.right_control,
       alt: self.left_alt || self.right_alt,
