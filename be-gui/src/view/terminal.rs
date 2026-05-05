@@ -210,6 +210,10 @@ impl TerminalView {
 
     self.terminal.set_size(self.size);
     self.terminal.update();
+
+    if self.terminal.has_pending_writes() {
+      layout.notifier().wake();
+    }
   }
 
   pub fn draw(&mut self, render: &mut Render) {

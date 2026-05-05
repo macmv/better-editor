@@ -346,6 +346,7 @@ version = "0.1.0"
 dependencies = [
  "anstyle-parse",
  "be-async",
+ "be-macros",
  "bitflags 2.11.0",
  "libc",
  "log",

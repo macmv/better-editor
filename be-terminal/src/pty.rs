@@ -11,8 +11,9 @@ use std::{
 use crate::Size;
 
 pub struct Pty {
-  _child: std::process::Child,
-  pty:    File,
+  _child:    std::process::Child,
+  pty:       File,
+  write_buf: Vec<u8>,
 }
 
 impl Pty {
@@ -64,7 +65,7 @@ impl Pty {
 
     be_async::set_nonblocking(&pty.controller).unwrap();
 
-    Pty { _child: child, pty: File::from(pty.controller) }
+    Pty { _child: child, pty: File::from(pty.controller), write_buf: Vec::new() }
   }
 
   pub fn fd(&self) -> BorrowedFd<'_> { self.pty.as_fd() }
@@ -83,9 +84,24 @@ impl Pty {
 
   pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> { self.pty.read(buf) }
 
-  pub fn input(&mut self, c: char) { write!(self.pty, "{c}").unwrap(); }
-  pub fn input_str(&mut self, s: &str) { write!(self.pty, "{s}").unwrap(); }
-  pub fn input_bytes(&mut self, pending_writes: &[u8]) {
-    self.pty.write_all(pending_writes).unwrap()
+  pub fn write(&mut self, args: std::fmt::Arguments) { self.write_buf.write_fmt(args).unwrap(); }
+  pub fn write_bytes(&mut self, bytes: &[u8]) { self.write_buf.extend_from_slice(bytes); }
+
+  pub fn has_pending_writes(&self) -> bool { !self.write_buf.is_empty() }
+
+  pub fn flush(&mut self) {
+    while !self.write_buf.is_empty() {
+      match self.pty.write(&self.write_buf) {
+        Ok(n) => {
+          self.write_buf.drain(..n);
+        }
+        Err(e) if e.kind() == io::ErrorKind::WouldBlock => break,
+        Err(e) => {
+          self.write_buf.clear();
+          fatal!("failed to write to pty: {e}");
+          break;
+        }
+      }
+    }
   }
 }

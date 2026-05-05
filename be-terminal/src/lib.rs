@@ -18,6 +18,9 @@ mod pty;
 #[macro_use]
 extern crate log;
 
+#[macro_use]
+extern crate be_macros;
+
 pub struct Terminal {
   pty:   Pty,
   state: TerminalState,
@@ -190,6 +193,7 @@ impl Terminal {
   }
 
   pub fn state(&self) -> &TerminalState { &self.state }
+  pub fn has_pending_writes(&self) -> bool { self.pty.has_pending_writes() }
 
   /// # Safety
   ///
@@ -209,39 +213,39 @@ impl Terminal {
     }
   }
 
-  pub fn perform_input(&mut self, c: char) { self.pty.input(c); }
-  pub fn perform_backspace(&mut self) { self.pty.input(control::C0::BS.into()); }
-  pub fn perform_delete(&mut self) { self.pty.input(control::C0::DEL.into()); }
-  pub fn perform_control(&mut self, b: u8) { self.pty.input_bytes(&[b]); }
-  pub fn perform_escape(&mut self) { self.pty.input(control::C0::ESC.into()); }
-  pub fn perform_tab(&mut self) { self.pty.input(control::C0::HT.into()); }
-  pub fn perform_shift_tab(&mut self) { self.pty.input_str("\x1b[Z"); }
+  pub fn perform_input(&mut self, c: char) { self.pty.write(format_args!("{c}")); }
+  pub fn perform_backspace(&mut self) { self.pty.write_bytes(&[control::C0::BS]); }
+  pub fn perform_delete(&mut self) { self.pty.write_bytes(&[control::C0::DEL]); }
+  pub fn perform_control(&mut self, b: u8) { self.pty.write_bytes(&[b]); }
+  pub fn perform_escape(&mut self) { self.pty.write_bytes(&[control::C0::ESC]); }
+  pub fn perform_tab(&mut self) { self.pty.write_bytes(&[control::C0::HT]); }
+  pub fn perform_shift_tab(&mut self) { self.pty.write_bytes(b"\x1b[Z"); }
   pub fn perform_up(&mut self) {
     if self.state.flags.contains(TerminalFlags::CURSOR_KEYS) {
-      self.pty.input_str("\x1bOA");
+      self.pty.write_bytes(b"\x1bOA");
     } else {
-      self.pty.input_str("\x1b[A");
+      self.pty.write_bytes(b"\x1b[A");
     }
   }
   pub fn perform_down(&mut self) {
     if self.state.flags.contains(TerminalFlags::CURSOR_KEYS) {
-      self.pty.input_str("\x1bOB");
+      self.pty.write_bytes(b"\x1bOB");
     } else {
-      self.pty.input_str("\x1b[B");
+      self.pty.write_bytes(b"\x1b[B");
     }
   }
   pub fn perform_left(&mut self) {
     if self.state.flags.contains(TerminalFlags::CURSOR_KEYS) {
-      self.pty.input_str("\x1bOD");
+      self.pty.write_bytes(b"\x1bOD");
     } else {
-      self.pty.input_str("\x1b[D");
+      self.pty.write_bytes(b"\x1b[D");
     }
   }
   pub fn perform_right(&mut self) {
     if self.state.flags.contains(TerminalFlags::CURSOR_KEYS) {
-      self.pty.input_str("\x1bOC");
+      self.pty.write_bytes(b"\x1bOC");
     } else {
-      self.pty.input_str("\x1b[C");
+      self.pty.write_bytes(b"\x1b[C");
     }
   }
   /// Report a mouse button press or release to the PTY.
@@ -303,9 +307,9 @@ impl Terminal {
   pub fn perform_focus_event(&mut self, focus: bool) {
     if self.state.flags.contains(TerminalFlags::REPORT_FOCUS) {
       if focus {
-        self.pty.input_str("\x1b[I");
+        self.pty.write_bytes(b"\x1b[I");
       } else {
-        self.pty.input_str("\x1b[O");
+        self.pty.write_bytes(b"\x1b[O");
       }
     }
   }
@@ -317,13 +321,13 @@ impl Terminal {
       push_utf8_coord(&mut buf, 32 + u32::from(button_code));
       push_utf8_coord(&mut buf, 32 + col as u32 + 1);
       push_utf8_coord(&mut buf, 32 + row as u32 + 1);
-      self.pty.input_bytes(&buf);
+      self.pty.write_bytes(&buf);
     } else {
       // X10 encoding: coords are limited to < 224 (byte value 255-32+1).
       if col >= 224 || row >= 224 {
         return;
       }
-      self.pty.input_bytes(&[
+      self.pty.write_bytes(&[
         0x1b,
         b'[',
         b'M',
@@ -337,7 +341,7 @@ impl Terminal {
   pub fn perform_paste(&mut self, s: &str) {
     // Source: alacritty
     if self.state.flags.contains(TerminalFlags::BRACKETED_PASTE) {
-      self.pty.input_str("\x1b[200~");
+      self.pty.write_bytes(b"\x1b[200~");
 
       // Write filtered escape sequences.
       //
@@ -345,9 +349,9 @@ impl Terminal {
       // bracketed paste end escape `\x1b[201~` and `\x03` since some shells
       // incorrectly terminate bracketed paste when they receive it.
       let filtered = s.replace(['\x1b', '\x03'], "");
-      self.pty.input_str(&filtered);
+      self.pty.write_bytes(filtered.as_bytes());
 
-      self.pty.input_str("\x1b[201~");
+      self.pty.write_bytes(b"\x1b[201~");
     } else {
       // In non-bracketed (ie: normal) mode, terminal applications cannot distinguish
       // pasted data from keystrokes.
@@ -357,7 +361,7 @@ impl Terminal {
       // probably an impossible task to solve in a general way), we'll just
       // replace line breaks (windows and unix style) with a single carriage
       // return (\r, which is what the Enter key produces).
-      self.pty.input_str(&s.replace("\r\n", "\r").replace('\n', "\r"));
+      self.pty.write_bytes(s.replace("\r\n", "\r").replace('\n', "\r").as_bytes());
     }
   }
 
@@ -395,7 +399,7 @@ impl Terminal {
             self.parser.advance(&mut self.state, b);
 
             if !self.state.pending_writes.is_empty() {
-              self.pty.input_bytes(&self.state.pending_writes);
+              self.pty.write_bytes(&self.state.pending_writes);
               self.state.pending_writes.clear();
             }
           }
@@ -408,6 +412,8 @@ impl Terminal {
         }
       }
     }
+
+    self.pty.flush();
 
     false
   }
