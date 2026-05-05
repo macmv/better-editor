@@ -316,6 +316,24 @@ impl LspCommand for Completion {
   }
 }
 
+// TODO: Figure out how to send this to the correct server.
+pub struct ResolveCompletion {
+  pub item: types::CompletionItem,
+}
+
+impl LspCommand for ResolveCompletion {
+  type Result = types::CompletionItem;
+
+  fn is_capable(&self, caps: &types::ServerCapabilities) -> bool {
+    let Some(completion) = caps.completion_provider.as_ref() else { return false };
+    completion.resolve_provider == Some(true)
+  }
+
+  fn send(&self, client: &mut LspClient) -> Option<Task<types::CompletionItem>> {
+    Some(client.request::<types::request::CompletionItemResolve>(self.item.clone()))
+  }
+}
+
 pub struct GotoDefinition {
   pub path:   PathBuf,
   pub cursor: Cursor,
