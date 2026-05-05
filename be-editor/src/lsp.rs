@@ -27,7 +27,9 @@ pub struct LspState {
 
 #[derive(Default)]
 pub struct CompletionsState {
-  tasks:            Vec<Task<Vec<types::CompletionItem>>>,
+  tasks:        Vec<Task<Vec<types::CompletionItem>>>,
+  resolve_task: Option<Task<types::CompletionItem>>, // TODO: Spinner!!
+
   completions:      types::CompletionList,
   show:             bool,
   clear_on_message: bool,
@@ -292,10 +294,26 @@ impl EditorState {
     if !self.lsp.completions.show {
       return;
     }
+    if self.lsp.completions.resolve_task.is_some() {
+      return;
+    }
     let active = self.lsp.completions.active;
     let Some(item) = self.lsp.completions.visible_completions.get(active) else { return };
-    let text = &item.item.label;
 
+    // TODO: Send this to the correct server.
+    if let Some(task) =
+      self.lsp.client.send_first_capable(&command::ResolveCompletion { item: item.item.clone() })
+    {
+      self.lsp.completions.resolve_task = Some(task);
+      self.lsp.completions.show = false;
+      return;
+    }
+
+    self.apply_completion(item.item.clone());
+  }
+
+  fn apply_completion(&mut self, item: types::CompletionItem) {
+    let text = &item.label;
     let range = self.current_range_for_completions();
     let to_move = (text.len() - range.len()) as i32;
     self.change(Change::replace(range, text));
@@ -376,6 +394,11 @@ impl EditorState {
     let len = self.lsp.completions.visible_completions.len();
     if len > 0 {
       self.lsp.completions.active = self.lsp.completions.active.min(len - 1);
+    }
+
+    if let Some(result) = self.lsp.completions.resolve_task.as_ref().and_then(|t| t.completed()) {
+      self.lsp.completions.resolve_task = None;
+      self.apply_completion(result);
     }
   }
 
