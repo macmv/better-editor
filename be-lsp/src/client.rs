@@ -272,6 +272,8 @@ impl LspWorker {
                     self.handle_notification(&method, params);
                   }
                   Message::Response { id, result, .. } => {
+                    debug!("LSP RX: {:?}", result);
+
                     if let Some(completer) = self.pending.remove(&id) {
                       completer(&result);
                     }
@@ -305,6 +307,8 @@ impl LspWorker {
       loop {
         match self.rx.try_recv() {
           Ok(LspRequest::Request(req, completer)) => {
+            debug!("LSP TX: {:?}", req.params);
+
             self.pending.insert(req.id, completer);
             self.writer.request(req)?;
           }

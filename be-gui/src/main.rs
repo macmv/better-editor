@@ -37,6 +37,7 @@ fn main() {
     .level_for("globset", LevelFilter::Warn)
     .level_for("ignore", LevelFilter::Warn)
     .level_for("tracing", LevelFilter::Warn)
+    .level_for("be_lsp", LevelFilter::Info)
     .chain(std::io::stdout())
     .chain(file)
     .apply()
