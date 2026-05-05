@@ -32,8 +32,12 @@ pub struct CompletionsState {
   show:             bool,
   clear_on_message: bool,
 
-  visible_completions: Vec<String>,
+  visible_completions: Vec<Completion>,
   active:              usize,
+}
+
+pub struct Completion {
+  item: types::CompletionItem,
 }
 
 pub struct SaveTask {
@@ -289,7 +293,8 @@ impl EditorState {
       return;
     }
     let active = self.lsp.completions.active;
-    let Some(text) = self.lsp.completions.visible_completions.get(active) else { return };
+    let Some(item) = self.lsp.completions.visible_completions.get(active) else { return };
+    let text = &item.item.label;
 
     let range = self.current_range_for_completions();
     let to_move = (text.len() - range.len()) as i32;
@@ -362,7 +367,7 @@ impl EditorState {
           // `starts_with` using a rope slice
           filter_text.bytes().take(current_word.byte_len()).eq(current_word.bytes())
         })
-        .map(|i| i.label.clone())
+        .map(|item| Completion { item: item.clone() })
         .collect();
     } else {
       self.lsp.completions.visible_completions.clear();
@@ -374,7 +379,7 @@ impl EditorState {
     }
   }
 
-  pub fn completions(&self) -> Option<&Vec<String>> {
+  pub fn completions(&self) -> Option<&Vec<Completion>> {
     if self.lsp.completions.show { Some(&self.lsp.completions.visible_completions) } else { None }
   }
 
@@ -391,6 +396,10 @@ impl EditorState {
 
     end - len..end
   }
+}
+
+impl Completion {
+  pub fn label(&self) -> &str { &self.item.label }
 }
 
 impl LspState {

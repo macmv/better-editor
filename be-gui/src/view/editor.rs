@@ -689,7 +689,7 @@ impl EditorView {
       let layouts = completions
         .iter()
         .take(20)
-        .map(|completion| render.layout_text(Font::Editor, &completion, render.theme().text))
+        .map(|completion| render.layout_text(Font::Editor, completion.label(), render.theme().text))
         .collect::<Vec<_>>();
 
       let inner_width = layouts
