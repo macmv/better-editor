@@ -37,9 +37,13 @@ pub struct LspState {
 
 #[derive(Default)]
 pub struct FileState {
-  pub version:     u32,
-  pub doc:         DocumentSnapshot,
-  pub diagnostics: Vec<Diagnostic>,
+  pub version: u32,
+  pub doc:     DocumentSnapshot,
+
+  /// The version that the diagnostics came from. This is used to translate
+  /// ranges to whatever the latest version is correctly.
+  pub diagnostic_version: u32,
+  pub diagnostics:        Vec<Diagnostic>,
 }
 
 impl From<DocumentSnapshot> for FileState {

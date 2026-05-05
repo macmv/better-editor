@@ -595,6 +595,7 @@ fn on_publish_diagnostics(state: &mut LspState, params: lsp::PublishDiagnosticsP
     if file.version as i32 != version {
       return;
     }
+    file.diagnostic_version = file.version;
   } else {
     warn!("cannot handle publish diagnostics without version");
     return;
