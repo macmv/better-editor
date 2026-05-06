@@ -1,6 +1,6 @@
 use std::{cell::RefCell, ops::Range, rc::Rc};
 
-use be_doc::{Change, DocumentSnapshot, Edit};
+use be_doc::{Change, DocumentSnapshot, Edit, Position};
 use be_lsp::{LanguageClientState, LanguageServerKey, TextEdit, command, types};
 use be_task::Task;
 
@@ -48,7 +48,7 @@ pub struct SaveTask {
 }
 
 pub struct Diagnostic {
-  pub range:   Range<usize>,
+  pub range:   Range<Position>,
   pub message: String,
   pub level:   DiagnosticLevel,
 }
@@ -100,7 +100,7 @@ impl EditorState {
 
     // TODO: Use drain()
     for range in self.lsp.diagnostics.iter().map(|d| d.range.clone()).collect::<Vec<_>>() {
-      self.damage_range(range);
+      self.damage_range(range.start.offset..range.end.offset);
     }
     self.lsp.diagnostics.clear();
 
@@ -109,7 +109,7 @@ impl EditorState {
     self.lsp.client.servers(|state| {
       if let Some(file) = state.files.get(file.path()) {
         self.lsp.diagnostics.extend(file.diagnostics.iter().map(|d| Diagnostic {
-          range:   d.range.start.offset..d.range.end.offset,
+          range:   d.range.clone(),
           message: d.message.clone(),
           level:   match d.severity {
             Some(types::DiagnosticSeverity::Error) => DiagnosticLevel::Error,
@@ -122,10 +122,10 @@ impl EditorState {
 
     // TODO: Get rid of this collect()
     for range in self.lsp.diagnostics.iter().map(|d| d.range.clone()).collect::<Vec<_>>() {
-      self.damage_range(range);
+      self.damage_range(range.start.offset..range.end.offset);
     }
 
-    self.lsp.diagnostics.sort_by_key(|d| d.range.start);
+    self.lsp.diagnostics.sort_by_key(|d| d.range.start.offset);
   }
 
   pub(crate) fn lsp_update_goto_definition(&mut self) {
@@ -457,8 +457,8 @@ impl CompletionsState {
 impl Diagnostic {
   pub fn highlight(&self) -> Highlight<'_> {
     Highlight {
-      start: self.range.start,
-      end:   self.range.end,
+      start: self.range.start.offset,
+      end:   self.range.end.offset,
       key:   HighlightKey::Diagnostic(self.level),
     }
   }

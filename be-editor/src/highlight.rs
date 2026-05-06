@@ -129,7 +129,7 @@ impl<'a> Iterator for DiagnosticIter<'a> {
   fn next(&mut self) -> Option<Self::Item> {
     loop {
       let it = self.iter.next()?;
-      if self.range.contains(&it.range.start) || self.range.contains(&it.range.end) {
+      if self.range.contains(&it.range.start.offset) || self.range.contains(&it.range.end.offset) {
         return Some(it.highlight());
       }
     }

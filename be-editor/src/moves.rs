@@ -238,10 +238,14 @@ impl EditorState {
           let offset = self.doc.cursor_offset(self.cursor);
 
           if let Some(d) = match dir {
-            ChangeDirection::Next => self.lsp.diagnostics.iter().find(|d| d.range.start > offset),
-            ChangeDirection::Prev => self.lsp.diagnostics.iter().rfind(|d| d.range.start < offset),
+            ChangeDirection::Next => {
+              self.lsp.diagnostics.iter().find(|d| d.range.start.offset > offset)
+            }
+            ChangeDirection::Prev => {
+              self.lsp.diagnostics.iter().rfind(|d| d.range.start.offset < offset)
+            }
           } {
-            let cursor = self.doc.offset_to_cursor(d.range.start);
+            let cursor = self.doc.position_to_cursor(d.range.start);
             self.move_to_line(cursor.line);
             self.move_to_col(cursor.column);
           } else {
