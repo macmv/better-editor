@@ -1,6 +1,6 @@
-use std::{cell::RefCell, ops::Range, rc::Rc};
+use std::{cell::RefCell, collections::BTreeMap, ops::Range, rc::Rc};
 
-use be_doc::{Change, DocumentSnapshot, Edit, Position};
+use be_doc::{Change, DocumentSnapshot, Edit, HistoricChange, Position};
 use be_lsp::{LanguageClientState, LanguageServerKey, TextEdit, command, types};
 use be_task::Task;
 
@@ -11,7 +11,9 @@ pub struct LspState {
   pub store:  Rc<RefCell<be_lsp::LanguageServerStore>>,
   pub client: LanguageClientState,
 
-  document_version:       u32,
+  document_version: u32,
+  version_changes:  BTreeMap<u32, Vec<HistoricChange>>,
+
   pub completions:        CompletionsState,
   pub goto_definition:
     Option<Task<Option<Vec<(types::Uri, be_lsp::command::PositionEncoding, types::Position)>>>>,
@@ -99,24 +101,29 @@ impl EditorState {
     }
 
     // TODO: Use drain()
+    /*
     for range in self.lsp.diagnostics.iter().map(|d| d.range.clone()).collect::<Vec<_>>() {
       self.damage_range(range.start.offset..range.end.offset);
     }
+    */
     self.lsp.diagnostics.clear();
 
     let file = self.file.as_ref().unwrap();
 
     self.lsp.client.servers(|state| {
       if let Some(file) = state.files.get(file.path()) {
-        self.lsp.diagnostics.extend(file.diagnostics.iter().map(|d| Diagnostic {
-          range:   d.range.clone(),
+        let diagnostics = file.diagnostics.iter().map(|d| Diagnostic {
+          range:   remap_position(&self.lsp.version_changes, d.range.start, file.diagnostic_version)
+            ..remap_position(&self.lsp.version_changes, d.range.end, file.diagnostic_version),
           message: d.message.clone(),
           level:   match d.severity {
             Some(types::DiagnosticSeverity::Error) => DiagnosticLevel::Error,
             Some(types::DiagnosticSeverity::Warning) => DiagnosticLevel::Warning,
             _ => DiagnosticLevel::Error,
           },
-        }));
+        });
+
+        self.lsp.diagnostics.extend(diagnostics);
       }
     });
 
@@ -192,6 +199,14 @@ impl EditorState {
     let Some(file) = &self.file else { return };
 
     self.lsp.document_version += 1;
+    self.lsp.version_changes.insert(
+      self.lsp.document_version,
+      vec![HistoricChange {
+        start:      self.doc.offset_to_position(change.range.start),
+        end_before: before.offset_to_position(change.range.end),
+        end_after:  self.doc.offset_to_position(change.range.start + change.text.len()),
+      }],
+    );
 
     self.lsp.client.send(&command::DidChangeTextDocument {
       path:              file.path().to_path_buf(),
@@ -462,4 +477,16 @@ impl Diagnostic {
       key:   HighlightKey::Diagnostic(self.level),
     }
   }
+}
+
+fn remap_position(
+  version_changes: &BTreeMap<u32, Vec<HistoricChange>>,
+  mut position: Position,
+  from_version: u32,
+) -> Position {
+  for change in version_changes.range(&from_version + 1..).map(|(_, c)| c).into_iter().flatten() {
+    change.map_position(&mut position);
+  }
+
+  position
 }
