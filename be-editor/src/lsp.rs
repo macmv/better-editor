@@ -360,7 +360,7 @@ impl EditorState {
 
       let (text, offset) = remove_snippets(&new_text);
       self.change(Change::replace(start.offset..end.offset, &text));
-      self.move_col_rel(offset as i32);
+      self.move_to_col(start.column + offset as i32);
     } else {
       let text = &item.label;
       let range = self.current_range_for_completions();
@@ -560,13 +560,16 @@ fn remove_snippets(text: &str) -> (String, usize) {
     match c {
       '0'..='9' if prev == Some('$') => {
         out.pop(); // remove '$'
-        if c == '0' {
+        if offset.is_none() {
           offset = Some(out.len());
         }
       }
 
       '{' if prev == Some('$') => {
         out.pop(); // remove '$'
+        if offset.is_none() {
+          offset = Some(out.len());
+        }
         in_snippet = true;
       }
       '}' if in_snippet => in_snippet = false,
