@@ -328,11 +328,34 @@ impl EditorState {
   }
 
   fn apply_completion(&mut self, item: types::CompletionItem) {
-    let text = &item.label;
-    let range = self.current_range_for_completions();
-    let to_move = (text.len() - range.len()) as i32;
-    self.change(Change::replace(range, text));
-    self.move_col_rel(to_move as i32);
+    if let Some(edit) = &item.text_edit {
+      let (range, new_text) = match edit {
+        types::Or2::A(edit) => (edit.range.clone(), &edit.new_text),
+        // TODO: Insert/replace support. We don't advertise this capability, so we shouldn't receive
+        // any insert/replace edits anyway.
+        types::Or2::B(edit) => (edit.replace.clone(), &edit.new_text),
+      };
+      let start = be_lsp::command::decode_position(
+        be_lsp::command::PositionEncoding::Utf8,
+        &self.doc,
+        range.start.clone(),
+      );
+      let end = be_lsp::command::decode_position(
+        be_lsp::command::PositionEncoding::Utf8,
+        &self.doc,
+        range.end.clone(),
+      );
+
+      let (text, offset) = remove_snippets(&new_text);
+      self.change(Change::replace(start.offset..end.offset, &text));
+      self.move_col_rel(offset as i32);
+    } else {
+      let text = &item.label;
+      let range = self.current_range_for_completions();
+      let to_move = (text.len() - range.len()) as i32;
+      self.change(Change::replace(range, text));
+      self.move_col_rel(to_move as i32);
+    }
 
     for edit in item.additional_text_edits.iter().flatten() {
       let start = be_lsp::command::decode_position(
@@ -499,6 +522,43 @@ impl Diagnostic {
   }
 }
 
+// TODO: Real snippet support! This requires some tight integration with the UI.
+// Need to sort out what we actually want to support here.
+fn remove_snippets(text: &str) -> (String, usize) {
+  let mut out = String::new();
+  let mut in_snippet = false;
+
+  let mut prev = None;
+  let mut offset = None;
+  for c in text.chars() {
+    match c {
+      '0'..='9' if prev == Some('$') => {
+        out.pop(); // remove '$'
+        if c == '0' {
+          offset = Some(out.len());
+        }
+      }
+
+      '{' if prev == Some('$') => {
+        out.pop(); // remove '$'
+        in_snippet = true;
+      }
+      '}' if in_snippet => in_snippet = false,
+
+      _ => {
+        if !in_snippet {
+          out.push(c);
+        }
+      }
+    };
+
+    prev = Some(c);
+  }
+
+  let len = out.len();
+  (out, offset.unwrap_or(len))
+}
+
 fn remap_position(
   version_changes: &BTreeMap<u32, Vec<HistoricChange>>,
   mut position: Position,
@@ -509,4 +569,14 @@ fn remap_position(
   }
 
   position
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn remove_snippets_works() {
+    assert_eq!(remove_snippets("hello$0(${1:foo});"), ("hello();".into(), 5));
+  }
 }

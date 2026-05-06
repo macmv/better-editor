@@ -12,7 +12,7 @@ pub fn client_capabilities() -> lsp::ClientCapabilities {
         dynamic_registration: None,
         completion_item:      Some(lsp::CompletionItemCapabilities {
           // Snippts allow the client to fill in a portion (like a variable name).
-          snippet_support:           None,
+          snippet_support:           Some(true),
           // Commit characters fill in the completion when typed (like '.' or '(')
           commit_characters_support: None,
           // Allows the server to preselect a specific item.
