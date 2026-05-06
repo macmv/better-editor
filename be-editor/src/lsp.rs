@@ -334,6 +334,22 @@ impl EditorState {
     self.change(Change::replace(range, text));
     self.move_col_rel(to_move as i32);
 
+    for edit in item.additional_text_edits.iter().flatten() {
+      let start = be_lsp::command::decode_position(
+        be_lsp::command::PositionEncoding::Utf8,
+        &self.doc,
+        edit.range.start.clone(),
+      );
+      let end = be_lsp::command::decode_position(
+        be_lsp::command::PositionEncoding::Utf8,
+        &self.doc,
+        edit.range.end.clone(),
+      );
+      let change = Change::replace(start.offset..end.offset, &edit.new_text);
+      self.keep_cursor_for_change(&change);
+      self.change(change);
+    }
+
     self.lsp.completions.show = false;
     self.lsp.completions.active = 0;
     self.lsp.completions.tasks.clear();
