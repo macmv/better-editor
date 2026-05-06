@@ -1,4 +1,9 @@
-use std::{cell::RefCell, collections::BTreeMap, ops::Range, rc::Rc};
+use std::{
+  cell::RefCell,
+  collections::{BTreeMap, HashSet},
+  ops::Range,
+  rc::Rc,
+};
 
 use be_doc::{Change, DocumentSnapshot, Edit, HistoricChange, Position};
 use be_lsp::{LanguageClientState, LanguageServerKey, TextEdit, command, types};
@@ -32,9 +37,10 @@ pub struct CompletionsState {
   tasks:        Vec<Task<Vec<types::CompletionItem>>>,
   resolve_task: Option<Task<types::CompletionItem>>, // TODO: Spinner!!
 
-  completions:      types::CompletionList,
-  show:             bool,
-  clear_on_message: bool,
+  pub trigger_chars: HashSet<char>,
+  completions:       types::CompletionList,
+  show:              bool,
+  clear_on_message:  bool,
 
   visible_completions: Vec<Completion>,
   active:              usize,
@@ -78,6 +84,12 @@ impl EditorState {
       }
     };
     self.lsp.client.set(key, server);
+
+    drop(config);
+
+    // TODO: Call this when a server sends it's init response. Right now, we block
+    // in `spawn` and wait for caps, so this works temporarily.
+    self.lsp_on_change_server_caps();
 
     // NB: This spits out an error for all the servers that haven't seen this file
     // yet. But, it ensures DidOpen behaves.
@@ -407,6 +419,20 @@ impl EditorState {
     });
 
     self.lsp.goto_references = task;
+  }
+
+  fn lsp_on_change_server_caps(&mut self) {
+    self.lsp.completions.trigger_chars.clear();
+
+    self.lsp.client.servers(|state| {
+      if let Some(completion) = &state.caps.completion_provider {
+        if let Some(trigger) = &completion.trigger_characters {
+          for c in trigger.iter().flat_map(|c| c.chars()) {
+            self.lsp.completions.trigger_chars.insert(c);
+          }
+        }
+      }
+    });
   }
 
   pub(crate) fn lsp_update_completions(&mut self) {
