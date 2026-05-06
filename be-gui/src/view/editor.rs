@@ -687,16 +687,20 @@ impl EditorView {
 
     if let Some(completions) = self.editor.completions() {
       struct CompletionLayout {
-        label:  TextLayout,
-        detail: Option<TextLayout>,
+        label:       TextLayout,
+        detail:      Option<TextLayout>,
+        description: Option<TextLayout>,
       }
 
       impl CompletionLayout {
         fn layout(render: &mut Render, completion: &Completion) -> CompletionLayout {
           CompletionLayout {
-            label:  render.layout_text(Font::Editor, completion.label(), render.theme().text),
-            detail: completion
+            label:       render.layout_text(Font::Editor, completion.label(), render.theme().text),
+            detail:      completion
               .detail()
+              .map(|d| render.layout_text(Font::Editor, d, render.theme().text_dim)),
+            description: completion
+              .description()
               .map(|d| render.layout_text(Font::Editor, d, render.theme().text_dim)),
           }
         }
@@ -708,16 +712,23 @@ impl EditorView {
             width += 20.0;
             width += detail.size().width;
           }
+          if let Some(description) = &self.description {
+            width += 10.0;
+            width += description.size().width;
+          }
 
           width
         }
 
         fn draw(&self, render: &mut Render, x: f64, y: f64, width: f64) {
+          render.draw_text(&self.label, (x, y));
+
+          if let Some(description) = &self.description {
+            render.draw_text(&description, (x + self.label.size().width + 10.0, y));
+          }
           if let Some(detail) = &self.detail {
             render.draw_text(&detail, (x + width - detail.size().width, y));
           }
-
-          render.draw_text(&self.label, (x, y));
         }
       }
 
