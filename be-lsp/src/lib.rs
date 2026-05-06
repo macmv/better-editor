@@ -1,4 +1,5 @@
 use be_config::LanguageName;
+use be_doc::Position;
 use be_task::Task;
 use parking_lot::Mutex;
 use std::{
@@ -26,7 +27,7 @@ pub struct LanguageServerStore {
 }
 
 pub struct Diagnostic {
-  pub range:    Range<usize>,
+  pub range:    Range<Position>,
   pub message:  String,
   pub severity: Option<types::DiagnosticSeverity>,
 }

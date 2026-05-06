@@ -4,7 +4,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use be_doc::{Change, Cursor, DocumentSnapshot};
+use be_doc::{Change, Cursor, DocumentSnapshot, Position};
 use be_task::Task;
 use serde_json::value::RawValue;
 
@@ -97,7 +97,7 @@ pub fn decode_range(
   encoding: PositionEncoding,
   doc: &DocumentSnapshot,
   range: types::Range,
-) -> Range<usize> {
+) -> Range<Position> {
   Range {
     start: decode_position(encoding, doc, range.start),
     end:   decode_position(encoding, doc, range.end),
@@ -108,7 +108,7 @@ pub fn decode_position(
   encoding: PositionEncoding,
   doc: &DocumentSnapshot,
   pos: types::Position,
-) -> usize {
+) -> Position {
   let line = be_doc::Line((pos.line as usize).clamp(0, doc.len_lines() - 1));
 
   let mut character = match encoding {
@@ -132,7 +132,10 @@ pub fn decode_position(
   let offset = doc.byte_of_line(line) + character as usize;
   // the `clamp()` calls above should catch this.
   assert!(offset <= doc.len(), "offset out of bounds");
-  offset
+
+  let column = doc.line(line).byte_slice(0..character).graphemes().count();
+
+  Position { offset, line, column: be_doc::Column(column) }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -458,7 +461,10 @@ impl LspCommand for DocumentFormat {
             res
               .into_iter()
               .map(|edit| TextEdit {
-                range:    decode_range(encoding, &doc, edit.range),
+                range:    {
+                  let r = decode_range(encoding, &doc, edit.range);
+                  r.start.offset..r.end.offset
+                },
                 new_text: edit.new_text,
               })
               .collect()

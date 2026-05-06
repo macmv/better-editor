@@ -30,6 +30,27 @@ pub struct Cursor {
   pub target_column: VisualColumn,
 }
 
+/// This is a dual position. It is only valid when both the offset and
+/// line/column refer to the same position within a file.
+///
+/// This is stored this way so that ranges can easily be revised throughout
+/// history - if a change adds/removes lines, we can easily tell that from the
+/// `line` of the positions, and we don't need the document the change was
+/// applied to to infer that.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Position {
+  pub offset: usize,
+  pub line:   Line,
+  pub column: Column,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HistoricChange {
+  pub start:      Position,
+  pub end_before: Position,
+  pub end_after:  Position,
+}
+
 /// A logical line, ie, lines from the start of the file.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Line(pub usize);

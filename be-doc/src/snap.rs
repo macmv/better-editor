@@ -3,7 +3,7 @@ use std::ops::{Range, RangeBounds};
 use crop::{Rope, RopeSlice};
 use unicode_width::UnicodeWidthStr;
 
-use crate::{Column, Cursor, Document, Line, VisualColumn};
+use crate::{Column, Cursor, Document, Line, Position, VisualColumn};
 
 /// An immutable copy of a Document at a particular point in time.
 #[derive(Default, Clone)]
@@ -135,6 +135,16 @@ impl DocumentSnapshot {
     let line = Line(self.line_of_byte(offset).0.clamp(0, self.len_lines().saturating_sub(1)));
     let column = Column(self.range(self.byte_of_line(line)..offset).graphemes().count());
     let mut cursor = Cursor { line, column, target_column: VisualColumn(0) };
+    cursor.target_column = self.visual_column(cursor);
+    cursor
+  }
+
+  pub fn position_to_cursor(&self, position: Position) -> Cursor {
+    let mut cursor = Cursor {
+      line:          position.line,
+      column:        position.column,
+      target_column: VisualColumn(0),
+    };
     cursor.target_column = self.visual_column(cursor);
     cursor
   }

@@ -109,7 +109,7 @@ impl EditorState {
     self.lsp.client.servers(|state| {
       if let Some(file) = state.files.get(file.path()) {
         self.lsp.diagnostics.extend(file.diagnostics.iter().map(|d| Diagnostic {
-          range:   d.range.clone(),
+          range:   d.range.start.offset..d.range.end.offset,
           message: d.message.clone(),
           level:   match d.severity {
             Some(types::DiagnosticSeverity::Error) => DiagnosticLevel::Error,
@@ -178,7 +178,7 @@ impl EditorState {
       && file.path() == def_path
     {
       let cursor =
-        self.doc.offset_to_cursor(be_lsp::command::decode_position(encoding, &self.doc, pos));
+        self.doc.position_to_cursor(be_lsp::command::decode_position(encoding, &self.doc, pos));
       self.move_to_line(cursor.line);
       self.move_to_col(cursor.column);
     } else {

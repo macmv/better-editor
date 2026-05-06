@@ -718,7 +718,7 @@ impl CursorOrLsp {
     match self {
       CursorOrLsp::Cursor(cursor) => cursor,
       CursorOrLsp::Lsp { encoding, pos } => {
-        doc.offset_to_cursor(be_lsp::command::decode_position(encoding, doc, pos))
+        doc.position_to_cursor(be_lsp::command::decode_position(encoding, doc, pos))
       }
     }
   }
