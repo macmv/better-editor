@@ -113,11 +113,9 @@ impl EditorState {
     }
 
     // TODO: Use drain()
-    /*
     for range in self.lsp.diagnostics.iter().map(|d| d.range.clone()).collect::<Vec<_>>() {
       self.damage_range(range.start.offset..range.end.offset);
     }
-    */
     self.lsp.diagnostics.clear();
 
     let file = self.file.as_ref().unwrap();
@@ -210,15 +208,14 @@ impl EditorState {
   pub(crate) fn lsp_notify_change(&mut self, change: &crate::Change, before: DocumentSnapshot) {
     let Some(file) = &self.file else { return };
 
+    let historic_change = HistoricChange {
+      start:      self.doc.offset_to_position(change.range.start),
+      end_before: before.offset_to_position(change.range.end),
+      end_after:  self.doc.offset_to_position(change.range.start + change.text.len()),
+    };
+
     self.lsp.document_version += 1;
-    self.lsp.version_changes.insert(
-      self.lsp.document_version,
-      vec![HistoricChange {
-        start:      self.doc.offset_to_position(change.range.start),
-        end_before: before.offset_to_position(change.range.end),
-        end_after:  self.doc.offset_to_position(change.range.start + change.text.len()),
-      }],
-    );
+    self.lsp.version_changes.insert(self.lsp.document_version, vec![historic_change]);
 
     self.lsp.client.send(&command::DidChangeTextDocument {
       path:              file.path().to_path_buf(),
@@ -227,6 +224,11 @@ impl EditorState {
       doc_after_change:  self.doc.snapshot(),
       changes:           vec![change.clone()],
     });
+
+    for diagnostic in &mut self.lsp.diagnostics {
+      historic_change.map_position(&mut diagnostic.range.start);
+      historic_change.map_position(&mut diagnostic.range.end);
+    }
   }
 
   pub(crate) fn lsp_on_save(&mut self) {
