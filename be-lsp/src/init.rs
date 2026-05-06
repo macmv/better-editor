@@ -29,8 +29,6 @@ pub fn client_capabilities() -> lsp::ClientCapabilities {
           tag_support:               None,
           resolve_support:           Some(lsp::ResolveSupportCapabilities {
             // rust-analyzer is picky, and needs `additionalTextEdits` for auto-imports to show up.
-            //
-            // TODO: Resolve support!
             properties: ["additionalTextEdits", "detail", "documentation"]
               .iter()
               .map(|s| s.to_string())
