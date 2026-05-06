@@ -148,6 +148,24 @@ impl PartialEq<&str> for Document {
   fn eq(&self, other: &&str) -> bool { self.rope == *other }
 }
 
+impl HistoricChange {
+  pub fn map_position(&self, position: &mut Position) {
+    if position.offset > self.end_before.offset {
+      let line_delta = self.end_after.line.0 as isize - self.end_before.line.0 as isize;
+      let offset_delta = self.end_after.offset as isize - self.end_before.offset as isize;
+
+      if position.line == self.end_before.line {
+        let column_delta = self.end_after.column.0 as isize - self.end_before.column.0 as isize;
+        position.column.0 = (position.column.0 as isize + column_delta).max(0) as usize;
+      }
+      position.line.0 = (position.line.0 as isize + line_delta).max(0) as usize;
+      position.offset = (position.offset as isize + offset_delta).max(0) as usize;
+    } else if position.offset > self.start.offset {
+      *position = self.start;
+    }
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
