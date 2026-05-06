@@ -420,6 +420,15 @@ impl EditorState {
     }
   }
 
+  fn check_perform_completion(&mut self, insert: &str) {
+    for c in insert.chars() {
+      if ('a'..='z').contains(&c) || self.lsp.completions.trigger_chars.contains(&c) {
+        self.perform_autocomplete();
+        return;
+      }
+    }
+  }
+
   fn perform_autocomplete(&mut self) { self.lsp_request_completions(); }
 
   fn change(&mut self, change: Change) {

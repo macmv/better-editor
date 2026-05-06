@@ -41,6 +41,10 @@ impl EditorState {
           '}' | ']' | ')' => self.fix_indent(),
           _ => {}
         }
+
+        if self.mode == Mode::Insert {
+          self.check_perform_completion(s);
+        }
       }
       Edit::Replace(c) => {
         let mut bytes = [0; 4];
