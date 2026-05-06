@@ -454,6 +454,7 @@ impl EditorState {
 
 impl Completion {
   pub fn label(&self) -> &str { &self.item.label }
+  pub fn detail(&self) -> Option<&str> { Some(&self.item.label_details.as_ref()?.detail.as_ref()?) }
 }
 
 impl LspState {

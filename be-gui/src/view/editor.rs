@@ -2,7 +2,7 @@ use std::{collections::HashMap, io, path::PathBuf};
 
 use be_animation::Animation;
 use be_doc::Cursor;
-use be_editor::{CommandMode, EditorEvent, EditorState, IndentLevel};
+use be_editor::{CommandMode, Completion, EditorEvent, EditorState, IndentLevel};
 use be_fs::WatcherHandle;
 use be_input::{Action, Mode};
 use be_shared::SharedHandle;
@@ -686,17 +686,49 @@ impl EditorView {
     let active = self.editor.active_completion();
 
     if let Some(completions) = self.editor.completions() {
+      struct CompletionLayout {
+        label:  TextLayout,
+        detail: Option<TextLayout>,
+      }
+
+      impl CompletionLayout {
+        fn layout(render: &mut Render, completion: &Completion) -> CompletionLayout {
+          CompletionLayout {
+            label:  render.layout_text(Font::Editor, completion.label(), render.theme().text),
+            detail: completion
+              .detail()
+              .map(|d| render.layout_text(Font::Editor, d, render.theme().text_dim)),
+          }
+        }
+
+        fn width(&self) -> f64 {
+          let mut width = self.label.size().width;
+
+          if let Some(detail) = &self.detail {
+            width += 20.0;
+            width += detail.size().width;
+          }
+
+          width
+        }
+
+        fn draw(&self, render: &mut Render, x: f64, y: f64, width: f64) {
+          if let Some(detail) = &self.detail {
+            render.draw_text(&detail, (x + width - detail.size().width, y));
+          }
+
+          render.draw_text(&self.label, (x, y));
+        }
+      }
+
       let layouts = completions
         .iter()
         .take(20)
-        .map(|completion| render.layout_text(Font::Editor, completion.label(), render.theme().text))
+        .map(|completion| CompletionLayout::layout(render, completion))
         .collect::<Vec<_>>();
 
-      let inner_width = layouts
-        .iter()
-        .map(|layout| layout.size().width)
-        .max_by(|a, b| a.total_cmp(b))
-        .unwrap_or(0.0);
+      let inner_width =
+        layouts.iter().map(|layout| layout.width()).max_by(|a, b| a.total_cmp(b)).unwrap_or(0.0);
       let inner_height = layouts.len() as f64 * line_height;
 
       const MARGIN_X: f64 = 10.0;
@@ -748,7 +780,7 @@ impl EditorView {
           );
         }
 
-        render.draw_text(&layout, (start_x, y));
+        layout.draw(render, start_x, y, inner_width);
         y += line_height;
       }
     }

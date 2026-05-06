@@ -22,7 +22,7 @@ mod treesitter;
 mod tests;
 
 pub use highlight::HighlightKey;
-pub use lsp::{Diagnostic, DiagnosticLevel};
+pub use lsp::{Completion, Diagnostic, DiagnosticLevel};
 
 #[macro_use]
 extern crate log;
