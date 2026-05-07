@@ -3,7 +3,7 @@ use std::{collections::HashMap, io, path::PathBuf};
 use be_animation::Animation;
 use be_doc::Cursor;
 use be_editor::{CommandMode, Completion, EditorEvent, EditorState, IndentLevel};
-use be_fs::WatcherHandle;
+use be_fs::{WatcherHandle, WorkspaceRoot};
 use be_input::{Action, Mode};
 use be_shared::SharedHandle;
 use be_workspace::Workspace;
@@ -38,6 +38,7 @@ pub struct EditorView {
   max_line: be_doc::Line,
 
   definition_history: Vec<(Cursor, PathBuf)>,
+  root:               WorkspaceRoot,
   watcher:            WatcherHandle,
 
   progress_animation: Animation,
@@ -67,9 +68,9 @@ const LINE_NUMBER_MARGIN_LEFT: f64 = 10.0;
 const LINE_NUMBER_MARGIN_RIGHT: f64 = 10.0;
 
 impl EditorView {
-  pub fn new(editor: &SharedHandle<EditorState>, store: &mut RenderStore) -> Self {
+  pub fn new(workspace: &mut Workspace) -> Self {
     let mut view = EditorView {
-      editor:            editor.clone(),
+      editor:            workspace.new_editor(),
       horizontal_scroll: Scroll::new(0.0),
       vertical_scroll:   Scroll::new(0.0),
       focus:             Focus::Unfocused { cursor: Cursor::default() },
@@ -83,7 +84,8 @@ impl EditorView {
       line_number_width: 0.0,
 
       definition_history: vec![],
-      watcher:            store.workspace.fs.add_handle(),
+      root:               workspace.root.clone(),
+      watcher:            workspace.fs.add_handle(),
 
       progress_animation: Animation::linear(2.0),
 
@@ -122,7 +124,7 @@ impl EditorView {
 
     for change in self.watcher.take_changes().iter() {
       if let Some(f) = self.editor.file()
-        && layout.store.workspace.root.resolve_path(change) == f
+        && self.root.resolve_path(change) == f
       {
         self.editor.on_file_changed();
       }

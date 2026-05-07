@@ -245,8 +245,7 @@ impl WorkspaceLayout {
         be_config::TabSettings::Split(split) => {
           if split.percent.len() != split.children.len().saturating_sub(1) {
             eprintln!("invalid split percentages"); // TODO: Real errors!
-            let editor = store.workspace.new_editor();
-            return Pane::View(state.views.new_view(view::EditorView::new(&editor, store)));
+            return Pane::View(state.views.new_view(view::EditorView::new(&mut store.workspace)));
           }
 
           Pane::Split(pane::Split {
@@ -269,8 +268,7 @@ impl WorkspaceLayout {
           Pane::View(state.views.new_view(view::TerminalView::new(&store.workspace.clipboard)))
         }
         be_config::TabSettings::Editor => {
-          let editor = store.workspace.new_editor();
-          Pane::View(state.views.new_view(view::EditorView::new(&editor, store)))
+          Pane::View(state.views.new_view(view::EditorView::new(&mut store.workspace)))
         }
         be_config::TabSettings::FileTree => Pane::View(
           state.views.new_view(view::FileTree::new(store.notifier(), &mut store.workspace)),
@@ -730,8 +728,7 @@ impl WorkspaceLayout {
   fn split_active_view(&mut self, store: &mut RenderStore) -> ViewId {
     match self.active_view().content {
       ViewContent::Editor(ref e) => {
-        let editor = store.workspace.new_editor();
-        let mut editor = crate::view::EditorView::new(&editor, store);
+        let mut editor = crate::view::EditorView::new(&mut store.workspace);
         editor.split_from(e);
         self.views.new_view(editor)
       }
