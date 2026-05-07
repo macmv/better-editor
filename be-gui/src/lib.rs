@@ -44,6 +44,7 @@ struct State {
 
 enum AppLayout {
   Workspace(WorkspaceLayout),
+  Terminal(crate::view::TerminalView),
 }
 
 struct WorkspaceLayout {
@@ -124,6 +125,7 @@ impl State {
   fn mode(&self) -> Mode {
     match &self.layout {
       AppLayout::Workspace(w) => w.mode(),
+      AppLayout::Terminal(_) => Mode::Insert,
     }
   }
 
@@ -140,6 +142,7 @@ impl State {
       Ok(action) => {
         match &mut self.layout {
           AppLayout::Workspace(w) => w.perform_action(action, store),
+          AppLayout::Terminal(t) => t.perform_action(action),
         }
         self.keys.clear();
       }
@@ -172,32 +175,38 @@ impl State {
   ) {
     match &mut self.layout {
       AppLayout::Workspace(w) => w.open(path, cursor, workspace),
+      AppLayout::Terminal(_) => {}
     }
   }
   pub fn layout(&mut self, layout: &mut Layout) {
     match &mut self.layout {
       AppLayout::Workspace(w) => w.layout(layout),
+      AppLayout::Terminal(t) => t.layout(layout),
     }
   }
   pub fn draw(&mut self, render: &mut Render) {
     match &mut self.layout {
       AppLayout::Workspace(w) => w.draw(render),
+      AppLayout::Terminal(t) => t.draw(render),
     }
   }
   pub fn animated(&self) -> bool {
     match &self.layout {
       AppLayout::Workspace(w) => w.animated(),
+      AppLayout::Terminal(_) => false,
     }
   }
   pub fn on_mouse(&mut self, ev: MouseEvent, size: kurbo::Size, store: &RenderStore) -> CursorKind {
     match &mut self.layout {
       AppLayout::Workspace(w) => w.on_mouse(ev, size, store),
+      AppLayout::Terminal(t) => t.on_mouse(&ev, size, store),
     }
   }
   /// Handles an event. Returns `true` if the app should close.
   pub fn on_event(&mut self, event: Event, store: &mut RenderStore) -> bool {
     match &mut self.layout {
       AppLayout::Workspace(w) => w.on_event(event, store),
+      AppLayout::Terminal(_) => false,
     }
   }
 }
