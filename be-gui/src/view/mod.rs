@@ -169,6 +169,19 @@ impl Scroll {
   /// draw the first line at.
   pub fn first_line_offset(&self) -> f64 { -(self.offset % self.line_height) }
 
+  /// This is the main interaction for keyboard-driven scrolling. When the
+  /// current row changes, this should be called, and it will change the scroll
+  /// offset to ensure `row` is entirely visible.
+  pub fn make_visible(&mut self, visible_height: f64, row: usize) {
+    let (min, max) = self.fully_visible_range(visible_height);
+
+    if row < min {
+      self.offset = row as f64 * self.line_height;
+    } else if row > max {
+      self.offset = (row + 1) as f64 * self.line_height - visible_height;
+    }
+  }
+
   pub fn fully_visible_range(&self, visible_height: f64) -> (usize, usize) {
     let min = (self.offset / self.line_height).ceil() as usize;
     let max = ((self.offset + visible_height) / self.line_height).floor() as usize - 1;

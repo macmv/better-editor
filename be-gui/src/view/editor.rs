@@ -881,13 +881,8 @@ impl CompletionsPopup {
       self.layouts.iter().map(|layout| layout.width()).max_by(|a, b| a.total_cmp(b)).unwrap_or(0.0);
     let inner_height = self.layouts.len() as f64 * line_height;
 
-    let (min, max) = self.scroll.fully_visible_range(inner_height);
     if let Some(active) = active {
-      if active < min {
-        self.scroll.offset = active as f64 * line_height;
-      } else if active > max {
-        self.scroll.offset = (active + 1) as f64 * line_height - inner_height;
-      }
+      self.scroll.make_visible(inner_height, active);
     }
 
     const MARGIN_X: f64 = 10.0;
