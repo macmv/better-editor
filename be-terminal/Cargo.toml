@@ -15,3 +15,6 @@ unicode-width = "0.2.2"
 
 be-async = { version = "0.1.0", path = "../be-async" }
 be-macros = { path = "../be-macros" }
+
+[dev-dependencies]
+expect-test.workspace = true

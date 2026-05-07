@@ -16,6 +16,13 @@ mod control;
 mod grid;
 mod pty;
 
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+#[macro_use]
+extern crate expect_test;
+
 #[macro_use]
 extern crate log;
 
