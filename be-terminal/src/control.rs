@@ -269,8 +269,8 @@ impl Perform for TerminalState {
       },
       (b'k', [b' ']) => unhandled!("set scp"),
       (b'L', []) => {
-        let count = (next_param_or(1) as usize).clamp(1, self.size.rows - self.cursor.row);
-        for i in (self.cursor.row..=self.size.rows.saturating_sub(count + 1)).rev() {
+        let count = (next_param_or(1) as usize).clamp(1, self.scroll_end - self.cursor.row);
+        for i in (self.cursor.row..=self.scroll_end.saturating_sub(count + 1)).rev() {
           self.grid.swap(i, i + count);
         }
         for i in self.cursor.row..self.cursor.row + count {
@@ -289,11 +289,11 @@ impl Perform for TerminalState {
         }
       }
       (b'M', []) => {
-        let count = (next_param_or(1) as usize).clamp(1, self.size.rows - self.cursor.row);
-        for i in self.cursor.row..self.size.rows - count {
+        let count = (next_param_or(1) as usize).clamp(1, self.scroll_end - self.cursor.row);
+        for i in self.cursor.row..self.scroll_end - count {
           self.grid.swap(i, i + count);
         }
-        for i in (self.size.rows - count)..self.size.rows {
+        for i in (self.scroll_end - count)..self.scroll_end {
           self.grid.line_mut(i).clear(self.cursor.style);
         }
         self.cursor.col = 0;
