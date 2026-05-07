@@ -7,6 +7,7 @@ use std::{
 };
 
 use be_editor::CursorOrLsp;
+use be_fs::WorkspaceRoot;
 use be_input::{Action, KeyStroke, Mode, Navigation};
 use be_workspace::{Workspace, WorkspaceEvent};
 use kurbo::{Axis, Point, Rect, Size};
@@ -39,12 +40,15 @@ extern crate be_macros;
 struct State {
   keys: Vec<KeyStroke>,
 
-  layout: AppLayout,
+  terminal:   crate::view::TerminalView,
+  workspaces: HashMap<WorkspaceRoot, WorkspaceLayout>,
+
+  active: AppView,
 }
 
-enum AppLayout {
-  Workspace(WorkspaceLayout),
-  Terminal(crate::view::TerminalView),
+enum AppView {
+  Terminal,
+  Workspace(WorkspaceRoot),
 }
 
 struct WorkspaceLayout {
@@ -118,24 +122,26 @@ impl ViewId {
 
 impl State {
   pub fn new(store: &mut RenderStore) -> Self {
-    let mut term = crate::view::TerminalView::new(&store.clipboard);
-    term.on_focus(true);
+    let mut terminal = crate::view::TerminalView::new(&store.clipboard);
+    terminal.on_focus(true);
 
-    State { keys: vec![], layout: AppLayout::Terminal(term) }
+    State { keys: vec![], terminal, workspaces: HashMap::new(), active: AppView::Terminal }
   }
 
   fn mode(&self) -> Mode {
-    match &self.layout {
-      AppLayout::Workspace(w) => w.mode(),
-      AppLayout::Terminal(_) => Mode::Insert,
+    match &self.active {
+      AppView::Workspace(w) => self.workspaces[w].mode(),
+      AppView::Terminal => Mode::Insert,
     }
   }
 
   pub fn on_key(&mut self, key: KeyStroke, store: &mut RenderStore) {
     self.keys.push(key);
 
-    if let AppLayout::Workspace(w) = &mut self.layout {
-      if let ViewContent::Editor(e) = &mut w.active_view_mut().content {
+    if let AppView::Workspace(w) = &mut self.active {
+      if let ViewContent::Editor(e) =
+        &mut self.workspaces.get_mut(w).unwrap().active_view_mut().content
+      {
         e.temporary_mode = None;
       }
     }
@@ -156,8 +162,10 @@ impl State {
             _ => None,
           };
 
-          if let AppLayout::Workspace(w) = &mut self.layout {
-            if let ViewContent::Editor(e) = &mut w.active_view_mut().content {
+          if let AppView::Workspace(w) = &mut self.active {
+            if let ViewContent::Editor(e) =
+              &mut self.workspaces.get_mut(w).unwrap().active_view_mut().content
+            {
               e.temporary_mode = temporary_mode;
             }
           }
@@ -167,54 +175,65 @@ impl State {
   }
 
   pub fn open(&mut self, path: &std::path::Path, cursor: Option<CursorOrLsp>) {
-    match &mut self.layout {
-      AppLayout::Workspace(w) => w.open(path, cursor),
-      AppLayout::Terminal(_) => {}
+    match &mut self.active {
+      AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().open(path, cursor),
+      AppView::Terminal => {}
     }
   }
   pub fn layout(&mut self, layout: &mut Layout) {
-    match &mut self.layout {
-      AppLayout::Workspace(w) => w.layout(layout),
-      AppLayout::Terminal(t) => t.layout(layout),
+    match &mut self.active {
+      AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().layout(layout),
+      AppView::Terminal => self.terminal.layout(layout),
     }
   }
   pub fn draw(&mut self, render: &mut Render) {
-    match &mut self.layout {
-      AppLayout::Workspace(w) => w.draw(render),
-      AppLayout::Terminal(t) => t.draw(render),
+    match &mut self.active {
+      AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().draw(render),
+      AppView::Terminal => self.terminal.draw(render),
     }
   }
   pub fn animated(&self) -> bool {
-    match &self.layout {
-      AppLayout::Workspace(w) => w.animated(),
-      AppLayout::Terminal(_) => false,
+    match &self.active {
+      AppView::Workspace(w) => self.workspaces[w].animated(),
+      AppView::Terminal => false,
     }
   }
   pub fn on_mouse(&mut self, ev: MouseEvent, size: kurbo::Size, store: &RenderStore) -> CursorKind {
-    match &mut self.layout {
-      AppLayout::Workspace(w) => w.on_mouse(ev, size, store),
-      AppLayout::Terminal(t) => t.on_mouse(&ev, size, store),
+    match &mut self.active {
+      AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().on_mouse(ev, size, store),
+      AppView::Terminal => self.terminal.on_mouse(&ev, size, store),
     }
   }
   /// Handles an event. Returns `true` if the app should close.
   pub fn on_event(&mut self, event: Event, store: &mut RenderStore) -> bool {
-    match &mut self.layout {
-      AppLayout::Workspace(w) => w.on_event(event, store),
-      AppLayout::Terminal(_) => false,
+    match &mut self.active {
+      AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().on_event(event, store),
+      AppView::Terminal => false,
     }
   }
 
   fn perform_action(&mut self, action: Action, store: &mut RenderStore) {
     match action {
       Action::Navigate { nav: Navigation::OpenWorkspace } => {
-        if !matches!(self.layout, AppLayout::Workspace(_)) {
-          self.layout = AppLayout::Workspace(WorkspaceLayout::new(store));
+        if matches!(self.active, AppView::Terminal) {
+          // TODO: Use terminal PWD.
+          let path = WorkspaceRoot::from_path(std::env::current_dir().unwrap());
+
+          if !self.workspaces.contains_key(&path) {
+            self.workspaces.insert(path.clone(), WorkspaceLayout::new(store));
+          }
+
+          self.terminal.on_focus(false);
+          self.active = AppView::Workspace(path);
+        } else {
+          self.terminal.on_focus(true);
+          self.active = AppView::Terminal;
         }
       }
 
-      _ => match &mut self.layout {
-        AppLayout::Workspace(w) => w.perform_action(action, store),
-        AppLayout::Terminal(t) => t.perform_action(action),
+      _ => match &mut self.active {
+        AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().perform_action(action, store),
+        AppView::Terminal => self.terminal.perform_action(action),
       },
     }
   }

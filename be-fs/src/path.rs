@@ -11,7 +11,7 @@ pub use relative_path::Component;
 
 /// The root path of a workspace. This is non-portable, and is only usable on
 /// the machine hosting a session.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct WorkspaceRoot {
   path: PathBuf,
 }
