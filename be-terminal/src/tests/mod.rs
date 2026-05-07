@@ -200,3 +200,23 @@ fn line_wrap() {
     |     |
   "#]);
 }
+
+#[test]
+fn pending_wrap_cursor() {
+  let mut vt = Vt::new(2, 5);
+  vt.feed(s().print("hell"));
+  vt.check(expect![@r#"
+    |hell🮙|
+    |     |
+  "#]);
+  vt.feed(s().print("o"));
+  vt.check(expect![@r#"
+    |hell🮙|
+    |     |
+  "#]);
+  vt.feed(s().print("X"));
+  vt.check(expect![@r#"
+    |hello|
+    |X🮙   |
+  "#]);
+}
