@@ -37,17 +37,18 @@ extern crate log;
 extern crate be_macros;
 
 struct State {
-  keys:   Vec<KeyStroke>,
-  active: usize,
-  tabs:   Vec<Tab>,
+  keys: Vec<KeyStroke>,
 
-  views: ViewCollection,
+  layout: WorkspaceLayout,
+}
 
-  tab_layout: WidgetCollection,
-
-  notify: Notify,
-
+struct WorkspaceLayout {
+  active:        usize,
+  tabs:          Vec<Tab>,
+  views:         ViewCollection,
+  tab_layout:    WidgetCollection,
   current_hover: Option<ViewId>,
+  notify:        Notify,
 }
 
 struct ViewCollection {
@@ -110,19 +111,53 @@ impl ViewId {
 
 impl State {
   pub fn new(store: &mut RenderStore) -> Self {
-    let mut state = State {
-      keys:          vec![],
-      active:        1,
-      tabs:          vec![],
-      views:         ViewCollection::new(),
-      tab_layout:    WidgetCollection::new(),
-      notify:        store.notifier(),
+    State { keys: vec![], layout: WorkspaceLayout::new(store, store.notifier()) }
+  }
+
+  pub fn on_key(&mut self, key: KeyStroke, store: &mut RenderStore) {
+    self.keys.push(key);
+
+    self.layout.on_key(&mut self.keys, store);
+  }
+
+  pub fn open(
+    &mut self,
+    path: &std::path::Path,
+    cursor: Option<CursorOrLsp>,
+    workspace: &mut Workspace,
+  ) {
+    self.layout.open(path, cursor, workspace);
+  }
+  pub fn layout(&mut self, layout: &mut Layout) { self.layout.layout(layout); }
+  pub fn draw(&mut self, render: &mut Render) { self.layout.draw(render); }
+  pub fn animated(&self) -> bool { self.layout.animated() }
+  pub fn on_mouse(&mut self, ev: MouseEvent, size: kurbo::Size, store: &RenderStore) -> CursorKind {
+    self.layout.on_mouse(ev, size, store)
+  }
+  /// Handles an event. Returns `true` if the app should close.
+  pub fn on_event(&mut self, event: Event, store: &mut RenderStore) -> bool {
+    self.layout.on_event(event, store)
+  }
+}
+
+impl WorkspaceLayout {
+  pub fn new(store: &mut RenderStore, notify: Notify) -> Self {
+    let mut state = WorkspaceLayout {
+      active: 1,
+      tabs: vec![],
+      views: ViewCollection::new(),
+      tab_layout: WidgetCollection::new(),
       current_hover: None,
+      notify,
     };
 
     let layout = store.workspace.config.borrow().settings.layout.clone();
 
-    fn build_view(state: &mut State, store: &mut RenderStore, tab: be_config::TabSettings) -> Pane {
+    fn build_view(
+      state: &mut WorkspaceLayout,
+      store: &mut RenderStore,
+      tab: be_config::TabSettings,
+    ) -> Pane {
       match tab {
         be_config::TabSettings::Split(split) => {
           if split.percent.len() != split.children.len().saturating_sub(1) {
@@ -401,24 +436,22 @@ impl State {
     self.views.get_mut(self.tabs[self.active].content.active()).unwrap()
   }
 
-  fn on_key(&mut self, key: KeyStroke, store: &mut RenderStore) {
-    self.keys.push(key);
-
+  fn on_key(&mut self, keys: &mut Vec<KeyStroke>, store: &mut RenderStore) {
     if let ViewContent::Editor(e) = &mut self.active_view_mut().content {
       e.temporary_mode = None;
     }
 
-    match Action::from_input(self.mode(), &self.keys) {
+    match Action::from_input(self.mode(), &keys) {
       Ok(action) => {
         self.perform_action(action, store);
-        self.keys.clear();
+        keys.clear();
       }
-      Err(be_input::ActionError::Unrecognized) => self.keys.clear(),
+      Err(be_input::ActionError::Unrecognized) => keys.clear(),
       Err(be_input::ActionError::Incomplete) => {
-        let has_temporary = self.keys.len() == 1 && !self.keys[0].control;
+        let has_temporary = keys.len() == 1 && !keys[0].control;
 
         if has_temporary {
-          let temporary_mode = match self.keys[0].key {
+          let temporary_mode = match keys[0].key {
             be_input::Key::Char('r') => Some(be_input::Mode::Replace),
             be_input::Key::Char('c' | 'd') => Some(be_input::Mode::Normal),
             _ => None,
