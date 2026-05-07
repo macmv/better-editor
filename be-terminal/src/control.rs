@@ -6,6 +6,12 @@ use crate::{
 
 impl Perform for TerminalState {
   fn print(&mut self, c: char) {
+    if self.cursor.pending_wrap {
+      self.cursor.col = 0;
+      self.cursor.pending_wrap = false;
+      self.linefeed();
+    }
+
     if self.cursor.insert {
       self.grid.line_mut(self.cursor.row).shift_right_from(self.cursor.pos.col);
     }
@@ -15,12 +21,18 @@ impl Perform for TerminalState {
       self.charsets[self.cursor.active_charset].map(c),
       self.cursor.style,
     );
-    self.cursor.col += 1;
+
+    if self.cursor.col + 1 < self.size.cols {
+      self.cursor.col += 1;
+    } else {
+      self.cursor.pending_wrap = true;
+    }
   }
 
   fn execute(&mut self, b: u8) {
     match b {
       C0::HT => {
+        self.cursor.pending_wrap = false;
         let dist = 8 - self.cursor.col % 8;
 
         for _ in 0..dist {
@@ -31,8 +43,14 @@ impl Perform for TerminalState {
           self.cursor.col += 1;
         }
       }
-      C0::BS => self.cursor.col = self.cursor.col.saturating_sub(1),
-      C0::CR => self.cursor.col = 0,
+      C0::BS => {
+        self.cursor.pending_wrap = false;
+        self.cursor.col = self.cursor.col.saturating_sub(1);
+      }
+      C0::CR => {
+        self.cursor.pending_wrap = false;
+        self.cursor.col = 0;
+      }
       C0::LF | C0::VT | C0::FF => {
         self.linefeed();
         if self.cursor.line_feed {
@@ -200,6 +218,7 @@ impl Perform for TerminalState {
       }
       (b'D', []) => self.move_left(next_param_or(1)),
       (b'd', []) => {
+        self.cursor.pending_wrap = false;
         self.cursor.row = (next_param_or(1) as usize - 1).clamp(0, self.size.rows - 1);
       }
       (b'E', []) => {
@@ -211,11 +230,13 @@ impl Perform for TerminalState {
         self.cursor.col = 0;
       }
       (b'G', []) | (b'`', []) => {
+        self.cursor.pending_wrap = false;
         self.cursor.col = (next_param_or(1) as usize - 1).clamp(0, self.size.cols - 1);
       }
       (b'W', [b'?']) if next_param_or(0) == 5 => unhandled!("set tabs to 8"),
       (b'g', []) => unhandled!("clear tabs"),
       (b'H', []) | (b'f', []) => {
+        self.cursor.pending_wrap = false;
         self.cursor.row = (next_param_or(1) as usize - 1).clamp(0, self.size.rows - 1);
         self.cursor.col = (next_param_or(1) as usize - 1).clamp(0, self.size.cols - 1);
       }
@@ -314,6 +335,7 @@ impl Perform for TerminalState {
           self.scroll_start = scroll_start;
           self.scroll_end = scroll_end;
         }
+        self.cursor.pending_wrap = false;
         self.cursor.row = 0;
         self.cursor.col = 0;
       }
@@ -358,12 +380,20 @@ impl Perform for TerminalState {
 }
 
 impl TerminalState {
-  fn move_up(&mut self, n: u16) { self.cursor.row = self.cursor.row.saturating_sub(n as usize); }
+  fn move_up(&mut self, n: u16) {
+    self.cursor.pending_wrap = false;
+    self.cursor.row = self.cursor.row.saturating_sub(n as usize);
+  }
   fn move_down(&mut self, n: u16) {
+    self.cursor.pending_wrap = false;
     self.cursor.row = (self.cursor.row + n as usize).clamp(0, self.size.rows - 1);
   }
-  fn move_left(&mut self, n: u16) { self.cursor.col = self.cursor.col.saturating_sub(n as usize); }
+  fn move_left(&mut self, n: u16) {
+    self.cursor.pending_wrap = false;
+    self.cursor.col = self.cursor.col.saturating_sub(n as usize);
+  }
   fn move_right(&mut self, n: u16) {
+    self.cursor.pending_wrap = false;
     self.cursor.col = (self.cursor.col + n as usize).clamp(0, self.size.cols - 1);
   }
 

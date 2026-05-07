@@ -36,6 +36,7 @@ pub struct Cursor {
   pub insert:         bool,
   pub line_feed:      bool,
   pub blink:          bool,
+  pub pending_wrap:   bool,
   pub style:          Style,
   pub active_charset: usize,
 }
@@ -481,12 +482,13 @@ impl TerminalState {
 impl Default for Cursor {
   fn default() -> Self {
     Cursor {
-      pos:       Position::default(),
-      visible:   true,
-      insert:    false,
-      line_feed: false,
-      blink:     false,
-      style:     Default::default(),
+      pos:          Position::default(),
+      visible:      true,
+      insert:       false,
+      line_feed:    false,
+      blink:        false,
+      pending_wrap: false,
+      style:        Default::default(),
 
       active_charset: 0,
     }
