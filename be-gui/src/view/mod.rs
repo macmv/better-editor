@@ -20,6 +20,11 @@ pub struct View {
   pub bounds:  Rect,
 }
 
+pub struct Scroll {
+  pub offset:      f64,
+  pub line_height: f64,
+}
+
 impl From<EditorView> for ViewContent {
   fn from(value: EditorView) -> Self { ViewContent::Editor(value) }
 }
@@ -153,5 +158,39 @@ impl Popup {
       Popup::Search(search) => search.perform_action(action),
       Popup::Command(command) => command.perform_action(action),
     }
+  }
+}
+
+impl Scroll {
+  pub fn new(line_height: f64) -> Self { Scroll { offset: 0.0, line_height } }
+
+  pub fn scroll(&mut self, delta: f64) {
+    self.offset += delta;
+    self.offset = self.offset.max(0.0);
+  }
+
+  /// A negative number between -line_height and zero. This is the Y offset to
+  /// draw the first line at.
+  pub fn first_line_offset(&self) -> f64 { -(self.offset % self.line_height) }
+
+  pub fn fully_visible_range(&self, visible_height: f64) -> (usize, usize) {
+    let min = (self.offset / self.line_height).ceil() as usize;
+    let max = ((self.offset + visible_height) / self.line_height).floor() as usize - 1;
+
+    (min, max)
+  }
+
+  pub fn partially_visible_range(&self, visible_height: f64) -> (usize, usize) {
+    let min = (self.offset / self.line_height).floor() as usize;
+    let max = ((self.offset + visible_height) / self.line_height).ceil() as usize;
+
+    (min, max)
+  }
+
+  pub fn lines(&self, visible_height: f64) -> impl Iterator<Item = (usize, f64)> {
+    let (min, max) = self.partially_visible_range(visible_height);
+    let offset = self.first_line_offset();
+
+    (min..=max).map(move |line| (line, offset + (line as f64) * self.line_height))
   }
 }

@@ -11,14 +11,15 @@ use kurbo::{Arc, Circle, Line, Point, Rect, RoundedRect, Size, Stroke, Triangle,
 
 use crate::{
   CursorMode, Font, Layout, MouseButton, MouseEvent, Render, RenderStore, TextLayout,
-  theme::Underline,
+  theme::Underline, view::Scroll,
 };
 
 pub struct EditorView {
   pub editor: SharedHandle<EditorState>,
 
-  scroll: Point,
-  focus:  Focus,
+  horizontal_scroll: Scroll,
+  vertical_scroll:   Scroll,
+  focus:             Focus,
 
   /// Set after typing an incomplete action, like 'd' or 'r'
   pub(crate) temporary_mode: Option<Mode>,
@@ -53,12 +54,13 @@ const LINE_NUMBER_MARGIN_RIGHT: f64 = 10.0;
 impl EditorView {
   pub fn new(store: &mut RenderStore) -> Self {
     let mut view = EditorView {
-      editor:         store.workspace.new_editor(),
-      scroll:         Point::ZERO,
-      focus:          Focus::Unfocused { cursor: Cursor::default() },
-      temporary_mode: None,
-      cached_layouts: HashMap::new(),
-      cached_scale:   0.0,
+      editor:            store.workspace.new_editor(),
+      horizontal_scroll: Scroll::new(0.0),
+      vertical_scroll:   Scroll::new(0.0),
+      focus:             Focus::Unfocused { cursor: Cursor::default() },
+      temporary_mode:    None,
+      cached_layouts:    HashMap::new(),
+      cached_scale:      0.0,
 
       min_line:          be_doc::Line(0),
       max_line:          be_doc::Line(0),
@@ -257,15 +259,14 @@ impl EditorView {
           //
           // Other editors solve this by not requiring the cursor to be in view, but I
           // like keeping the cursor nice and obvious.
-          self.scroll.y = (self.scroll.y - delta.y).max(0.0);
+          self.vertical_scroll.offset = (self.vertical_scroll.offset - delta.y).max(0.0);
 
           if self.focused() {
             let scroll_offset = self.editor.config.borrow().settings.editor.scroll_offset as usize;
 
-            let min_fully_visible_row =
-              (self.scroll.y / line_height).ceil() as usize + scroll_offset;
-            let max_fully_visible_row =
-              ((self.scroll.y + size.height) / line_height).floor() as usize - 1 - scroll_offset;
+            let (min, max) = self.vertical_scroll.fully_visible_range(size.height);
+            let min_fully_visible_row = min + scroll_offset;
+            let max_fully_visible_row = max - scroll_offset;
 
             if self.cursor().line.as_usize() < min_fully_visible_row {
               self.editor.move_to_line(be_doc::Line(min_fully_visible_row));
@@ -285,19 +286,20 @@ impl EditorView {
   fn line_for_mouse(&self, store: &RenderStore, y: f64) -> Option<be_doc::Line> {
     let line_height = store.text.font_metrics().line_height;
 
-    let line_region_y = self.scroll.y + y;
+    let line_region_y = self.vertical_scroll.offset + y;
     let line = (line_region_y / line_height).floor() as usize;
     if line < self.doc().len_lines() { Some(be_doc::Line(line)) } else { None }
   }
 
   fn layout_editor(&mut self, layout: &mut Layout) {
     let line_height = layout.store.text.font_metrics().line_height;
+    self.vertical_scroll.line_height = line_height;
     let scroll_offset = self.editor.config.borrow().settings.editor.scroll_offset as usize;
 
     if self.focused() {
-      let min_fully_visible_row = (self.scroll.y / line_height).ceil() as usize + scroll_offset;
-      let max_fully_visible_row =
-        ((self.scroll.y + layout.size().height) / line_height).floor() as usize - 1 - scroll_offset;
+      let (min, max) = self.vertical_scroll.fully_visible_range(layout.size().height);
+      let min_fully_visible_row = min + scroll_offset;
+      let max_fully_visible_row = max - scroll_offset;
 
       if self.cursor().line.as_usize() < min_fully_visible_row {
         let target_line = self
@@ -307,7 +309,7 @@ impl EditorView {
           .saturating_sub(scroll_offset)
           .clamp(0, self.doc().len_lines());
 
-        self.scroll.y = target_line as f64 * line_height;
+        self.vertical_scroll.offset = target_line as f64 * line_height;
       } else if self.cursor().line.as_usize() > max_fully_visible_row {
         let target_line = self
           .cursor()
@@ -316,18 +318,13 @@ impl EditorView {
           .saturating_add(scroll_offset + 1)
           .clamp(0, self.doc().len_lines());
 
-        self.scroll.y = (target_line as f64 * line_height) - layout.size().height;
+        self.vertical_scroll.offset = (target_line as f64 * line_height) - layout.size().height;
       }
     }
 
-    self.min_line = be_doc::Line(
-      ((self.scroll.y / line_height).floor() as usize)
-        .clamp(0, self.doc().len_lines().saturating_sub(1)),
-    );
-    self.max_line = be_doc::Line(
-      (((self.scroll.y + layout.size().height) / line_height).ceil() as usize)
-        .clamp(0, self.doc().len_lines().saturating_sub(1)),
-    );
+    let (min_line, max_line) = self.vertical_scroll.partially_visible_range(layout.size().height);
+    self.min_line = be_doc::Line(min_line.clamp(0, self.doc().len_lines().saturating_sub(1)));
+    self.max_line = be_doc::Line(max_line.clamp(0, self.doc().len_lines().saturating_sub(1)));
 
     let start = self.doc().byte_of_line(self.min_line);
     let end = if self.max_line.as_usize() >= self.doc().len_lines() {
@@ -370,11 +367,11 @@ impl EditorView {
       && let Some(line_layout) = self.cached_layouts.get(&self.cursor().line.as_usize())
     {
       let cursor = line_layout.cursor(self.doc().cursor_column_offset(self.cursor()), mode);
-      if cursor.x0 - self.scroll.x <= 0.0 {
-        self.scroll.x = cursor.x0;
+      if cursor.x0 - self.horizontal_scroll.offset <= 0.0 {
+        self.horizontal_scroll.offset = cursor.x0;
       }
-      if cursor.x1 - self.scroll.x >= layout.size().width - self.gutter_width() {
-        self.scroll.x = cursor.x1 - (layout.size().width - self.gutter_width());
+      if cursor.x1 - self.horizontal_scroll.offset >= layout.size().width - self.gutter_width() {
+        self.horizontal_scroll.offset = cursor.x1 - (layout.size().width - self.gutter_width());
       }
     }
   }
@@ -386,8 +383,7 @@ impl EditorView {
     );
 
     let line_height = render.store.text.font_metrics().line_height;
-
-    let start_y = -(self.scroll.y % line_height);
+    let start_y = self.vertical_scroll.first_line_offset();
 
     let ranges = self.editor.selection_ranges();
     for (start, end) in ranges {
@@ -423,10 +419,10 @@ impl EditorView {
         let end_x = layout.cursor(end_column, CursorMode::Block).x1;
         render.fill(
           &Rect::new(
-            self.gutter_width() + start_x - self.scroll.x,
-            line.as_usize() as f64 * line_height - self.scroll.y,
-            self.gutter_width() + end_x - self.scroll.x,
-            (line.as_usize() + 1) as f64 * line_height - self.scroll.y,
+            self.gutter_width() + start_x - self.horizontal_scroll.offset,
+            line.as_usize() as f64 * line_height - self.vertical_scroll.offset,
+            self.gutter_width() + end_x - self.horizontal_scroll.offset,
+            (line.as_usize() + 1) as f64 * line_height - self.vertical_scroll.offset,
           ),
           render.theme().background_raised_outline,
         );
@@ -456,7 +452,7 @@ impl EditorView {
         let mut y = start_y;
         let mut indent_guides = IndentGuides::new(
           self.editor.config.borrow().settings.editor.indent_width as usize,
-          Vec2::new(-self.scroll.x, start_y),
+          Vec2::new(-self.horizontal_scroll.offset, start_y),
         );
         for i in self.min_line.as_usize()..=self.max_line.as_usize() {
           if self.cached_layouts.get(&i).is_none() {
@@ -469,9 +465,14 @@ impl EditorView {
             render,
           );
 
-          render.draw_text(&layout, Point::new(-self.scroll.x, y));
+          render.draw_text(&layout, Point::new(-self.horizontal_scroll.offset, y));
 
-          self.draw_trailing_spaces(i, layout.size().width - self.scroll.x, y, render);
+          self.draw_trailing_spaces(
+            i,
+            layout.size().width - self.horizontal_scroll.offset,
+            y,
+            render,
+          );
 
           y += line_height;
         }
@@ -490,7 +491,7 @@ impl EditorView {
       if line >= self.min_line.as_usize() && line <= self.max_line.as_usize() {
         let cursor = layout.cursor(self.doc().cursor_column_offset(self.cursor()), mode)
           + Vec2::new(
-            self.gutter_width() - self.scroll.x,
+            self.gutter_width() - self.horizontal_scroll.offset,
             start_y + (line - self.min_line.as_usize()) as f64 * line_height,
           );
         if self.focused() {
