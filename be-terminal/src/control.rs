@@ -267,7 +267,16 @@ impl Perform for TerminalState {
           self.set_private_mode(param, false)
         }
       }
-      (b'M', []) => unhandled!("delete lines"),
+      (b'M', []) => {
+        let count = (next_param_or(1) as usize).clamp(1, self.size.rows - self.cursor.row);
+        for i in self.cursor.row..self.size.rows - count {
+          self.grid.swap(i, i + count);
+        }
+        for i in (self.size.rows - count)..self.size.rows {
+          self.grid.line_mut(i).clear(self.cursor.style);
+        }
+        self.cursor.col = 0;
+      }
       (b'm', []) => self.set_graphics_mode(params),
       // Kitty keyboard protocol: set/push/pop/query keyboard mode flags.
       // These control how key events are encoded (e.g. distinguish modifiers,
