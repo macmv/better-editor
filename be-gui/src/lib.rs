@@ -116,7 +116,10 @@ impl ViewId {
 
 impl State {
   pub fn new(store: &mut RenderStore) -> Self {
-    State { keys: vec![], layout: AppLayout::Workspace(WorkspaceLayout::new(store)) }
+    let mut term = crate::view::TerminalView::new(&store.workspace.clipboard);
+    term.on_focus(true);
+
+    State { keys: vec![], layout: AppLayout::Terminal(term) }
   }
 
   fn mode(&self) -> Mode {
@@ -137,10 +140,7 @@ impl State {
 
     match Action::from_input(self.mode(), &self.keys) {
       Ok(action) => {
-        match &mut self.layout {
-          AppLayout::Workspace(w) => w.perform_action(action, store),
-          AppLayout::Terminal(t) => t.perform_action(action),
-        }
+        self.perform_action(action, store);
         self.keys.clear();
       }
       Err(be_input::ActionError::Unrecognized) => self.keys.clear(),
@@ -204,6 +204,21 @@ impl State {
     match &mut self.layout {
       AppLayout::Workspace(w) => w.on_event(event, store),
       AppLayout::Terminal(_) => false,
+    }
+  }
+
+  fn perform_action(&mut self, action: Action, store: &mut RenderStore) {
+    match action {
+      Action::Navigate { nav: Navigation::OpenWorkspace } => {
+        if !matches!(self.layout, AppLayout::Workspace(_)) {
+          self.layout = AppLayout::Workspace(WorkspaceLayout::new(store));
+        }
+      }
+
+      _ => match &mut self.layout {
+        AppLayout::Workspace(w) => w.perform_action(action, store),
+        AppLayout::Terminal(t) => t.perform_action(action),
+      },
     }
   }
 }

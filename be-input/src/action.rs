@@ -21,6 +21,7 @@ pub enum Action {
 
 #[derive(Debug)]
 pub enum Navigation {
+  OpenWorkspace,
   OpenSearch,
   Direction(Direction),
   Split(Axis),
@@ -113,6 +114,7 @@ impl Action {
       return match (mode, key.key) {
         (_, Key::Char('w')) if key.control => match iter.next().ok_or(ActionError::Incomplete)?.key
         {
+          Key::Char('\\') => Ok(Action::Navigate { nav: Navigation::OpenWorkspace }),
           Key::Char('h') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Left) }),
           Key::Char('j') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Down) }),
           Key::Char('k') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Up) }),
