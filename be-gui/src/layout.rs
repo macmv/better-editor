@@ -20,6 +20,8 @@ pub enum Font {
   Editor,
   /// The font used for other UI elements. This is typically a sans-serif font.
   Ui,
+  /// The font used by terminals. This should be a fixed-width font.
+  Terminal,
 }
 
 impl<'a> Layout<'a> {

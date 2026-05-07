@@ -4,9 +4,10 @@ use be_config_macros::Config;
 
 #[derive(Default, Config, Clone)]
 pub struct Settings {
-  pub editor: EditorSettings,
-  pub ui:     UiSettings,
-  pub layout: LayoutSettings,
+  pub editor:   EditorSettings,
+  pub ui:       UiSettings,
+  pub terminal: TerminalSettings,
+  pub layout:   LayoutSettings,
 }
 
 #[derive(Default, Config, Clone)]
@@ -18,6 +19,11 @@ pub struct EditorSettings {
 
 #[derive(Default, Config, Clone)]
 pub struct UiSettings {
+  pub font: FontSettings,
+}
+
+#[derive(Default, Config, Clone)]
+pub struct TerminalSettings {
   pub font: FontSettings,
 }
 

@@ -300,7 +300,7 @@ impl TerminalView {
 
     let theme = &render.store.theme;
     let mut layout = render.store.text.layout_builder(
-      crate::Font::Editor,
+      crate::Font::Terminal,
       &line_string,
       render.theme().text,
       render.scale(),

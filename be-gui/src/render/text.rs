@@ -124,6 +124,14 @@ impl TextStore {
           config.settings.ui.font.family.as_str().into(),
         ));
       }
+      Font::Terminal => {
+        builder.push_default(parley::StyleProperty::FontSize(
+          (config.settings.terminal.font.size * scale) as f32,
+        ));
+        builder.push_default(parley::StyleProperty::FontStack(
+          config.settings.terminal.font.family.as_str().into(),
+        ));
+      }
     }
     // NB: Disable ligatures with this:
     /*

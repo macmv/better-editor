@@ -6,6 +6,10 @@ indent-width = 2
 size = 16
 family = "monospace"
 
+[terminal.font]
+size = 16
+family = "monospace"
+
 [ui.font]
 size = 13
 family = "sans-serif"
