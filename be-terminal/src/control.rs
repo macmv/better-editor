@@ -431,6 +431,7 @@ impl TerminalState {
   }
 
   fn linefeed(&mut self) {
+    self.cursor.pending_wrap = false;
     if self.cursor.row == self.scroll_end - 1 {
       let line = self.grid.scroll_up(self.scroll_start..self.scroll_end, self.cursor.style);
       if !self.alt_screen {
