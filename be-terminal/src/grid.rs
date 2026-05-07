@@ -3,7 +3,7 @@ use std::ops::{Deref, DerefMut, Range};
 use crate::{Position, Size, Style};
 
 pub struct Grid {
-  lines: Vec<Vec<Cell>>,
+  lines: Vec<OwnedLine>,
   size:  Size,
 }
 
@@ -13,6 +13,7 @@ pub struct Cell {
   style: Style,
 }
 
+#[derive(Clone)]
 pub struct OwnedLine {
   cells: Vec<Cell>,
 }
@@ -45,45 +46,45 @@ impl Default for Cell {
 
 impl Grid {
   pub fn new(size: Size) -> Self {
-    Grid { lines: vec![vec![Cell::default(); size.cols]; size.rows], size }
+    Grid { lines: vec![OwnedLine { cells: vec![Cell::default(); size.cols] }; size.rows], size }
   }
 
   pub fn put(&mut self, pos: Position, c: char, style: Style) {
     if pos.row >= self.lines.len() {
       return;
     }
-    if pos.col >= self.lines[pos.row].len() {
+    if pos.col >= self.lines[pos.row].cells.len() {
       return;
     }
 
-    self.lines[pos.row][pos.col].c = c;
-    self.lines[pos.row][pos.col].style = style;
+    self.lines[pos.row].cells[pos.col].c = c;
+    self.lines[pos.row].cells[pos.col].style = style;
   }
 
   pub fn replace_char(&mut self, pos: Position, c: char) {
     if pos.row >= self.lines.len() {
       return;
     }
-    if pos.col >= self.lines[pos.row].len() {
+    if pos.col >= self.lines[pos.row].cells.len() {
       return;
     }
 
-    self.lines[pos.row][pos.col].c = c;
+    self.lines[pos.row].cells[pos.col].c = c;
   }
 
   pub fn line(&self, index: usize) -> Option<&Line> {
-    self.lines.get(index).map(|line| Line::from_slice(line))
+    self.lines.get(index).map(|line| Line::from_slice(&line.cells))
   }
 
   pub fn line_mut(&mut self, index: usize) -> &mut Line {
-    Line::from_mut(self.lines.get_mut(index).expect("line out of bounds"))
+    Line::from_mut(&mut self.lines.get_mut(index).expect("line out of bounds").cells)
   }
 
   pub fn resize(&mut self, size: Size) {
-    self.lines.resize(size.rows, vec![]);
+    self.lines.resize(size.rows, OwnedLine { cells: vec![] });
 
     for line in &mut self.lines {
-      line.resize(size.cols, Cell::default());
+      line.cells.resize(size.cols, Cell::default());
     }
 
     self.size = size;
@@ -91,7 +92,7 @@ impl Grid {
 
   pub fn clear(&mut self, style: Style) {
     for line in &mut self.lines {
-      Line::from_mut(line).clear(style);
+      Line::from_mut(&mut line.cells).clear(style);
     }
   }
 
@@ -105,7 +106,7 @@ impl Grid {
   }
 
   pub fn scroll_up(&mut self, range: Range<usize>) -> OwnedLine {
-    let line = OwnedLine { cells: self.lines[range.start].clone() };
+    let line = self.lines[range.start].clone();
 
     for line in range.start..range.end - 1 {
       self.lines.swap(line, line + 1);
