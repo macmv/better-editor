@@ -14,12 +14,14 @@ use crate::{
   Color, Layout, Notify, Render,
   icon::{self, Icon},
   theme::Theme,
+  view::Scroll,
 };
 
 pub struct FileTree {
   tree:    Directory,
   focused: bool,
   active:  usize,
+  scroll:  Scroll,
 
   notify:  Notify,
   watcher: WatcherHandle,
@@ -139,6 +141,7 @@ impl FileTree {
       tree,
       focused: false,
       active: 0,
+      scroll: Scroll::new(0.0),
       notify,
       watcher: workspace.fs.add_handle(),
       root: workspace.root.clone(),
@@ -402,6 +405,9 @@ impl FileTree {
   pub fn draw(&mut self, render: &mut Render) {
     puffin::profile_function!();
 
+    self.scroll.line_height = render.store.text.font_metrics().line_height;
+    self.scroll.make_visible(render.size().height, self.active);
+
     render.fill(
       &Rect::new(0.0, 0.0, render.size().width, render.size().height),
       render.theme().background_lower,
@@ -412,6 +418,7 @@ impl FileTree {
       indent:       0,
       indent_width: 12.0,
       line_height:  render.store.text.font_metrics().line_height,
+      offset:       self.scroll.offset,
       active:       self.active,
       focused:      self.focused,
     }
@@ -452,6 +459,7 @@ struct TreeDraw {
 
   indent_width: f64,
   line_height:  f64,
+  offset:       f64,
 
   active:  usize,
   focused: bool,
@@ -561,7 +569,10 @@ impl File {
 
 impl TreeDraw {
   fn pos(&self) -> Point {
-    Point::new(self.indent as f64 * self.indent_width, self.line as f64 * self.line_height)
+    Point::new(
+      self.indent as f64 * self.indent_width,
+      self.line as f64 * self.line_height - self.offset,
+    )
   }
 
   fn draw_item(&mut self, item: ItemRef, render: &mut Render) {
