@@ -298,7 +298,9 @@ impl winit::application::ApplicationHandler<Event> for App {
           // frames.
           init.device.poll(wgpu::PollType::wait()).unwrap();
 
-          if init.app.state.animated() {
+          if init.app.state.should_exit() {
+            event_loop.exit();
+          } else if init.app.state.animated() {
             init.window.request_redraw();
             event_loop.set_control_flow(event_loop::ControlFlow::Poll);
           } else {

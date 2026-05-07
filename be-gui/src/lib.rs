@@ -40,7 +40,9 @@ extern crate be_macros;
 struct State {
   keys: Vec<KeyStroke>,
 
-  terminal:   crate::view::TerminalView,
+  terminal:             crate::view::TerminalView,
+  terminal_should_exit: bool,
+
   workspaces: HashMap<WorkspaceRoot, WorkspaceLayout>,
 
   active: AppView,
@@ -126,7 +128,13 @@ impl State {
     let mut terminal = crate::view::TerminalView::new(&store.clipboard, &path);
     terminal.on_focus(true);
 
-    State { keys: vec![], terminal, workspaces: HashMap::new(), active: AppView::Terminal }
+    State {
+      keys: vec![],
+      terminal,
+      terminal_should_exit: false,
+      workspaces: HashMap::new(),
+      active: AppView::Terminal,
+    }
   }
 
   fn mode(&self) -> Mode {
@@ -184,13 +192,25 @@ impl State {
   pub fn layout(&mut self, layout: &mut Layout) {
     match &mut self.active {
       AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().layout(layout),
-      AppView::Terminal => self.terminal.layout(layout),
+      AppView::Terminal => {
+        layout.active = Some(ViewId(0));
+        self.terminal.layout(layout);
+        if !layout.to_close.is_empty() {
+          self.terminal_should_exit = true;
+        }
+      }
     }
   }
   pub fn draw(&mut self, render: &mut Render) {
     match &mut self.active {
       AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().draw(render),
       AppView::Terminal => self.terminal.draw(render),
+    }
+  }
+  pub fn should_exit(&self) -> bool {
+    match &self.active {
+      AppView::Workspace(_) => false,
+      AppView::Terminal => self.terminal_should_exit,
     }
   }
   pub fn animated(&self) -> bool {
