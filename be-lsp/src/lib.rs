@@ -5,6 +5,7 @@ use parking_lot::Mutex;
 use std::{
   collections::HashMap,
   ops::Range,
+  path::PathBuf,
   sync::{Arc, Weak},
 };
 
@@ -22,6 +23,7 @@ pub use client::LspClient;
 use crate::client::LspState;
 
 pub struct LanguageServerStore {
+  root:       PathBuf,
   servers:    HashMap<LanguageServerKey, Arc<LanguageServerState>>,
   on_message: Arc<Mutex<Box<dyn Fn() + Send>>>,
 }
@@ -66,6 +68,7 @@ pub struct LanguageServerState {
 impl Default for LanguageServerStore {
   fn default() -> Self {
     LanguageServerStore {
+      root:       PathBuf::new(),
       servers:    HashMap::new(),
       on_message: Arc::new(Mutex::new(Box::new(|| {}))),
     }
@@ -73,6 +76,8 @@ impl Default for LanguageServerStore {
 }
 
 impl LanguageServerStore {
+  pub fn set_root(&mut self, root: PathBuf) { self.root = root; }
+
   pub fn set_on_message(&mut self, waker: Arc<Mutex<Box<dyn Fn() + Send>>>) {
     self.on_message = waker;
   }
@@ -82,7 +87,7 @@ impl LanguageServerStore {
   }
 
   pub fn spawn(&mut self, key: LanguageServerKey, cmd: &str) -> Weak<LanguageServerState> {
-    let (client, server_caps) = LspClient::spawn(cmd, self.on_message.clone());
+    let (client, server_caps) = LspClient::spawn(cmd, &self.root, self.on_message.clone());
 
     let state = Arc::new(LanguageServerState { client: Mutex::new(client), caps: server_caps });
     let weak = Arc::downgrade(&state);

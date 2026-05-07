@@ -9,7 +9,7 @@ use std::{
   fmt,
   io::{self, Read, Write},
   mem::ManuallyDrop,
-  path::PathBuf,
+  path::{Path, PathBuf},
   process::{Child, ChildStdin, ChildStdout, Stdio},
   sync::Arc,
 };
@@ -95,10 +95,15 @@ struct Reader {
 impl LspClient {
   pub fn spawn(
     cmd: &str,
+    path: &Path,
     on_message: Arc<Mutex<Box<dyn Fn() + Send>>>,
   ) -> (LspClient, lsp::ServerCapabilities) {
-    let mut child =
-      std::process::Command::new(cmd).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
+    let mut child = std::process::Command::new(cmd)
+      .current_dir(path)
+      .stdin(Stdio::piped())
+      .stdout(Stdio::piped())
+      .spawn()
+      .unwrap();
 
     let stdin = child.stdin.take().unwrap();
     let stdout = child.stdout.take().unwrap();
@@ -632,7 +637,11 @@ mod tests {
 
   #[test]
   fn spawn_client() {
-    let (mut client, _) = LspClient::spawn("rust-analyzer", Arc::new(Mutex::new(Box::new(|| {}))));
+    let (mut client, _) = LspClient::spawn(
+      "rust-analyzer",
+      &std::env::current_dir().unwrap(),
+      Arc::new(Mutex::new(Box::new(|| {}))),
+    );
 
     let path = std::path::Path::new("./src/lib.rs").canonicalize().unwrap();
     let uri = types::Uri::from_file_path(&path);

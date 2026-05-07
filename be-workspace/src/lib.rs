@@ -47,6 +47,7 @@ impl Workspace {
     let mut lsp = LanguageServerStore::default();
     {
       let waker = notifier.clone();
+      lsp.set_root(root.as_path().into());
       lsp.set_on_message(Arc::new(Mutex::new(Box::new(move || {
         (waker.lock())(WorkspaceEvent::Refresh);
       }))));
