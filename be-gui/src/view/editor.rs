@@ -7,7 +7,7 @@ use be_fs::WatcherHandle;
 use be_input::{Action, Mode};
 use be_shared::SharedHandle;
 use be_workspace::Workspace;
-use kurbo::{Arc, Circle, Line, Point, Rect, RoundedRect, Size, Stroke, Triangle, Vec2};
+use kurbo::{Arc, Circle, Insets, Line, Point, Rect, RoundedRect, Size, Stroke, Triangle, Vec2};
 
 use crate::{
   CursorMode, Font, Layout, MouseButton, MouseEvent, Render, RenderStore, TextLayout,
@@ -47,8 +47,9 @@ pub struct EditorView {
 
 #[derive(Default)]
 struct CompletionsPopup {
-  scroll:  Scroll,
-  layouts: Vec<CompletionLayout>,
+  scroll:      Scroll,
+  completions: Vec<Completion>,
+  layouts:     Vec<CompletionLayout>,
 }
 
 struct CompletionLayout {
@@ -861,6 +862,8 @@ impl IndentGuides {
 
 impl CompletionsPopup {
   pub fn layout(&mut self, completions: &[Completion], render: &mut Render) {
+    self.completions = completions.iter().cloned().collect();
+
     self.layouts = completions
       .iter()
       .take(20)
@@ -868,65 +871,78 @@ impl CompletionsPopup {
       .collect::<Vec<_>>();
   }
 
-  pub fn draw(&self, cursor: Rect, active: Option<usize>, render: &mut Render) {
+  pub fn draw(&mut self, cursor: Rect, active: Option<usize>, render: &mut Render) {
     let line_height = render.store.text.font_metrics().line_height;
+    self.scroll.line_height = line_height;
 
     let inner_width =
       self.layouts.iter().map(|layout| layout.width()).max_by(|a, b| a.total_cmp(b)).unwrap_or(0.0);
     let inner_height = self.layouts.len() as f64 * line_height;
+
+    let (min, max) = self.scroll.fully_visible_range(inner_height);
+    if let Some(active) = active {
+      if active < min {
+        self.scroll.offset = active as f64 * line_height;
+      } else if active > max {
+        self.scroll.offset = (active + 1) as f64 * line_height - inner_height;
+      }
+    }
 
     const MARGIN_X: f64 = 10.0;
     const MARGIN_Y: f64 = 5.0;
 
     let start_x = cursor.x0;
     let start_y;
-    let mut y;
-    let rect;
+    let inner_rect;
 
     if cursor.y1 + inner_height + MARGIN_Y * 2.0 > render.size().height {
       // draw above the cursor
       start_y = cursor.y0;
-      y = start_y - inner_height - MARGIN_Y;
 
-      rect = Rect::new(
-        start_x - MARGIN_X,
-        start_y - inner_height - MARGIN_Y * 2.0,
-        start_x + inner_width + MARGIN_X,
-        start_y,
+      inner_rect = Rect::new(
+        start_x,
+        start_y - inner_height - MARGIN_Y,
+        start_x + inner_width,
+        start_y + MARGIN_Y,
       );
     } else {
       // draw below the cursor
       start_y = cursor.y1;
-      y = start_y + MARGIN_Y;
 
-      rect = Rect::new(
-        start_x - MARGIN_X,
-        start_y,
-        start_x + inner_width + MARGIN_X,
-        start_y + inner_height + MARGIN_Y * 2.0,
+      inner_rect = Rect::new(
+        start_x,
+        start_y + MARGIN_Y,
+        start_x + inner_width,
+        start_y + inner_height + MARGIN_Y,
       );
     }
 
+    let outer_rect = inner_rect.inset(Insets::uniform_xy(MARGIN_X, MARGIN_Y));
+
     render.drop_shadow(
-      rect,
+      outer_rect,
       MARGIN_Y,
       2.0,
       // keep the chroma and hue so they blend nicely.
       render.theme().background.map(|_, c, h, _| [0.0, c, h, 0.2]),
     );
-    render.fill(&RoundedRect::from_rect(rect, MARGIN_Y), render.theme().background_raised);
+    render.fill(&RoundedRect::from_rect(outer_rect, MARGIN_Y), render.theme().background_raised);
 
-    for (i, layout) in self.layouts.iter().enumerate() {
-      if active == Some(i) {
-        render.fill(
-          &Rect::from_origin_size(Point::new(start_x, y), Size::new(inner_width, line_height)),
-          render.theme().background_raised_outline,
-        );
+    render.clipped(inner_rect, |render| {
+      for (i, y) in self.scroll.partially_visible_lines(inner_height) {
+        let Some(completion) = self.completions.get(i) else { continue };
+        let layout = CompletionLayout::layout(render, completion);
+
+        if active == Some(i) {
+          render.fill(
+            &Rect::from_origin_size(Point::new(0.0, y), Size::new(inner_width, line_height)),
+            render.theme().background_raised_outline,
+          );
+        }
+
+        layout.draw(render, 0.0, y, inner_width);
       }
-
-      layout.draw(render, start_x, y, inner_width);
-      y += line_height;
-    }
+    });
   }
 }
 

@@ -46,6 +46,7 @@ pub struct CompletionsState {
   active:              usize,
 }
 
+#[derive(Clone)]
 pub struct Completion {
   item: types::CompletionItem,
 }
