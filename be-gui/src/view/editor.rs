@@ -429,8 +429,7 @@ impl EditorView {
       }
     }
 
-    let mut y = start_y;
-    for i in self.min_line.as_usize()..=self.max_line.as_usize() {
+    for (i, y) in self.vertical_scroll.partially_visible_lines(render.size().height) {
       if self.cached_layouts.get(&i).is_none() {
         break;
       }
@@ -440,8 +439,6 @@ impl EditorView {
         layout,
         Point::new(LINE_NUMBER_MARGIN_LEFT + self.line_number_width - layout.size().width, y),
       );
-
-      y += line_height;
     }
 
     self.draw_change_gutter(start_y, render);
@@ -449,12 +446,12 @@ impl EditorView {
     render.clipped(
       Rect::new(self.gutter_width(), 0.0, render.size().width, render.size().height),
       |render| {
-        let mut y = start_y;
         let mut indent_guides = IndentGuides::new(
           self.editor.config.borrow().settings.editor.indent_width as usize,
           Vec2::new(-self.horizontal_scroll.offset, start_y),
         );
-        for i in self.min_line.as_usize()..=self.max_line.as_usize() {
+
+        for (i, y) in self.vertical_scroll.partially_visible_lines(render.size().height) {
           if self.cached_layouts.get(&i).is_none() {
             break;
           }
@@ -473,8 +470,6 @@ impl EditorView {
             y,
             render,
           );
-
-          y += line_height;
         }
 
         indent_guides.finish(render)

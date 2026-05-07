@@ -187,10 +187,10 @@ impl Scroll {
     (min, max)
   }
 
-  pub fn lines(&self, visible_height: f64) -> impl Iterator<Item = (usize, f64)> {
+  pub fn partially_visible_lines(&self, visible_height: f64) -> impl Iterator<Item = (usize, f64)> {
     let (min, max) = self.partially_visible_range(visible_height);
     let offset = self.first_line_offset();
 
-    (min..=max).map(move |line| (line, offset + (line as f64) * self.line_height))
+    (min..=max).map(move |line| (line, offset + (line - min) as f64 * self.line_height))
   }
 }
