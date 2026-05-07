@@ -1,7 +1,6 @@
 use be_input::{Action, Clipboard, Direction, Edit, Mode, Move};
 use be_shared::SharedHandle;
 use be_terminal::{Position, StyleFlags, Terminal, TerminalColor};
-use be_workspace::Workspace;
 use kurbo::{Point, Rect, Size, Stroke};
 use parley::FontWeight;
 use peniko::color::AlphaColor;
@@ -40,7 +39,7 @@ struct LineLayout {
 }
 
 impl TerminalView {
-  pub fn new(workspace: &Workspace) -> Self {
+  pub fn new(clipboard: &SharedHandle<Clipboard>) -> Self {
     TerminalView {
       terminal:        Terminal::new(be_terminal::Size { rows: 40, cols: 80 }),
       set_waker:       false,
@@ -50,7 +49,7 @@ impl TerminalView {
       character_size:  kurbo::Size::ZERO,
       cached_layouts:  vec![],
       cached_scale:    0.0,
-      clipboard:       workspace.clipboard.clone(),
+      clipboard:       clipboard.clone(),
       drag_start:      None,
       selection:       None,
       mouse_held:      None,
