@@ -545,7 +545,12 @@ impl TerminalState {
     }
 
     let style = &mut self.cursor.style;
-    let mut iter = params.iter();
+    let mut iter = params.iter().peekable();
+
+    if iter.peek().is_none() {
+      *style = Style::default();
+      return;
+    }
 
     while let Some(args) = iter.next() {
       match args {
