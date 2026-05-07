@@ -164,11 +164,6 @@ impl Popup {
 impl Scroll {
   pub fn new(line_height: f64) -> Self { Scroll { offset: 0.0, line_height } }
 
-  pub fn scroll(&mut self, delta: f64) {
-    self.offset += delta;
-    self.offset = self.offset.max(0.0);
-  }
-
   /// A negative number between -line_height and zero. This is the Y offset to
   /// draw the first line at.
   pub fn first_line_offset(&self) -> f64 { -(self.offset % self.line_height) }
