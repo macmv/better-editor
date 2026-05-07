@@ -1,7 +1,7 @@
 use std::{
   ops::{Deref, DerefMut},
   os::fd::BorrowedFd,
-  path::PathBuf,
+  path::{Path, PathBuf},
 };
 
 use anstyle_parse::{Parser, Utf8Parser};
@@ -185,9 +185,9 @@ pub struct Poller {
 }
 
 impl Terminal {
-  pub fn new(size: Size) -> Self {
+  pub fn new(size: Size, path: &Path) -> Self {
     Terminal {
-      pty:    Pty::new(size),
+      pty:    Pty::new(size, path),
       state:  TerminalState::new(size),
       parser: Parser::<Utf8Parser>::new(),
     }

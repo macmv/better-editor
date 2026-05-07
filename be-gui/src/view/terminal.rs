@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use be_input::{Action, Clipboard, Direction, Edit, Mode, Move};
 use be_shared::SharedHandle;
@@ -41,9 +41,9 @@ struct LineLayout {
 }
 
 impl TerminalView {
-  pub fn new(clipboard: &SharedHandle<Clipboard>) -> Self {
+  pub fn new(clipboard: &SharedHandle<Clipboard>, path: &Path) -> Self {
     TerminalView {
-      terminal:        Terminal::new(be_terminal::Size { rows: 40, cols: 80 }),
+      terminal:        Terminal::new(be_terminal::Size { rows: 40, cols: 80 }, path),
       set_waker:       false,
       focused:         false,
       viewport_offset: 0.0,

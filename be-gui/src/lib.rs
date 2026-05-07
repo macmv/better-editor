@@ -122,7 +122,8 @@ impl ViewId {
 
 impl State {
   pub fn new(store: &mut RenderStore) -> Self {
-    let mut terminal = crate::view::TerminalView::new(&store.clipboard);
+    let path = std::env::current_dir().unwrap();
+    let mut terminal = crate::view::TerminalView::new(&store.clipboard, &path);
     terminal.on_focus(true);
 
     State { keys: vec![], terminal, workspaces: HashMap::new(), active: AppView::Terminal }
@@ -287,9 +288,9 @@ impl WorkspaceLayout {
             .collect(),
           })
         }
-        be_config::TabSettings::Terminal => {
-          Pane::View(state.views.new_view(view::TerminalView::new(&state.workspace.clipboard)))
-        }
+        be_config::TabSettings::Terminal => Pane::View(state.views.new_view(
+          view::TerminalView::new(&state.workspace.clipboard, state.workspace.root.as_path()),
+        )),
         be_config::TabSettings::Editor => {
           Pane::View(state.views.new_view(view::EditorView::new(&mut state.workspace)))
         }
@@ -752,9 +753,10 @@ impl WorkspaceLayout {
       ViewContent::FileTree(_) => {
         self.views.new_view(crate::view::FileTree::new(store.notifier(), &mut self.workspace))
       }
-      ViewContent::Terminal(_) => {
-        self.views.new_view(crate::view::TerminalView::new(&self.workspace.clipboard))
-      }
+      ViewContent::Terminal(_) => self.views.new_view(crate::view::TerminalView::new(
+        &self.workspace.clipboard,
+        self.workspace.root.as_path(),
+      )),
     }
   }
 }

@@ -5,7 +5,7 @@ use std::{
     fd::{AsFd, AsRawFd, BorrowedFd},
     unix::process::CommandExt,
   },
-  path::PathBuf,
+  path::{Path, PathBuf},
   process::Command,
 };
 
@@ -18,7 +18,7 @@ pub struct Pty {
 }
 
 impl Pty {
-  pub fn new(size: Size) -> Self {
+  pub fn new(size: Size, path: &Path) -> Self {
     let pty = rustix_openpty::openpty(
       None,
       Some(&rustix::termios::Winsize {
@@ -30,6 +30,8 @@ impl Pty {
     .unwrap();
 
     let mut cmd = Command::new("/bin/zsh");
+
+    cmd.current_dir(path);
 
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
