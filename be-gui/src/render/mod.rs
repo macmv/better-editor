@@ -34,6 +34,7 @@ pub struct RenderStore {
   pub workspace: Workspace,
   pub text:      TextStore,
   pub theme:     Theme,
+  pub config:    Rc<RefCell<Config>>,
   pub clipboard: SharedHandle<Clipboard>,
 
   render: vello::Renderer,
@@ -133,6 +134,7 @@ pub fn run() {
       text: TextStore::new(&config),
       render: vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),
       theme: Theme::default_theme(),
+      config,
     };
 
     let mut app = App {

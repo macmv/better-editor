@@ -20,12 +20,12 @@ pub struct Workspace {
   pub root: WorkspaceRoot,
 
   pub fs:        WorkspaceWatcher,
-  pub config:    Rc<RefCell<Config>>,
   pub repo:      SharedHandle<Option<Repo>>,
   pub lsp:       Rc<RefCell<LanguageServerStore>>,
   pub clipboard: SharedHandle<Clipboard>,
   pub search:    SharedHandle<SearchState>,
 
+  config:   Rc<RefCell<Config>>,
   notifier: Arc<Mutex<Box<dyn Fn(WorkspaceEvent) + Send>>>,
 
   next_editor:     u32,

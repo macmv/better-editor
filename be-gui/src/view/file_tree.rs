@@ -642,11 +642,10 @@ impl TreeDraw {
 
     let (icon, fill, color) = match render
       .store
-      .workspace
       .config
       .borrow()
       .language_for_filename(&file.name)
-      .map(|lang| (lang, render.store.workspace.config.borrow()))
+      .map(|lang| (lang, render.store.config.borrow()))
       .as_ref()
       .and_then(|(lang, config)| config.languages[&lang].icon.as_deref())
     {

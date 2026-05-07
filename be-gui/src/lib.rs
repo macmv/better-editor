@@ -234,7 +234,7 @@ impl WorkspaceLayout {
       notify:        store.notifier(),
     };
 
-    let layout = store.workspace.config.borrow().settings.layout.clone();
+    let layout = store.config.borrow().settings.layout.clone();
 
     fn build_view(
       state: &mut WorkspaceLayout,
