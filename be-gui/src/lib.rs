@@ -39,7 +39,11 @@ extern crate be_macros;
 struct State {
   keys: Vec<KeyStroke>,
 
-  layout: WorkspaceLayout,
+  layout: AppLayout,
+}
+
+enum AppLayout {
+  Workspace(WorkspaceLayout),
 }
 
 struct WorkspaceLayout {
@@ -111,13 +115,18 @@ impl ViewId {
 
 impl State {
   pub fn new(store: &mut RenderStore) -> Self {
-    State { keys: vec![], layout: WorkspaceLayout::new(store, store.notifier()) }
+    State {
+      keys:   vec![],
+      layout: AppLayout::Workspace(WorkspaceLayout::new(store, store.notifier())),
+    }
   }
 
   pub fn on_key(&mut self, key: KeyStroke, store: &mut RenderStore) {
     self.keys.push(key);
 
-    self.layout.on_key(&mut self.keys, store);
+    match &mut self.layout {
+      AppLayout::Workspace(w) => w.on_key(&mut self.keys, store),
+    }
   }
 
   pub fn open(
@@ -126,17 +135,35 @@ impl State {
     cursor: Option<CursorOrLsp>,
     workspace: &mut Workspace,
   ) {
-    self.layout.open(path, cursor, workspace);
+    match &mut self.layout {
+      AppLayout::Workspace(w) => w.open(path, cursor, workspace),
+    }
   }
-  pub fn layout(&mut self, layout: &mut Layout) { self.layout.layout(layout); }
-  pub fn draw(&mut self, render: &mut Render) { self.layout.draw(render); }
-  pub fn animated(&self) -> bool { self.layout.animated() }
+  pub fn layout(&mut self, layout: &mut Layout) {
+    match &mut self.layout {
+      AppLayout::Workspace(w) => w.layout(layout),
+    }
+  }
+  pub fn draw(&mut self, render: &mut Render) {
+    match &mut self.layout {
+      AppLayout::Workspace(w) => w.draw(render),
+    }
+  }
+  pub fn animated(&self) -> bool {
+    match &self.layout {
+      AppLayout::Workspace(w) => w.animated(),
+    }
+  }
   pub fn on_mouse(&mut self, ev: MouseEvent, size: kurbo::Size, store: &RenderStore) -> CursorKind {
-    self.layout.on_mouse(ev, size, store)
+    match &mut self.layout {
+      AppLayout::Workspace(w) => w.on_mouse(ev, size, store),
+    }
   }
   /// Handles an event. Returns `true` if the app should close.
   pub fn on_event(&mut self, event: Event, store: &mut RenderStore) -> bool {
-    self.layout.on_event(event, store)
+    match &mut self.layout {
+      AppLayout::Workspace(w) => w.on_event(event, store),
+    }
   }
 }
 
