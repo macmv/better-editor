@@ -40,7 +40,7 @@ pub enum WorkspaceEvent {
 }
 
 impl Workspace {
-  pub fn new(config: Rc<RefCell<Config>>) -> Self {
+  pub fn new(root: WorkspaceRoot, config: Rc<RefCell<Config>>) -> Self {
     let notifier: Arc<Mutex<Box<dyn Fn(WorkspaceEvent) + Send>>> =
       Arc::new(Mutex::new(Box::new(|_| {})));
 
@@ -52,7 +52,6 @@ impl Workspace {
       }))));
     }
 
-    let root = WorkspaceRoot::from_path(std::env::current_dir().unwrap());
     let repo = Repo::open(&root.as_path());
     let fs = {
       let waker = notifier.clone();

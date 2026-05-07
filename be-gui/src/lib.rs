@@ -216,11 +216,10 @@ impl State {
     match action {
       Action::Navigate { nav: Navigation::OpenWorkspace } => {
         if matches!(self.active, AppView::Terminal) {
-          // TODO: Use terminal PWD.
-          let path = WorkspaceRoot::from_path(std::env::current_dir().unwrap());
+          let path = WorkspaceRoot::from_path(self.terminal.current_dir());
 
           if !self.workspaces.contains_key(&path) {
-            self.workspaces.insert(path.clone(), WorkspaceLayout::new(store));
+            self.workspaces.insert(path.clone(), WorkspaceLayout::new(path.clone(), store));
           }
 
           self.terminal.on_focus(false);
@@ -240,8 +239,8 @@ impl State {
 }
 
 impl WorkspaceLayout {
-  pub fn new(store: &mut RenderStore) -> Self {
-    let mut workspace = Workspace::new(store.config.clone());
+  pub fn new(root: WorkspaceRoot, store: &mut RenderStore) -> Self {
+    let mut workspace = Workspace::new(root, store.config.clone());
     workspace.clipboard = store.clipboard.clone();
 
     let notify = store.notifier();

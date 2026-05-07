@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use be_input::{Action, Clipboard, Direction, Edit, Mode, Move};
 use be_shared::SharedHandle;
 use be_terminal::{Position, StyleFlags, Terminal, TerminalColor};
@@ -56,6 +58,8 @@ impl TerminalView {
       mouse_pos:       None,
     }
   }
+
+  pub fn current_dir(&self) -> PathBuf { self.terminal.current_dir() }
 
   pub fn perform_action(&mut self, action: Action) {
     match action {

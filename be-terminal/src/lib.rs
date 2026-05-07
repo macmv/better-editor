@@ -1,6 +1,7 @@
 use std::{
   ops::{Deref, DerefMut},
   os::fd::BorrowedFd,
+  path::PathBuf,
 };
 
 use anstyle_parse::{Parser, Utf8Parser};
@@ -194,6 +195,8 @@ impl Terminal {
 
   pub fn state(&self) -> &TerminalState { &self.state }
   pub fn has_pending_writes(&self) -> bool { self.pty.has_pending_writes() }
+
+  pub fn current_dir(&self) -> PathBuf { self.pty.current_dir() }
 
   /// # Safety
   ///

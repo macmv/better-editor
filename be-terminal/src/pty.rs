@@ -5,6 +5,7 @@ use std::{
     fd::{AsFd, AsRawFd, BorrowedFd},
     unix::process::CommandExt,
   },
+  path::PathBuf,
   process::Command,
 };
 
@@ -69,6 +70,18 @@ impl Pty {
     be_async::set_nonblocking(&pty.controller).unwrap();
 
     Pty { _child: child, pty: File::from(pty.controller), write_buf: Vec::new() }
+  }
+
+  pub fn current_dir(&self) -> PathBuf {
+    #[cfg(target_os = "linux")]
+    {
+      std::fs::read_link(format!("/proc/{}/cwd", self._child.id())).unwrap()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+      warn!("current_dir not implemented on platform");
+      std::env::current_dir().unwrap()
+    }
   }
 
   pub fn fd(&self) -> BorrowedFd<'_> { self.pty.as_fd() }
