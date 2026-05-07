@@ -36,6 +36,7 @@ pub struct Cursor {
   pub insert:         bool,
   pub line_feed:      bool,
   pub blink:          bool,
+  pub auto_wrap:      bool,
   pub pending_wrap:   bool,
   pub style:          Style,
   pub active_charset: usize,
@@ -487,6 +488,7 @@ impl Default for Cursor {
       insert:       false,
       line_feed:    false,
       blink:        false,
+      auto_wrap:    true,
       pending_wrap: false,
       style:        Default::default(),
 

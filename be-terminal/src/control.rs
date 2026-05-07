@@ -24,7 +24,7 @@ impl Perform for TerminalState {
 
     if self.cursor.col + 1 < self.size.cols {
       self.cursor.col += 1;
-    } else {
+    } else if self.cursor.auto_wrap {
       self.cursor.pending_wrap = true;
     }
   }
@@ -487,7 +487,7 @@ impl TerminalState {
       1 => self.flags.set(TerminalFlags::CURSOR_KEYS, true),
       3 => unhandled!("column mode"),
       6 => unhandled!("origin"),
-      7 => unhandled!("line wrap"),
+      7 => self.cursor.auto_wrap = set,
       12 => self.cursor.blink = set,
       25 => self.cursor.visible = set,
       1000 => self.flags.set(TerminalFlags::REPORT_MOUSE, set),
