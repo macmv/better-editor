@@ -495,7 +495,7 @@ impl EditorState {
       .range(..end)
       .chars()
       .rev()
-      .take_while(|c| c.is_alphanumeric())
+      .take_while(|c| c.is_alphanumeric() || *c == '_')
       .map(|c| c.len_utf8())
       .sum::<usize>();
 
