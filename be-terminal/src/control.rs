@@ -352,7 +352,13 @@ impl Perform for TerminalState {
           self.grid.scroll_down(self.scroll_start..self.scroll_end, self.cursor.style);
         }
       }
-      (b't', []) => unhandled!("push title/text area"),
+      (b't', []) => match next_param_or(0) {
+        // Report text area size in characters.
+        18 => self.send_text(&format!("\x1b[8;{};{}t", self.size.rows, self.size.cols)),
+        // Report screen size in characters.
+        19 => self.send_text(&format!("\x1b[9;{};{}t", self.size.rows, self.size.cols)),
+        _ => unhandled!(),
+      },
       (b'u', [b'?']) => unhandled!("report keyboard mode"),
       (b'u', [b'=']) => unhandled!("set keyboard mode"),
       (b'u', [b'>']) => unhandled!("push keyboard mode"),
