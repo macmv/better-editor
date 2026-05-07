@@ -253,7 +253,7 @@ impl Perform for TerminalState {
           self.grid.swap(i, i + count);
         }
         for i in self.cursor.row..self.cursor.row + count {
-          self.grid.line_mut(i).clear(Default::default());
+          self.grid.line_mut(i).clear(self.cursor.style);
         }
         self.cursor.col = 0;
       }
