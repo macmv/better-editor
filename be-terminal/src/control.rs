@@ -553,7 +553,8 @@ impl TerminalState {
         [1] => style.flags.set(StyleFlags::BOLD, true),
         [2] => style.flags.set(StyleFlags::DIM, true),
         [3] => style.flags.set(StyleFlags::ITALIC, true),
-        [4] => style.flags.set(StyleFlags::UNDERLINE, true),
+        // TODO: Implement other types of underlines.
+        [4, ..] => style.flags.set(StyleFlags::UNDERLINE, true),
         [5] => style.flags.set(StyleFlags::BLINK, true),
         [7] => style.flags.set(StyleFlags::INVERSE, true),
         [8] => style.flags.set(StyleFlags::HIDDEN, true),
