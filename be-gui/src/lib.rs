@@ -572,8 +572,10 @@ impl WorkspaceLayout {
         }
       }
       Action::Navigate { nav: Navigation::OpenSearch } => {
-        self.active_tab_mut().popup =
-          Some(view::Popup::Search(view::Search::new(self.notify.clone())));
+        self.active_tab_mut().popup = Some(view::Popup::Search(view::Search::new(
+          self.workspace.root.clone(),
+          self.notify.clone(),
+        )));
       }
       Action::Navigate { nav: Navigation::Split(axis) } => {
         let new_view = self.split_active_view(store);

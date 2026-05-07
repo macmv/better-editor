@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use be_fs::WorkspaceRoot;
 use be_input::{Action, Direction, Edit, Move};
 use kurbo::{Point, Rect, RoundedRect, Stroke};
 use nucleo::{Injector, Nucleo};
@@ -24,9 +25,9 @@ struct Index {
 }
 
 impl Search {
-  pub fn new(notify: Notify) -> Self {
+  pub fn new(root: WorkspaceRoot, notify: Notify) -> Self {
     let mut search =
-      Search { index: Index::new(notify.clone()), search: String::new(), cursor: 0, notify };
+      Search { index: Index::new(root, notify.clone()), search: String::new(), cursor: 0, notify };
     search.change_pattern(false);
     search
   }
@@ -165,31 +166,33 @@ impl Search {
 }
 
 impl Index {
-  pub fn new(notify: Notify) -> Self {
+  pub fn new(root: WorkspaceRoot, notify: Notify) -> Self {
     let config = nucleo::Config::DEFAULT;
     let nucleo = Nucleo::new(config.clone(), std::sync::Arc::new(move || notify.wake()), None, 1);
     let matcher = nucleo::Matcher::new(config);
 
     let mut injector = nucleo.injector();
     // TODO: Thread pool.
-    std::thread::spawn(move || recurse(".", &mut injector));
+    std::thread::spawn(move || recurse(root, &mut injector));
 
     Index { nucleo, matcher }
   }
 }
 
-fn recurse(path: &str, injector: &mut Injector<String>) {
+fn recurse(root: WorkspaceRoot, injector: &mut Injector<String>) {
   // We've already got libgit integration, so maybe we should just use that.
   // However, `ignore` is a lot simpler to use, and I'd rather use a rust
   // dependency than a C one.
-  for entry in ignore::Walk::new(path) {
+  for entry in ignore::Walk::new(root.as_path()) {
     match entry {
       Ok(entry) => {
         let path = entry.path();
         if !path.is_dir() {
-          injector.push(path.to_str().unwrap().to_string(), |path, columns| {
-            columns[0] = path.as_str().into();
-          });
+          let Ok(p) = path.strip_prefix(root.as_path()) else { continue };
+          injector
+            .push(p.to_str().expect("invalid workspace path").to_string(), |path, columns| {
+              columns[0] = path.as_str().into()
+            });
         }
       }
       Err(err) => println!("Error: {}", err),
