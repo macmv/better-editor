@@ -48,6 +48,8 @@ enum AppLayout {
 }
 
 struct WorkspaceLayout {
+  workspace: Workspace,
+
   active:        usize,
   tabs:          Vec<Tab>,
   views:         ViewCollection,
@@ -164,14 +166,9 @@ impl State {
     }
   }
 
-  pub fn open(
-    &mut self,
-    path: &std::path::Path,
-    cursor: Option<CursorOrLsp>,
-    workspace: &mut Workspace,
-  ) {
+  pub fn open(&mut self, path: &std::path::Path, cursor: Option<CursorOrLsp>) {
     match &mut self.layout {
-      AppLayout::Workspace(w) => w.open(path, cursor, workspace),
+      AppLayout::Workspace(w) => w.open(path, cursor),
       AppLayout::Terminal(_) => {}
     }
   }
@@ -225,13 +222,21 @@ impl State {
 
 impl WorkspaceLayout {
   pub fn new(store: &mut RenderStore) -> Self {
+    let mut workspace = Workspace::new(store.config.clone());
+    workspace.clipboard = store.clipboard.clone();
+
+    let notify = store.notifier();
+    workspace.set_waker(move |ev| notify.workspace_event(ev));
+
     let mut state = WorkspaceLayout {
-      active:        1,
-      tabs:          vec![],
-      views:         ViewCollection::new(),
-      tab_layout:    WidgetCollection::new(),
+      workspace,
+
+      active: 1,
+      tabs: vec![],
+      views: ViewCollection::new(),
+      tab_layout: WidgetCollection::new(),
       current_hover: None,
-      notify:        store.notifier(),
+      notify: store.notifier(),
     };
 
     let layout = store.config.borrow().settings.layout.clone();
@@ -245,7 +250,7 @@ impl WorkspaceLayout {
         be_config::TabSettings::Split(split) => {
           if split.percent.len() != split.children.len().saturating_sub(1) {
             eprintln!("invalid split percentages"); // TODO: Real errors!
-            return Pane::View(state.views.new_view(view::EditorView::new(&mut store.workspace)));
+            return Pane::View(state.views.new_view(view::EditorView::new(&mut state.workspace)));
           }
 
           Pane::Split(pane::Split {
@@ -265,13 +270,13 @@ impl WorkspaceLayout {
           })
         }
         be_config::TabSettings::Terminal => {
-          Pane::View(state.views.new_view(view::TerminalView::new(&store.workspace.clipboard)))
+          Pane::View(state.views.new_view(view::TerminalView::new(&state.workspace.clipboard)))
         }
         be_config::TabSettings::Editor => {
-          Pane::View(state.views.new_view(view::EditorView::new(&mut store.workspace)))
+          Pane::View(state.views.new_view(view::EditorView::new(&mut state.workspace)))
         }
         be_config::TabSettings::FileTree => Pane::View(
-          state.views.new_view(view::FileTree::new(store.notifier(), &mut store.workspace)),
+          state.views.new_view(view::FileTree::new(store.notifier(), &mut state.workspace)),
         ),
       }
     }
@@ -303,7 +308,7 @@ impl WorkspaceLayout {
   fn layout(&mut self, layout: &mut Layout) {
     puffin::profile_function!();
 
-    layout.store.workspace.fs.update();
+    self.workspace.fs.update();
 
     layout.clipped(
       Rect::new(0.0, layout.size().height - 25.0, layout.size().width, layout.size().height),
@@ -312,7 +317,7 @@ impl WorkspaceLayout {
       },
     );
 
-    for editor in layout.store.workspace.editors_mut() {
+    for editor in self.workspace.editors_mut() {
       puffin::profile_scope!("layout editor");
       editor.layout();
     }
@@ -351,7 +356,7 @@ impl WorkspaceLayout {
       },
     );
 
-    for editor in layout.store.workspace.editors_mut() {
+    for editor in self.workspace.editors_mut() {
       editor.clear_damage();
     }
   }
@@ -448,14 +453,11 @@ impl WorkspaceLayout {
     );
   }
 
-  fn open(
-    &mut self,
-    path: &std::path::Path,
-    cursor: Option<CursorOrLsp>,
-    workspace: &mut Workspace,
-  ) {
-    if let ViewContent::Editor(e) = &mut self.active_view_mut().content {
-      let res = e.open(path, workspace);
+  fn open(&mut self, path: &std::path::Path, cursor: Option<CursorOrLsp>) {
+    if let ViewContent::Editor(e) =
+      &mut self.views.get_mut(self.tabs[self.active].content.active()).unwrap().content
+    {
+      let res = e.open(path, &mut self.workspace);
       if let Some(cursor) = cursor
         && res.is_ok()
       {
@@ -472,7 +474,7 @@ impl WorkspaceLayout {
         _ => None,
       })
     {
-      let res = e.open(path, workspace);
+      let res = e.open(path, &mut self.workspace);
       if let Some(cursor) = cursor
         && res.is_ok()
       {
@@ -511,9 +513,6 @@ impl WorkspaceLayout {
     } else {
       self.views.get(self.tabs[self.active].content.active()).unwrap().mode()
     }
-  }
-  fn active_view(&self) -> &View {
-    self.views.get(self.tabs[self.active].content.active()).unwrap()
   }
   fn active_view_mut(&mut self) -> &mut View {
     self.views.get_mut(self.tabs[self.active].content.active()).unwrap()
@@ -642,7 +641,7 @@ impl WorkspaceLayout {
       Event::Workspace(WorkspaceEvent::Refresh) => {}
       Event::Workspace(WorkspaceEvent::Editor(be_editor::EditorEvent::OpenFile(path, cursor))) => {
         self.tabs[self.active].popup = None;
-        self.open(&path, cursor, &mut store.workspace);
+        self.open(&path, cursor);
       }
       Event::Workspace(WorkspaceEvent::Editor(be_editor::EditorEvent::RecordDefinition(
         path,
@@ -680,9 +679,9 @@ impl WorkspaceLayout {
               let path = if path.is_absolute() {
                 path.to_path_buf()
               } else {
-                store.workspace.root.as_path().join(path)
+                self.workspace.root.as_path().join(path)
               };
-              self.open(&path, None, &mut store.workspace);
+              self.open(&path, None);
             }
           }
           "noh" => {
@@ -717,7 +716,7 @@ impl WorkspaceLayout {
         self.tabs[self.active].popup = None;
       }
       Event::Workspace(WorkspaceEvent::Editor(be_editor::EditorEvent::SavedFile(path))) => {
-        store.workspace.fs.notify_saved(&path);
+        self.workspace.fs.notify_saved(&path);
       }
       Event::Exit => return true,
     }
@@ -726,17 +725,17 @@ impl WorkspaceLayout {
   }
 
   fn split_active_view(&mut self, store: &mut RenderStore) -> ViewId {
-    match self.active_view().content {
+    match self.views.get(self.tabs[self.active].content.active()).unwrap().content {
       ViewContent::Editor(ref e) => {
-        let mut editor = crate::view::EditorView::new(&mut store.workspace);
+        let mut editor = crate::view::EditorView::new(&mut self.workspace);
         editor.split_from(e);
         self.views.new_view(editor)
       }
       ViewContent::FileTree(_) => {
-        self.views.new_view(crate::view::FileTree::new(store.notifier(), &mut store.workspace))
+        self.views.new_view(crate::view::FileTree::new(store.notifier(), &mut self.workspace))
       }
       ViewContent::Terminal(_) => {
-        self.views.new_view(crate::view::TerminalView::new(&store.workspace.clipboard))
+        self.views.new_view(crate::view::TerminalView::new(&self.workspace.clipboard))
       }
     }
   }

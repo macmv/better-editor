@@ -4,7 +4,7 @@ use be_config::Config;
 use be_editor::EditorEvent;
 use be_input::Clipboard;
 use be_shared::SharedHandle;
-use be_workspace::{Workspace, WorkspaceEvent};
+use be_workspace::WorkspaceEvent;
 use kurbo::{Affine, Axis, Point, Rect, Shape, Size, Stroke, Vec2};
 use peniko::{
   Gradient,
@@ -31,7 +31,6 @@ pub enum Event {
 pub struct RenderStore {
   proxy: winit::event_loop::EventLoopProxy<Event>,
 
-  pub workspace: Workspace,
   pub text:      TextStore,
   pub theme:     Theme,
   pub config:    Rc<RefCell<Config>>,
@@ -117,19 +116,10 @@ pub fn run() {
       warn!("{diagnostic}");
     }
     let config = Rc::new(RefCell::new(config.value));
-
-    let mut workspace = Workspace::new(config.clone());
     let clipboard = SharedHandle::new(clipboard::create(&window));
-    workspace.clipboard = clipboard.clone();
-
-    {
-      let notifier = Notify { proxy: proxy.clone() };
-      workspace.set_waker(move |ev| notifier.workspace_event(ev));
-    }
 
     let mut store = RenderStore {
       proxy,
-      workspace,
       clipboard,
       text: TextStore::new(&config),
       render: vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),
@@ -147,7 +137,7 @@ pub fn run() {
     };
 
     if let Some(path) = std::env::args().nth(1) {
-      app.state.open(std::path::Path::new(&path), None, &mut app.store.workspace);
+      app.state.open(std::path::Path::new(&path), None);
     }
 
     app
@@ -403,7 +393,7 @@ impl Notify {
 
   pub fn exit(&self) { self.proxy.send_event(Event::Exit).unwrap(); }
 
-  fn workspace_event(&self, ev: be_workspace::WorkspaceEvent) {
+  pub fn workspace_event(&self, ev: be_workspace::WorkspaceEvent) {
     let _ = self.proxy.send_event(Event::Workspace(ev));
   }
 }
