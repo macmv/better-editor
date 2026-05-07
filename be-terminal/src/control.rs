@@ -549,7 +549,7 @@ impl TerminalState {
 
     while let Some(args) = iter.next() {
       match args {
-        [0] => *style = Style::default(),
+        [0] | [] => *style = Style::default(),
         [1] => style.flags.set(StyleFlags::BOLD, true),
         [2] => style.flags.set(StyleFlags::DIM, true),
         [3] => style.flags.set(StyleFlags::ITALIC, true),
