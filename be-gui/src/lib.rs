@@ -116,10 +116,7 @@ impl ViewId {
 
 impl State {
   pub fn new(store: &mut RenderStore) -> Self {
-    State {
-      keys:   vec![],
-      layout: AppLayout::Workspace(WorkspaceLayout::new(store, store.notifier())),
-    }
+    State { keys: vec![], layout: AppLayout::Workspace(WorkspaceLayout::new(store)) }
   }
 
   fn mode(&self) -> Mode {
@@ -212,14 +209,14 @@ impl State {
 }
 
 impl WorkspaceLayout {
-  pub fn new(store: &mut RenderStore, notify: Notify) -> Self {
+  pub fn new(store: &mut RenderStore) -> Self {
     let mut state = WorkspaceLayout {
-      active: 1,
-      tabs: vec![],
-      views: ViewCollection::new(),
-      tab_layout: WidgetCollection::new(),
+      active:        1,
+      tabs:          vec![],
+      views:         ViewCollection::new(),
+      tab_layout:    WidgetCollection::new(),
       current_hover: None,
-      notify,
+      notify:        store.notifier(),
     };
 
     let layout = store.workspace.config.borrow().settings.layout.clone();
