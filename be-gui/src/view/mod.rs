@@ -20,6 +20,7 @@ pub struct View {
   pub bounds:  Rect,
 }
 
+#[derive(Default)]
 pub struct Scroll {
   pub offset:      f64,
   pub line_height: f64,

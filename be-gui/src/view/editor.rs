@@ -41,6 +41,20 @@ pub struct EditorView {
   watcher:            WatcherHandle,
 
   progress_animation: Animation,
+
+  completions_popup: Option<CompletionsPopup>,
+}
+
+#[derive(Default)]
+struct CompletionsPopup {
+  scroll:  Scroll,
+  layouts: Vec<CompletionLayout>,
+}
+
+struct CompletionLayout {
+  label:       TextLayout,
+  detail:      Option<TextLayout>,
+  description: Option<TextLayout>,
 }
 
 enum Focus {
@@ -71,6 +85,8 @@ impl EditorView {
       watcher:            store.workspace.fs.add_handle(),
 
       progress_animation: Animation::linear(2.0),
+
+      completions_popup: None,
     };
 
     view.progress_animation.set_repeat(true);
@@ -678,118 +694,19 @@ impl EditorView {
   }
 
   fn draw_completions(&mut self, cursor: Rect, render: &mut Render) {
-    let line_height = render.store.text.font_metrics().line_height;
-    let active = self.editor.active_completion();
-
-    if let Some(completions) = self.editor.completions() {
-      struct CompletionLayout {
-        label:       TextLayout,
-        detail:      Option<TextLayout>,
-        description: Option<TextLayout>,
+    match (self.editor.completions(), &mut self.completions_popup) {
+      (Some(completions), None) => {
+        let mut popup = CompletionsPopup::default();
+        popup.layout(&completions, render);
+        self.completions_popup = Some(popup);
       }
+      (None, Some(_)) => self.completions_popup = None,
+      (Some(completions), Some(popup)) => popup.layout(&completions, render),
+      (None, None) => {}
+    }
 
-      impl CompletionLayout {
-        fn layout(render: &mut Render, completion: &Completion) -> CompletionLayout {
-          CompletionLayout {
-            label:       render.layout_text(Font::Editor, completion.label(), render.theme().text),
-            detail:      completion
-              .detail()
-              .map(|d| render.layout_text(Font::Editor, d, render.theme().text_dim)),
-            description: completion
-              .description()
-              .map(|d| render.layout_text(Font::Editor, d, render.theme().text_dim)),
-          }
-        }
-
-        fn width(&self) -> f64 {
-          let mut width = self.label.size().width;
-
-          if let Some(detail) = &self.detail {
-            width += 20.0;
-            width += detail.size().width;
-          }
-          if let Some(description) = &self.description {
-            width += 10.0;
-            width += description.size().width;
-          }
-
-          width
-        }
-
-        fn draw(&self, render: &mut Render, x: f64, y: f64, width: f64) {
-          render.draw_text(&self.label, (x, y));
-
-          if let Some(description) = &self.description {
-            render.draw_text(&description, (x + self.label.size().width + 10.0, y));
-          }
-          if let Some(detail) = &self.detail {
-            render.draw_text(&detail, (x + width - detail.size().width, y));
-          }
-        }
-      }
-
-      let layouts = completions
-        .iter()
-        .take(20)
-        .map(|completion| CompletionLayout::layout(render, completion))
-        .collect::<Vec<_>>();
-
-      let inner_width =
-        layouts.iter().map(|layout| layout.width()).max_by(|a, b| a.total_cmp(b)).unwrap_or(0.0);
-      let inner_height = layouts.len() as f64 * line_height;
-
-      const MARGIN_X: f64 = 10.0;
-      const MARGIN_Y: f64 = 5.0;
-
-      let start_x = cursor.x0;
-      let start_y;
-      let mut y;
-      let rect;
-
-      if cursor.y1 + inner_height + MARGIN_Y * 2.0 > render.size().height {
-        // draw above the cursor
-        start_y = cursor.y0;
-        y = start_y - inner_height - MARGIN_Y;
-
-        rect = Rect::new(
-          start_x - MARGIN_X,
-          start_y - inner_height - MARGIN_Y * 2.0,
-          start_x + inner_width + MARGIN_X,
-          start_y,
-        );
-      } else {
-        // draw below the cursor
-        start_y = cursor.y1;
-        y = start_y + MARGIN_Y;
-
-        rect = Rect::new(
-          start_x - MARGIN_X,
-          start_y,
-          start_x + inner_width + MARGIN_X,
-          start_y + inner_height + MARGIN_Y * 2.0,
-        );
-      }
-
-      render.drop_shadow(
-        rect,
-        MARGIN_Y,
-        2.0,
-        // keep the chroma and hue so they blend nicely.
-        render.theme().background.map(|_, c, h, _| [0.0, c, h, 0.2]),
-      );
-      render.fill(&RoundedRect::from_rect(rect, MARGIN_Y), render.theme().background_raised);
-
-      for (i, layout) in layouts.iter().enumerate() {
-        if active == Some(i) {
-          render.fill(
-            &Rect::from_origin_size(Point::new(start_x, y), Size::new(inner_width, line_height)),
-            render.theme().background_raised_outline,
-          );
-        }
-
-        layout.draw(render, start_x, y, inner_width);
-        y += line_height;
-      }
+    if let Some(popup) = &mut self.completions_popup {
+      popup.draw(cursor, self.editor.active_completion(), render);
     }
   }
 
@@ -939,5 +856,116 @@ impl IndentGuides {
       render.theme().background_raised,
       Stroke::new(INDENT_GUIDE_WIDTH),
     );
+  }
+}
+
+impl CompletionsPopup {
+  pub fn layout(&mut self, completions: &[Completion], render: &mut Render) {
+    self.layouts = completions
+      .iter()
+      .take(20)
+      .map(|completion| CompletionLayout::layout(render, completion))
+      .collect::<Vec<_>>();
+  }
+
+  pub fn draw(&self, cursor: Rect, active: Option<usize>, render: &mut Render) {
+    let line_height = render.store.text.font_metrics().line_height;
+
+    let inner_width =
+      self.layouts.iter().map(|layout| layout.width()).max_by(|a, b| a.total_cmp(b)).unwrap_or(0.0);
+    let inner_height = self.layouts.len() as f64 * line_height;
+
+    const MARGIN_X: f64 = 10.0;
+    const MARGIN_Y: f64 = 5.0;
+
+    let start_x = cursor.x0;
+    let start_y;
+    let mut y;
+    let rect;
+
+    if cursor.y1 + inner_height + MARGIN_Y * 2.0 > render.size().height {
+      // draw above the cursor
+      start_y = cursor.y0;
+      y = start_y - inner_height - MARGIN_Y;
+
+      rect = Rect::new(
+        start_x - MARGIN_X,
+        start_y - inner_height - MARGIN_Y * 2.0,
+        start_x + inner_width + MARGIN_X,
+        start_y,
+      );
+    } else {
+      // draw below the cursor
+      start_y = cursor.y1;
+      y = start_y + MARGIN_Y;
+
+      rect = Rect::new(
+        start_x - MARGIN_X,
+        start_y,
+        start_x + inner_width + MARGIN_X,
+        start_y + inner_height + MARGIN_Y * 2.0,
+      );
+    }
+
+    render.drop_shadow(
+      rect,
+      MARGIN_Y,
+      2.0,
+      // keep the chroma and hue so they blend nicely.
+      render.theme().background.map(|_, c, h, _| [0.0, c, h, 0.2]),
+    );
+    render.fill(&RoundedRect::from_rect(rect, MARGIN_Y), render.theme().background_raised);
+
+    for (i, layout) in self.layouts.iter().enumerate() {
+      if active == Some(i) {
+        render.fill(
+          &Rect::from_origin_size(Point::new(start_x, y), Size::new(inner_width, line_height)),
+          render.theme().background_raised_outline,
+        );
+      }
+
+      layout.draw(render, start_x, y, inner_width);
+      y += line_height;
+    }
+  }
+}
+
+impl CompletionLayout {
+  fn layout(render: &mut Render, completion: &Completion) -> CompletionLayout {
+    CompletionLayout {
+      label:       render.layout_text(Font::Editor, completion.label(), render.theme().text),
+      detail:      completion
+        .detail()
+        .map(|d| render.layout_text(Font::Editor, d, render.theme().text_dim)),
+      description: completion
+        .description()
+        .map(|d| render.layout_text(Font::Editor, d, render.theme().text_dim)),
+    }
+  }
+
+  fn width(&self) -> f64 {
+    let mut width = self.label.size().width;
+
+    if let Some(detail) = &self.detail {
+      width += 20.0;
+      width += detail.size().width;
+    }
+    if let Some(description) = &self.description {
+      width += 10.0;
+      width += description.size().width;
+    }
+
+    width
+  }
+
+  fn draw(&self, render: &mut Render, x: f64, y: f64, width: f64) {
+    render.draw_text(&self.label, (x, y));
+
+    if let Some(description) = &self.description {
+      render.draw_text(&description, (x + self.label.size().width + 10.0, y));
+    }
+    if let Some(detail) = &self.detail {
+      render.draw_text(&detail, (x + width - detail.size().width, y));
+    }
   }
 }
