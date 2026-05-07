@@ -67,9 +67,9 @@ const LINE_NUMBER_MARGIN_LEFT: f64 = 10.0;
 const LINE_NUMBER_MARGIN_RIGHT: f64 = 10.0;
 
 impl EditorView {
-  pub fn new(store: &mut RenderStore) -> Self {
+  pub fn new(editor: &SharedHandle<EditorState>, store: &mut RenderStore) -> Self {
     let mut view = EditorView {
-      editor:            store.workspace.new_editor(),
+      editor:            editor.clone(),
       horizontal_scroll: Scroll::new(0.0),
       vertical_scroll:   Scroll::new(0.0),
       focus:             Focus::Unfocused { cursor: Cursor::default() },
