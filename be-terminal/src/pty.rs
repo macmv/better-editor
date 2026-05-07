@@ -30,6 +30,9 @@ impl Pty {
 
     let mut cmd = Command::new("/bin/zsh");
 
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("COLORTERM", "truecolor");
+
     cmd.stdin(pty.user.try_clone().unwrap());
     cmd.stdout(pty.user.try_clone().unwrap());
     cmd.stderr(pty.user.try_clone().unwrap());
