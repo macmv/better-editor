@@ -2,6 +2,7 @@ use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Instant};
 
 use be_config::Config;
 use be_editor::EditorEvent;
+use be_input::Clipboard;
 use be_shared::SharedHandle;
 use be_workspace::{Workspace, WorkspaceEvent};
 use kurbo::{Affine, Axis, Point, Rect, Shape, Size, Stroke, Vec2};
@@ -33,6 +34,7 @@ pub struct RenderStore {
   pub workspace: Workspace,
   pub text:      TextStore,
   pub theme:     Theme,
+  pub clipboard: SharedHandle<Clipboard>,
 
   render: vello::Renderer,
 }
@@ -116,7 +118,8 @@ pub fn run() {
     let config = Rc::new(RefCell::new(config.value));
 
     let mut workspace = Workspace::new(config.clone());
-    workspace.clipboard = SharedHandle::new(clipboard::create(&window));
+    let clipboard = SharedHandle::new(clipboard::create(&window));
+    workspace.clipboard = clipboard.clone();
 
     {
       let notifier = Notify { proxy: proxy.clone() };
@@ -126,6 +129,7 @@ pub fn run() {
     let mut store = RenderStore {
       proxy,
       workspace,
+      clipboard,
       text: TextStore::new(&config),
       render: vello::Renderer::new(&device, vello::RendererOptions::default()).unwrap(),
       theme: Theme::default_theme(),

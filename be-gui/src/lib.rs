@@ -116,7 +116,7 @@ impl ViewId {
 
 impl State {
   pub fn new(store: &mut RenderStore) -> Self {
-    let mut term = crate::view::TerminalView::new(&store.workspace.clipboard);
+    let mut term = crate::view::TerminalView::new(&store.clipboard);
     term.on_focus(true);
 
     State { keys: vec![], layout: AppLayout::Terminal(term) }
