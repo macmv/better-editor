@@ -1,6 +1,4 @@
-use std::path::PathBuf;
-
-use be_fs::WorkspaceRoot;
+use be_fs::{WorkspacePath, WorkspaceRoot};
 use be_input::{Action, Direction, Edit, Move};
 use kurbo::{Point, Rect, RoundedRect, Stroke};
 use nucleo::{Injector, Nucleo};
@@ -9,6 +7,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::{Notify, Render};
 
 pub struct Search {
+  root:   WorkspaceRoot,
   index:  Index,
   notify: Notify,
 
@@ -26,8 +25,13 @@ struct Index {
 
 impl Search {
   pub fn new(root: WorkspaceRoot, notify: Notify) -> Self {
-    let mut search =
-      Search { index: Index::new(root, notify.clone()), search: String::new(), cursor: 0, notify };
+    let mut search = Search {
+      root: root.clone(),
+      index: Index::new(root, notify.clone()),
+      search: String::new(),
+      cursor: 0,
+      notify,
+    };
     search.change_pattern(false);
     search
   }
@@ -121,7 +125,7 @@ impl Search {
 
       Action::Edit { e: Edit::Insert('\n'), .. } => {
         if let Some(result) = self.index.nucleo.snapshot().get_matched_item(0) {
-          self.notify.open_file(PathBuf::from(result.data));
+          self.notify.open_file(self.root.resolve_path(WorkspacePath::new(result.data)));
         }
       }
       Action::Edit { e: Edit::Insert(c), .. } => {
