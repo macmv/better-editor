@@ -98,20 +98,20 @@ impl Grid {
 
   pub fn swap(&mut self, a: usize, b: usize) { self.lines.swap(a, b); }
 
-  pub fn scroll_down(&mut self, range: Range<usize>) {
+  pub fn scroll_down(&mut self, range: Range<usize>, style: Style) {
     for line in (range.start + 1..range.end).rev() {
       self.lines.swap(line, line - 1);
     }
-    self.line_mut(range.start).clear(Style::default());
+    self.line_mut(range.start).clear(style);
   }
 
-  pub fn scroll_up(&mut self, range: Range<usize>) -> OwnedLine {
+  pub fn scroll_up(&mut self, range: Range<usize>, style: Style) -> OwnedLine {
     let line = self.lines[range.start].clone();
 
     for line in range.start..range.end - 1 {
       self.lines.swap(line, line + 1);
     }
-    self.line_mut(range.end - 1).clear(Style::default());
+    self.line_mut(range.end - 1).clear(style);
 
     line
   }

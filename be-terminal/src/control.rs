@@ -85,7 +85,7 @@ impl Perform for TerminalState {
       (b'H', []) => unhandled!("set horizontal tab stop"),
       (b'M', []) => {
         if self.cursor.row == self.scroll_start {
-          self.grid.scroll_down(self.scroll_start..self.scroll_end);
+          self.grid.scroll_down(self.scroll_start..self.scroll_end, self.cursor.style);
         } else {
           self.cursor.row = self.cursor.row.saturating_sub(1);
         }
@@ -341,7 +341,7 @@ impl Perform for TerminalState {
       }
       (b'S', []) => {
         for _ in 0..next_param_or(1) {
-          self.grid.scroll_up(self.scroll_start..self.scroll_end);
+          self.grid.scroll_up(self.scroll_start..self.scroll_end, self.cursor.style);
         }
       }
       (b's', []) => {
@@ -349,7 +349,7 @@ impl Perform for TerminalState {
       }
       (b'T', []) => {
         for _ in 0..next_param_or(1) {
-          self.grid.scroll_down(self.scroll_start..self.scroll_end);
+          self.grid.scroll_down(self.scroll_start..self.scroll_end, self.cursor.style);
         }
       }
       (b't', []) => unhandled!("push title/text area"),
@@ -426,7 +426,7 @@ impl TerminalState {
 
   fn linefeed(&mut self) {
     if self.cursor.row == self.scroll_end - 1 {
-      let line = self.grid.scroll_up(self.scroll_start..self.scroll_end);
+      let line = self.grid.scroll_up(self.scroll_start..self.scroll_end, self.cursor.style);
       if !self.alt_screen {
         self.scrollback.push(line);
       }
