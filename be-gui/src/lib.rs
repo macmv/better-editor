@@ -7,7 +7,7 @@ use std::{
 };
 
 use be_editor::CursorOrLsp;
-use be_input::{Action, KeyStroke, Navigation};
+use be_input::{Action, KeyStroke, Mode, Navigation};
 use be_workspace::{Workspace, WorkspaceEvent};
 use kurbo::{Axis, Point, Rect, Size};
 pub use render::*;
@@ -121,11 +121,46 @@ impl State {
     }
   }
 
+  fn mode(&self) -> Mode {
+    match &self.layout {
+      AppLayout::Workspace(w) => w.mode(),
+    }
+  }
+
   pub fn on_key(&mut self, key: KeyStroke, store: &mut RenderStore) {
     self.keys.push(key);
 
-    match &mut self.layout {
-      AppLayout::Workspace(w) => w.on_key(&mut self.keys, store),
+    if let AppLayout::Workspace(w) = &mut self.layout {
+      if let ViewContent::Editor(e) = &mut w.active_view_mut().content {
+        e.temporary_mode = None;
+      }
+    }
+
+    match Action::from_input(self.mode(), &self.keys) {
+      Ok(action) => {
+        match &mut self.layout {
+          AppLayout::Workspace(w) => w.perform_action(action, store),
+        }
+        self.keys.clear();
+      }
+      Err(be_input::ActionError::Unrecognized) => self.keys.clear(),
+      Err(be_input::ActionError::Incomplete) => {
+        let has_temporary = self.keys.len() == 1 && !self.keys[0].control;
+
+        if has_temporary {
+          let temporary_mode = match self.keys[0].key {
+            be_input::Key::Char('r') => Some(be_input::Mode::Replace),
+            be_input::Key::Char('c' | 'd') => Some(be_input::Mode::Normal),
+            _ => None,
+          };
+
+          if let AppLayout::Workspace(w) = &mut self.layout {
+            if let ViewContent::Editor(e) = &mut w.active_view_mut().content {
+              e.temporary_mode = temporary_mode;
+            }
+          }
+        }
+      }
     }
   }
 
@@ -461,35 +496,6 @@ impl WorkspaceLayout {
   }
   fn active_view_mut(&mut self) -> &mut View {
     self.views.get_mut(self.tabs[self.active].content.active()).unwrap()
-  }
-
-  fn on_key(&mut self, keys: &mut Vec<KeyStroke>, store: &mut RenderStore) {
-    if let ViewContent::Editor(e) = &mut self.active_view_mut().content {
-      e.temporary_mode = None;
-    }
-
-    match Action::from_input(self.mode(), &keys) {
-      Ok(action) => {
-        self.perform_action(action, store);
-        keys.clear();
-      }
-      Err(be_input::ActionError::Unrecognized) => keys.clear(),
-      Err(be_input::ActionError::Incomplete) => {
-        let has_temporary = keys.len() == 1 && !keys[0].control;
-
-        if has_temporary {
-          let temporary_mode = match keys[0].key {
-            be_input::Key::Char('r') => Some(be_input::Mode::Replace),
-            be_input::Key::Char('c' | 'd') => Some(be_input::Mode::Normal),
-            _ => None,
-          };
-
-          if let ViewContent::Editor(e) = &mut self.active_view_mut().content {
-            e.temporary_mode = temporary_mode;
-          }
-        }
-      }
-    }
   }
 
   fn active_tab(&self) -> &Tab { &self.tabs[self.active] }
