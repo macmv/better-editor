@@ -212,7 +212,9 @@ impl EditorState {
       self.cursor.line.0 += 1;
     }
 
-    self.move_to_col(Column(target_column as usize));
+    // NB: We don't use clamp column, as this can go paste max_column (required for
+    // next/prev word to see the newline character).
+    self.cursor.column.0 = target_column as usize;
   }
 
   pub fn move_to(&mut self, cursor: Cursor) {

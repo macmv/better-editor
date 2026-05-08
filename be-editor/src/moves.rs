@@ -46,6 +46,8 @@ impl EditorState {
             break;
           }
         }
+
+        self.clamp_column();
       }
 
       Move::EndWord => {
@@ -77,6 +79,8 @@ impl EditorState {
             break;
           }
         }
+
+        self.clamp_column();
       }
 
       Move::PrevWord => {
@@ -108,6 +112,8 @@ impl EditorState {
             break;
           }
         }
+
+        self.clamp_column();
       }
 
       Move::MatchingBracket => {
@@ -368,6 +374,17 @@ mod tests {
         expect![@"fn foo() -> Self { bar ⟦}⟧"],
       ],
     );
+  }
+
+  #[test]
+  fn next_word_no_loop() {
+    let mut editor = editor("foo\nbar\n");
+
+    editor.perform_move(Move::NextWord, None);
+    editor.check(expect![@r#"
+      foo
+      ⟦b⟧ar
+    "#]);
   }
 
   #[test]
