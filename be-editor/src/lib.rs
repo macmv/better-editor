@@ -212,7 +212,7 @@ impl EditorState {
       self.cursor.line.0 += 1;
     }
 
-    // NB: We don't use clamp column, as this can go paste max_column (required for
+    // NB: We don't use clamp column, as this can go past max_column (required for
     // next/prev word to see the newline character).
     self.cursor.column.0 = target_column as usize;
   }
