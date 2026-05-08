@@ -7,3 +7,6 @@ expect-test = { git = "https://github.com/macmv/expect-test", rev = "6a120346f02
 
 [profile.dev]
 opt-level = 1
+
+[profile.release]
+debug = true
