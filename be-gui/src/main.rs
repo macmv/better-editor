@@ -4,6 +4,8 @@ use fern::Dispatch;
 use log::LevelFilter;
 
 fn main() {
+  let args = <be_gui::Args as clap::Parser>::parse();
+
   let cache = be_config::cache_root().unwrap();
   std::fs::create_dir_all(&cache).unwrap();
 
@@ -67,7 +69,7 @@ fn main() {
     None
   };
 
-  be_gui::run();
+  be_gui::run(args);
 }
 
 const TOTAL_LOGS: usize = 5;

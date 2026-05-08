@@ -11,7 +11,7 @@ use peniko::{
   color::{AlphaColor, Oklab, Oklch, Srgb},
 };
 
-use crate::{Layout, render::text::TextStore, theme::Theme};
+use crate::{Args, Layout, render::text::TextStore, theme::Theme};
 
 mod blitter;
 mod clipboard;
@@ -93,8 +93,10 @@ pub fn encode_color(color: Color) -> AlphaColor<Srgb> {
 
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
-pub fn run() {
-  window::run(|device, surface, window, proxy| {
+pub fn run(args: Args) {
+  let mut args = Some(args);
+
+  window::run(Box::new(move |device, surface, window, proxy| {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
       label:           None,
       size:            wgpu::Extent3d {
@@ -127,21 +129,18 @@ pub fn run() {
       config,
     };
 
-    let mut app = App {
-      state: super::State::new(&mut store),
+    // Only the first window gets command line arguments.
+    let app_args = args.take().unwrap_or_default();
+
+    App {
+      state: super::State::new(&mut store, app_args),
       store,
 
       texture,
       texture_view,
       blitter: blitter::TextureBlitterConvert::new(&device, surface.format),
-    };
-
-    if let Some(path) = std::env::args().nth(1) {
-      app.state.open(std::path::Path::new(&path), None);
     }
-
-    app
-  });
+  }));
 }
 
 impl App {

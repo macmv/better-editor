@@ -4,6 +4,7 @@ use std::{
   collections::HashMap,
   hash::Hash,
   ops::{Index, IndexMut},
+  path::PathBuf,
 };
 
 use be_editor::CursorOrLsp;
@@ -36,6 +37,12 @@ extern crate log;
 
 #[macro_use]
 extern crate be_macros;
+
+#[derive(Default, clap::Parser)]
+pub struct Args {
+  #[clap(long)]
+  editor: Option<PathBuf>,
+}
 
 struct State {
   keys: Vec<KeyStroke>,
@@ -123,18 +130,31 @@ impl ViewId {
 }
 
 impl State {
-  pub fn new(store: &mut RenderStore) -> Self {
+  pub fn new(store: &mut RenderStore, args: Args) -> Self {
     let path = std::env::current_dir().unwrap();
     let mut terminal = crate::view::TerminalView::new(&store.clipboard, &path);
     terminal.on_focus(true);
 
-    State {
+    let mut state = State {
       keys: vec![],
       terminal,
       terminal_should_exit: false,
       workspaces: HashMap::new(),
       active: AppView::Terminal,
+    };
+
+    if let Some(root) = args.editor {
+      if !root.exists() {
+        error!("path does not exist: {}", root.display());
+        std::process::exit(1);
+      }
+      let root = WorkspaceRoot::from_path(root);
+      state.workspaces.insert(root.clone(), WorkspaceLayout::new(root.clone(), store));
+      state.terminal.on_focus(false);
+      state.active = AppView::Workspace(root);
     }
+
+    state
   }
 
   fn mode(&self) -> Mode {
@@ -183,12 +203,6 @@ impl State {
     }
   }
 
-  pub fn open(&mut self, path: &std::path::Path, cursor: Option<CursorOrLsp>) {
-    match &mut self.active {
-      AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().open(path, cursor),
-      AppView::Terminal => {}
-    }
-  }
   pub fn layout(&mut self, layout: &mut Layout) {
     match &mut self.active {
       AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().layout(layout),

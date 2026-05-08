@@ -9,12 +9,14 @@ use winit::{
 
 use crate::{Event, MouseEvent, render::cursor::CursorKind};
 
-type AppBuilder = fn(
-  &wgpu::Device,
-  &wgpu::SurfaceConfiguration,
-  &Window,
-  event_loop::EventLoopProxy<Event>,
-) -> super::App;
+type AppBuilder = Box<
+  dyn FnMut(
+    &wgpu::Device,
+    &wgpu::SurfaceConfiguration,
+    &Window,
+    event_loop::EventLoopProxy<Event>,
+  ) -> super::App,
+>;
 
 struct App {
   builder: AppBuilder,
