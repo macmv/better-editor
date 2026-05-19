@@ -615,8 +615,8 @@ impl WorkspaceLayout {
         let new_view = self.split_active_view(store);
         self.tabs[self.active].content.split(
           match axis {
-            be_config::Axis::Horizontal => kurbo::Axis::Horizontal,
-            be_config::Axis::Vertical => kurbo::Axis::Vertical,
+            be_input::Axis::Horizontal => kurbo::Axis::Horizontal,
+            be_input::Axis::Vertical => kurbo::Axis::Vertical,
           },
           &mut self.views.views,
           store,

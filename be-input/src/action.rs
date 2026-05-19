@@ -1,7 +1,6 @@
 use std::num::NonZero;
 
 use crate::{KeyStroke, Mode, VisualMode, key::Key};
-use be_config::Axis;
 
 pub enum Action {
   SetMode { mode: Mode, delta: i32 },
@@ -26,6 +25,12 @@ pub enum Navigation {
   Direction(Direction),
   Split(Axis),
   Tab(u8),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Axis {
+  Horizontal,
+  Vertical,
 }
 
 pub enum Move {
