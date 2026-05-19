@@ -2,6 +2,7 @@ use std::num::NonZero;
 
 use crate::{KeyStroke, Mode, VisualMode, key::Key};
 
+#[derive(Debug)]
 pub enum Action {
   SetMode { mode: Mode, delta: i32 },
   OpenSearch,
@@ -33,6 +34,7 @@ pub enum Axis {
   Vertical,
 }
 
+#[derive(Debug)]
 pub enum Move {
   Single(Direction),
 
@@ -64,6 +66,7 @@ pub enum ChangeDirection {
   Prev,
 }
 
+#[derive(Debug)]
 pub enum Edit {
   Insert(char),
   Replace(char),
