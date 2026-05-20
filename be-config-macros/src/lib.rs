@@ -40,7 +40,7 @@ fn struct_config(ident: &syn::Ident, s: syn::DataStruct) -> proc_macro2::TokenSt
       fn set_key(
         &mut self,
         key: &str,
-        value: ::be_config::parse::DeValue,
+        value: ::toml::Spanned<::be_config::parse::DeValue>,
         de: &mut ::be_config::parse::Parser,
       ) -> bool {
         match key {
@@ -124,10 +124,11 @@ fn tagged_enum_config(
     impl ::be_config::parse::ParseValue for #ident {
       fn parse(
         &mut self,
-        value: ::be_config::parse::DeValue,
+        value: ::toml::Spanned<::be_config::parse::DeValue>,
         de: &mut ::be_config::parse::Parser,
       ) -> ::std::result::Result<(), String> {
-        let ::be_config::parse::DeValue::Table(mut table) = value else {
+        let span = value.span();
+        let ::be_config::parse::DeValue::Table(mut table) = value.into_inner() else {
           return Err("expected table".to_string());
         };
 
@@ -140,7 +141,7 @@ fn tagged_enum_config(
         };
 
         let is_empty = table.is_empty();
-        let rest = ::be_config::parse::DeValue::Table(table);
+        let rest = ::toml::Spanned::new(span, ::be_config::parse::DeValue::Table(table));
 
         *self = match tag.as_ref() {
           #(#variant_arms,)*
@@ -180,10 +181,10 @@ fn string_enum_config(ident: &syn::Ident, e: syn::DataEnum) -> proc_macro2::Toke
     impl ::be_config::parse::ParseValue for #ident {
       fn parse(
         &mut self,
-        value: ::be_config::parse::DeValue,
+        value: ::toml::Spanned<::be_config::parse::DeValue>,
         de: &mut ::be_config::parse::Parser,
       ) -> ::std::result::Result<(), String> {
-        let ::be_config::parse::DeValue::String(mut s) = value else {
+        let ::be_config::parse::DeValue::String(mut s) = value.into_inner() else {
           return Err("expected string".to_string());
         };
 

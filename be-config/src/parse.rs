@@ -1,5 +1,6 @@
 use std::{collections::HashSet, fmt};
 
+use toml::Spanned;
 pub use toml::de::{DeTable, DeValue};
 
 pub struct ParseResult<T> {
@@ -34,24 +35,25 @@ pub(crate) trait ParseTable {
   fn required_keys() -> &'static [&'static str];
   /// Sets the key from a table entry. Returns `true` if the struct was
   /// modified, and `false` if the struct does not respond to the given key.
-  fn set_key(&mut self, key: &str, value: DeValue, de: &mut Parser) -> bool;
+  fn set_key(&mut self, key: &str, value: Spanned<DeValue>, de: &mut Parser) -> bool;
 }
 
 pub(crate) trait ParseValue
 where
   Self: Sized,
 {
-  fn parse(&mut self, value: DeValue, de: &mut Parser) -> Result<(), String>;
+  fn parse(&mut self, value: Spanned<DeValue>, de: &mut Parser) -> Result<(), String>;
 }
 
 impl<T> ParseValue for T
 where
   T: Default + ParseTable,
 {
-  fn parse(&mut self, value: DeValue, de: &mut Parser) -> Result<(), String> {
-    match value {
+  fn parse(&mut self, value: Spanned<DeValue>, de: &mut Parser) -> Result<(), String> {
+    let span = value.span();
+    match value.into_inner() {
       DeValue::Table(table) => {
-        de.table(self, table);
+        de.table(self, Spanned::new(span, table));
         Ok(())
       }
       _ => Err("expected table".to_string()),
@@ -64,7 +66,7 @@ pub fn parse<T: Default + ParseTable>(content: &str) -> ParseResult<T> {
 
   let mut value = T::default();
   if let Some(table) = parser.check(DeTable::parse(content)) {
-    parser.table(&mut value, table.into_inner())
+    parser.table(&mut value, table)
   };
 
   ParseResult { value, diagnostics: parser.diagnostics }
@@ -74,38 +76,39 @@ pub fn parse_into<T: Default + ParseTable>(value: &mut T, content: &str) -> Vec<
   let mut parser = Parser { allow_partial: true, diagnostics: vec![] };
 
   if let Some(table) = parser.check(DeTable::parse(content)) {
-    parser.table(value, table.into_inner())
+    parser.table(value, table)
   };
 
   parser.diagnostics
 }
 
 impl Parser {
-  pub fn table<T: Default + ParseTable>(&mut self, out: &mut T, table: DeTable) {
+  pub fn table<T: Default + ParseTable>(&mut self, out: &mut T, table: Spanned<DeTable>) {
     let mut required = if self.allow_partial {
       None
     } else {
       Some(HashSet::<&str>::from_iter(T::required_keys().iter().copied()))
     };
 
-    for (k, v) in table {
+    let span = table.span();
+    for (k, v) in table.into_inner() {
       if let Some(required) = &mut required {
         required.remove(&**k.get_ref());
       }
 
-      if !out.set_key(k.get_ref(), v.into_inner(), self) {
+      if !out.set_key(k.get_ref(), v, self) {
         self.warn(format!("unknown key: {}", k.get_ref()), k.span());
       }
     }
 
     if let Some(required) = required {
       for key in required {
-        self.error(format!("missing key: '{}'", key), 0..0); // todo: bah this library is bad
+        self.error(format!("missing key: '{}'", key), span.clone());
       }
     }
   }
 
-  pub fn complete_value<T: Default + ParseValue>(&mut self, value: DeValue) -> T {
+  pub fn complete_value<T: Default + ParseValue>(&mut self, value: Spanned<DeValue>) -> T {
     let mut v = T::default();
     let partial = self.allow_partial;
     self.allow_partial = false;
@@ -114,7 +117,7 @@ impl Parser {
     v
   }
 
-  pub fn partial_value<T: Default + ParseValue>(&mut self, v: &mut T, value: DeValue) {
+  pub fn partial_value<T: Default + ParseValue>(&mut self, v: &mut T, value: Spanned<DeValue>) {
     let res = v.parse(value, self);
     self.check(res).unwrap_or_default()
   }
@@ -169,8 +172,8 @@ macro_rules! int {
   ($($ty:ty)*) => {
     $(
     impl ParseValue for $ty {
-      fn parse(&mut self, value: DeValue, _de: &mut Parser) -> Result<(), String> {
-        match value {
+      fn parse(&mut self, value: Spanned<DeValue>, _de: &mut Parser) -> Result<(), String> {
+        match value.into_inner() {
           DeValue::Integer(i) => {
             *self = <$ty>::from_str_radix(i.as_str(), i.radix()).map_err(|_| "expected integer".to_string())?;
             Ok(())
@@ -186,8 +189,8 @@ macro_rules! int {
 int!(i8 i16 i32 i64 u8 u16 u32 u64 isize usize);
 
 impl ParseValue for f32 {
-  fn parse(&mut self, value: DeValue, _de: &mut Parser) -> Result<(), String> {
-    *self = match value {
+  fn parse(&mut self, value: Spanned<DeValue>, _de: &mut Parser) -> Result<(), String> {
+    *self = match value.into_inner() {
       DeValue::Integer(i) => i.as_str().parse().map_err(|_| "expected float".to_string())?,
       DeValue::Float(i) => i.as_str().parse().map_err(|_| "expected float".to_string())?,
       _ => return Err("expected float".to_string()),
@@ -198,8 +201,8 @@ impl ParseValue for f32 {
 }
 
 impl ParseValue for f64 {
-  fn parse(&mut self, value: DeValue, _de: &mut Parser) -> Result<(), String> {
-    *self = match value {
+  fn parse(&mut self, value: Spanned<DeValue>, _de: &mut Parser) -> Result<(), String> {
+    *self = match value.into_inner() {
       DeValue::Integer(i) => i.as_str().parse().map_err(|_| "expected float".to_string())?,
       DeValue::Float(i) => i.as_str().parse().map_err(|_| "expected float".to_string())?,
       _ => return Err("expected float".to_string()),
@@ -210,8 +213,8 @@ impl ParseValue for f64 {
 }
 
 impl ParseValue for String {
-  fn parse(&mut self, value: DeValue, _de: &mut Parser) -> Result<(), String> {
-    match value {
+  fn parse(&mut self, value: Spanned<DeValue>, _de: &mut Parser) -> Result<(), String> {
+    match value.into_inner() {
       DeValue::String(s) => *self = s.into(),
       _ => return Err("expected string".to_string()),
     }
@@ -221,12 +224,12 @@ impl ParseValue for String {
 }
 
 impl<T: ParseValue + Default> ParseValue for Vec<T> {
-  fn parse(&mut self, value: DeValue, de: &mut Parser) -> Result<(), String> {
+  fn parse(&mut self, value: Spanned<DeValue>, de: &mut Parser) -> Result<(), String> {
     // NB: Parsing arrays replaces them.
     self.clear();
 
-    match value {
-      DeValue::Array(a) => self.extend(a.into_iter().map(|it| de.complete_value(it.into_inner()))),
+    match value.into_inner() {
+      DeValue::Array(a) => self.extend(a.into_iter().map(|it| de.complete_value(it))),
       _ => return Err("expected array".to_string()),
     }
 
