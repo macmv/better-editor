@@ -68,7 +68,7 @@ pub fn parse<T: Default + ParseTable>(content: &str) -> ParseResult<T> {
     Parser { line_index: LineIndex::new(content), allow_partial: false, diagnostics: vec![] };
 
   let mut value = T::default();
-  if let Some(table) = parser.check(DeTable::parse(content)) {
+  if let Some(table) = parser.check(DeTable::parse(content), 0..0) {
     parser.table(&mut value, table)
   };
 
@@ -79,7 +79,7 @@ pub fn parse_into<T: Default + ParseTable>(value: &mut T, content: &str) -> Vec<
   let mut parser =
     Parser { line_index: LineIndex::new(content), allow_partial: true, diagnostics: vec![] };
 
-  if let Some(table) = parser.check(DeTable::parse(content)) {
+  if let Some(table) = parser.check(DeTable::parse(content), 0..0) {
     parser.table(value, table)
   };
 
@@ -122,17 +122,25 @@ impl Parser {
   }
 
   pub fn partial_value<T: Default + ParseValue>(&mut self, v: &mut T, value: Spanned<DeValue>) {
+    let span = value.span();
     let res = v.parse(value, self);
-    self.check(res).unwrap_or_default()
+    self.check(res, span).unwrap_or_default()
   }
 
-  fn check<U, E: std::fmt::Display>(&mut self, result: Result<U, E>) -> Option<U> {
+  fn check<U, E: std::fmt::Display>(
+    &mut self,
+    result: Result<U, E>,
+    span: std::ops::Range<usize>,
+  ) -> Option<U> {
     match result {
       Ok(value) => Some(value),
       Err(err) => {
         self.diagnostics.push(Diagnostic {
           title: err.to_string(),
-          line:  0,
+          line:  self
+            .line_index
+            .try_line_col(line_index::TextSize::new(span.start as u32))
+            .map_or(0, |l| l.line as u32),
           level: DiagnosticLevel::Error,
         });
         None
