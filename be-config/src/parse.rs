@@ -1,5 +1,6 @@
 use std::{collections::HashSet, fmt};
 
+use line_index::LineIndex;
 use toml::Spanned;
 pub use toml::de::{DeTable, DeValue};
 
@@ -26,6 +27,7 @@ impl<T> ParseResult<T> {
 }
 
 pub(crate) struct Parser {
+  line_index:    LineIndex,
   allow_partial: bool,
   diagnostics:   Vec<Diagnostic>,
 }
@@ -62,7 +64,8 @@ where
 }
 
 pub fn parse<T: Default + ParseTable>(content: &str) -> ParseResult<T> {
-  let mut parser = Parser { allow_partial: false, diagnostics: vec![] };
+  let mut parser =
+    Parser { line_index: LineIndex::new(content), allow_partial: false, diagnostics: vec![] };
 
   let mut value = T::default();
   if let Some(table) = parser.check(DeTable::parse(content)) {
@@ -73,7 +76,8 @@ pub fn parse<T: Default + ParseTable>(content: &str) -> ParseResult<T> {
 }
 
 pub fn parse_into<T: Default + ParseTable>(value: &mut T, content: &str) -> Vec<Diagnostic> {
-  let mut parser = Parser { allow_partial: true, diagnostics: vec![] };
+  let mut parser =
+    Parser { line_index: LineIndex::new(content), allow_partial: true, diagnostics: vec![] };
 
   if let Some(table) = parser.check(DeTable::parse(content)) {
     parser.table(value, table)
@@ -139,7 +143,10 @@ impl Parser {
   pub fn error(&mut self, title: String, span: std::ops::Range<usize>) {
     self.diagnostics.push(Diagnostic {
       title,
-      line: span.start as u32,
+      line: self
+        .line_index
+        .try_line_col(line_index::TextSize::new(span.start as u32))
+        .map_or(0, |l| l.line as u32),
       level: DiagnosticLevel::Error,
     })
   }
@@ -147,7 +154,10 @@ impl Parser {
   pub fn warn(&mut self, title: String, span: std::ops::Range<usize>) {
     self.diagnostics.push(Diagnostic {
       title,
-      line: span.start as u32,
+      line: self
+        .line_index
+        .try_line_col(line_index::TextSize::new(span.start as u32))
+        .map_or(0, |l| l.line as u32),
       level: DiagnosticLevel::Warning,
     })
   }

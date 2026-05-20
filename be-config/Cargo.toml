@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 be-config-macros = { path = "../be-config-macros" }
+line-index = "0.1.2"
 
 serde = { version = "1.0.228", features = ["derive"] }
 toml = "1.0.3"
