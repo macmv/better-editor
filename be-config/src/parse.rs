@@ -181,7 +181,7 @@ impl fmt::Display for Diagnostic {
         DiagnosticLevel::Warning => "warning",
       },
       self.title,
-      self.line
+      self.line + 1
     )
   }
 }
