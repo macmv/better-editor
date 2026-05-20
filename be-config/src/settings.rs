@@ -1,4 +1,4 @@
-use crate::parse::ParseResult;
+use crate::{keybind::Keybinds, parse::ParseResult};
 
 use be_config_macros::Config;
 
@@ -8,6 +8,7 @@ pub struct Settings {
   pub ui:       UiSettings,
   pub terminal: TerminalSettings,
   pub layout:   LayoutSettings,
+  pub keybinds: Keybinds,
 }
 
 #[derive(Default, Config, Clone)]

@@ -1,5 +1,7 @@
 use std::{collections::HashMap, io, path::PathBuf, sync::LazyLock};
 
+mod grammar;
+mod keybind;
 mod lang;
 mod parse;
 mod settings;

@@ -208,6 +208,7 @@ name = "be-config"
 version = "0.1.0"
 dependencies = [
  "be-config-macros",
+ "be-input",
  "expect-test",
  "line-index",
  "serde",

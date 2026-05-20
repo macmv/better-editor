@@ -29,3 +29,94 @@ children = [
 
 [[layout.tab]]
 pane = "terminal"
+
+[keybinds.settings]
+# To enter any navigation bind, first press this key.
+navigate = " "
+
+# [keybinds.navigation]
+# "h" = "navigate(left)"
+# "j" = "navigate(down)"
+# "k" = "navigate(up)"
+# "l" = "navigate(right)"
+# "0" = "navigate(tab(0))"
+# "1" = "navigate(tab(1))"
+# "2" = "navigate(tab(2))"
+# "3" = "navigate(tab(3))"
+# "4" = "navigate(tab(4))"
+# "5" = "navigate(tab(5))"
+# "6" = "navigate(tab(6))"
+# "7" = "navigate(tab(7))"
+# "8" = "navigate(tab(8))"
+# "9" = "navigate(tab(9))"
+# "s" = "navigate(search)"
+
+[keybinds.normal]
+"i" = { action = "set_mode", mode = "insert" }
+"a" = { action = "set_mode", mode = "insert" } # TODO
+"o" = { action = "append", after = true }
+"O" = { action = "append", after = false }
+"C-v" = { action = "set_mode", mode = "visual_block" }
+"V" = { action = "set_mode", mode = "visual_line" }
+"v" = { action = "set_mode", mode = "visual_character" }
+"R" = { action = "set_mode", mode = "replace" }
+":" = { action = "set_mode", mode = "command" }
+"/" = "open_search"
+
+"r" = "replace"
+"x" = "delete"
+"d d" = "delete_line"
+"c c" = "cut_line"
+"D" = "delete_rest_of_line"
+"p" = { edit = "paste", after = true }
+"P" = { edit = "paste", after = false }
+"u" = "undo"
+"C-r" = "redo"
+"~" = "switch_case"
+
+[keybinds.visual.all]
+"y" = "yank"
+"Y" = "yank"
+"x" = "delete"
+"d" = "delete"
+"escape" = { action = "set_mode", mode = "normal" }
+
+[keybinds.visual.block]
+"C-v" = { action = "set_mode", mode = "normal" }
+"V" = { action = "set_mode", mode = "visual_line" }
+"v" = { action = "set_mode", mode = "visual_character" }
+
+[keybinds.visual.line]
+"C-v" = { action = "set_mode", mode = "visual_block" }
+"V" = { action = "set_mode", mode = "normal" }
+"v" = { action = "set_mode", mode = "visual_character" }
+
+[keybinds.visual.character]
+"C-v" = { action = "set_mode", mode = "visual_block" }
+"V" = { action = "set_mode", mode = "visual_line" }
+"v" = { action = "set_mode", mode = "normal" }
+
+# Moves occur in normal and visual mode. They are optionally prefixed by a count.
+[keybinds.movement]
+"h" = "left"
+"j" = "down"
+"k" = "up"
+"l" = "right"
+"w" = "next_word"
+"e" = "end_word"
+"b" = "prev_word"
+"0" = "line_start"
+"^" = "line_start_of_text"
+"$" = "line_end"
+"%" = "matching_bracket"
+"n" = { move = "search_result", direction = "next" }
+"N" = { move = "search_result", direction = "prev" }
+"g g" = "goto_line"
+"g d" = "goto_definition"
+"g r" = "goto_reference"
+"G" = "goto_end"
+"] c" = { move = "change", direction = "next" }
+"[ c" = { move = "change", direction = "prev" }
+"] g" = { move = "diagnostic", direction = "next" }
+"[ g" = { move = "diagnostic", direction = "prev" }
+"C-t" = "back_definition"
