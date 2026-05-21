@@ -84,17 +84,8 @@ impl Keybinds {
     if let Some(nav_key) = self.settings.navigate.0.get(0)
       && parser.remaining[0] == *nav_key
     {
-      return match parser.remaining.get(1).ok_or(ActionError::Incomplete)?.key {
-        Key::Char('\\') => Ok(Action::Navigate { nav: Navigation::OpenWorkspace }),
-        Key::Char('h') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Left) }),
-        Key::Char('j') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Down) }),
-        Key::Char('k') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Up) }),
-        Key::Char('l') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Right) }),
-        Key::Char('v') => Ok(Action::Navigate { nav: Navigation::Split(Axis::Vertical) }),
-        Key::Char('f') => Ok(Action::Navigate { nav: Navigation::Split(Axis::Horizontal) }),
-        Key::Char(c @ '0'..='9') => Ok(Action::Navigate { nav: Navigation::Tab(c as u8 - b'0') }),
-        _ => Err(ActionError::Unrecognized),
-      };
+      parser.skip();
+      return parser.parse_action(&self.navigation);
     }
 
     macro_rules! parse_chain {

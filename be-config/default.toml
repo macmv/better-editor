@@ -49,6 +49,10 @@ navigate = "C-w"
 "7" = { action = "navigate", nav = { nav = "tab", tab = 7 } }
 "8" = { action = "navigate", nav = { nav = "tab", tab = 8 } }
 "9" = { action = "navigate", nav = { nav = "tab", tab = 9 } }
+"\\" = { action = "navigate", nav = "open_workspace" }
+"C-\\" = { action = "navigate", nav = "open_workspace" }
+"v" = { action = "navigate", nav = { nav = "split", axis = "vertical" } }
+"f" = { action = "navigate", nav = { nav = "split", axis = "horizontal" } }
 
 [keybinds.normal]
 "i" = { action = "set_mode", mode = "insert" }
