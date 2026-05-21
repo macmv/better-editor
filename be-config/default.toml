@@ -30,8 +30,30 @@ children = [
 [[layout.tab]]
 pane = "terminal"
 
+# All keybinds are a sequence of keys, which take the following form:
+# - "<key>" - A typed key, like 'a' or '3'.
+# - "ESC" - Escape
+# - "SP" - Space
+# - "DEL" - Delete
+# - "BS" - Backspace (delete on MacOS)
+# - "TAB" - Tab
+# - "UP" - Up arrow
+# - "DOWN" - Down arrow
+# - "LEFT" - Left arrow
+# - "RIGHT" - Right arrow
+#
+# Additionally, modifiers may be added with the following syntax:
+# - "C-<key>" (control)
+# - "M-<key>" (meta/super/windows)
+# - "A-<key>" (alt)
+# - "S-<key>" (shift - ignored for normal character keys)
+#
+# For example, the following sequence would require control+alt+w to be pressed,
+# then shift+5 (assuming % is where shift+5 is) to be pressed:
+# "C-A-w %"
+
 [keybinds.settings]
-# To enter any navigation bind, first press this key.
+# To enter any navigation bind, first press this key. Applies in any mode.
 navigate = "C-w"
 
 [keybinds.navigation]
