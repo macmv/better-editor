@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::num::NonZero;
 
 use be_input::{ActionError, ChangeDirection, Direction, Key, KeyStroke, Mode, Navigation};
@@ -14,7 +12,6 @@ pub enum Action {
   OpenSearch,
   Append { after: bool },
   Edit { edit: Edit },
-  Navigate { nav: Navigation },
   Autocomplete,
   MoveCompletion { next: bool },
   Yank,
@@ -256,7 +253,6 @@ impl KeyParser<'_> {
       G::OpenSearch => OpenSearch,
       G::Append { after } => Append { after },
       G::Edit { ref edit } => Edit { count: None, e: self.translate_edit(edit)? },
-      G::Navigate { nav } => Navigate { nav },
       G::Autocomplete => Autocomplete,
       G::MoveCompletion { next } => MoveCompletion { next },
       G::Yank => Yank,

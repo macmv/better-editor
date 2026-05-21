@@ -241,7 +241,11 @@ impl ParseKey for grammar::Action {
       Some("set_mode") => Ok(SetMode { mode: p.get("mode")?, delta: p.get_or("delta", 0)? }),
       Some("open_search") => Ok(OpenSearch),
       Some("append") => Ok(Append { after: p.get("after")? }),
+      Some("autocomplete") => Ok(Autocomplete),
+      Some("move_completion") => Ok(MoveCompletion { next: p.get("next")? }),
       Some("yank") => Ok(Yank),
+      Some("clipboard_copy") => Ok(ClipboardCopy),
+      Some("clipboard_paste") => Ok(ClipboardPaste),
       _ => Ok(Edit { edit: grammar::Edit::parse(p)? }),
     }
   }
