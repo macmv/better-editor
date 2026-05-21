@@ -93,7 +93,7 @@ impl Keybinds {
 
         count *= 10;
         count += u32::from(c) - u32::from('0');
-        parser.remaining = &parser.remaining[1..];
+        parser.skip();
       }
     }
 
