@@ -7,6 +7,7 @@ use crate::{
   keybind::{KeyMap, Keybinds},
 };
 
+#[derive(Debug)]
 pub enum Action {
   SetMode { mode: Mode, delta: i32 },
   OpenSearch,
