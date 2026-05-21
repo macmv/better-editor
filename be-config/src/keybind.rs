@@ -1,6 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
 use be_config_macros::Config;
+use be_input::KeyStroke;
+use smallvec::SmallVec;
 
 use crate::{grammar, parse::ParseValue};
 
@@ -38,10 +40,73 @@ impl<T> Clone for KeyMap<T> {
 }
 
 #[derive(Default, Clone, PartialEq, Eq, Hash)]
-pub struct Key(String);
+pub struct Key(SmallVec<[KeyStroke; 4]>);
 
 impl Key {
-  fn parse_str(s: &str) -> Self { Self(s.into()) }
+  fn parse_str(s: &str) -> Result<Self, String> {
+    let mut keys = SmallVec::new();
+
+    for key in s.split(' ') {
+      keys.push(parse_key_stroke(key)?);
+    }
+
+    Ok(Key(keys))
+  }
+}
+
+// Parses keys like:
+//
+// 'a' 'M-a' 'C-a' 'C-A-a'
+fn parse_key_stroke(key: &str) -> Result<KeyStroke, String> {
+  use be_input::Key;
+
+  let mut out = KeyStroke {
+    key:     Key::Char(' '),
+    sup:     false,
+    shift:   false,
+    control: false,
+    alt:     false,
+  };
+
+  let mut iter = key.chars().peekable();
+  let first = iter.next().ok_or_else(|| format!("invalid key: {}", key))?;
+
+  if iter.peek().is_none() {
+    out.key = Key::Char(first);
+    return Ok(out);
+  }
+
+  match key {
+    "SP" => out.key = Key::Char(' '),
+    "ESC" => out.key = Key::Escape,
+
+    _ if iter.peek() == Some(&'-') => {
+      let mut c = first;
+      loop {
+        assert_eq!(iter.next(), Some('-'));
+
+        match c {
+          'M' => out.sup = true,
+          'C' => out.control = true,
+          'A' => out.alt = true,
+          _ => return Err(format!("invalid key: {}", key)),
+        }
+
+        c = iter.next().ok_or_else(|| format!("invalid key: {}", key))?;
+
+        if iter.peek().is_none() {
+          out.key = Key::Char(c);
+          break;
+        } else if iter.peek() != Some(&'-') {
+          return Err(format!("invalid key: {}", key));
+        }
+      }
+    }
+
+    _ => return Err(format!("invalid key: {}", key)),
+  }
+
+  Ok(out)
 }
 
 impl ParseValue for Key {
@@ -52,7 +117,7 @@ impl ParseValue for Key {
   ) -> Result<(), String> {
     match value.as_ref() {
       toml::de::DeValue::String(s) => {
-        *self = Key::parse_str(&s);
+        *self = Key::parse_str(&s)?;
         Ok(())
       }
       _ => return Err("expected string".to_string()),
@@ -246,7 +311,13 @@ impl<T: ParseKey> ParseValue for KeyMap<T> {
         let mut keys = HashMap::new();
 
         for (k, v) in table {
-          let k = Key::parse_str(k.get_ref());
+          let k = match Key::parse_str(k.get_ref()) {
+            Ok(k) => k,
+            Err(e) => {
+              de.error(e, k.span());
+              continue;
+            }
+          };
           let v = match T::parse(&KeybindParser { value: v.as_ref() }) {
             Ok(v) => v,
             Err(e) => {
@@ -265,5 +336,53 @@ impl<T: ParseKey> ParseValue for KeyMap<T> {
 
       _ => return Err("expected table".to_string()),
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn key_strokes() {
+    use be_input::Key;
+
+    assert_eq!(
+      parse_key_stroke("a"),
+      Ok(KeyStroke {
+        key:     Key::Char('a'),
+        sup:     false,
+        shift:   false,
+        control: false,
+        alt:     false,
+      })
+    );
+    assert_eq!(
+      parse_key_stroke("C-a"),
+      Ok(KeyStroke {
+        key:     Key::Char('a'),
+        sup:     false,
+        shift:   false,
+        control: true,
+        alt:     false,
+      })
+    );
+    assert_eq!(
+      parse_key_stroke("C-A-a"),
+      Ok(KeyStroke {
+        key:     Key::Char('a'),
+        sup:     false,
+        shift:   false,
+        control: true,
+        alt:     true,
+      })
+    );
+
+    assert!(parse_key_stroke("-a").is_err());
+    assert!(parse_key_stroke("Ca").is_err());
+    assert!(parse_key_stroke("C-").is_err());
+
+    assert!(parse_key_stroke("C-Aa").is_err());
+    assert!(parse_key_stroke("CA-a").is_err());
   }
 }

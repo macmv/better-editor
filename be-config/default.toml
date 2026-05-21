@@ -32,7 +32,7 @@ pane = "terminal"
 
 [keybinds.settings]
 # To enter any navigation bind, first press this key.
-navigate = " "
+navigate = "SP"
 
 # [keybinds.navigation]
 # "h" = "navigate(left)"
@@ -79,7 +79,7 @@ navigate = " "
 "Y" = "yank"
 "x" = "delete"
 "d" = "delete"
-"escape" = { action = "set_mode", mode = "normal" }
+"ESC" = { action = "set_mode", mode = "normal" }
 
 [keybinds.visual.block]
 "C-v" = { action = "set_mode", mode = "normal" }

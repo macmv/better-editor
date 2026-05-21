@@ -212,6 +212,7 @@ dependencies = [
  "expect-test",
  "line-index",
  "serde",
+ "smallvec",
  "toml",
 ]
 
