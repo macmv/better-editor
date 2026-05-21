@@ -80,7 +80,9 @@ impl Keybinds {
       return Err(ActionError::Incomplete);
     }
 
-    if parser.remaining[0].key == Key::Char('w') && parser.remaining[0].control {
+    if let Some(nav_key) = self.settings.navigate.0.get(0)
+      && parser.remaining[0] == *nav_key
+    {
       return match parser.remaining.get(1).ok_or(ActionError::Incomplete)?.key {
         Key::Char('\\') => Ok(Action::Navigate { nav: Navigation::OpenWorkspace }),
         Key::Char('h') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Left) }),

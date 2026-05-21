@@ -24,7 +24,7 @@ pub struct VisualKeybinds {
 
 #[derive(Default, Config, Clone)]
 pub struct KeybindSettings {
-  navigate: Key,
+  pub(crate) navigate: Key,
 }
 
 pub struct KeyMap<T> {

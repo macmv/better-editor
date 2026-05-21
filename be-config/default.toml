@@ -32,7 +32,7 @@ pane = "terminal"
 
 [keybinds.settings]
 # To enter any navigation bind, first press this key.
-navigate = "SP"
+navigate = "C-w"
 
 # [keybinds.navigation]
 # "h" = "navigate(left)"
