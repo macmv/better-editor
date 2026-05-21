@@ -84,7 +84,7 @@ impl Keybinds {
 
     let mut parser = KeyParser { keybinds: self, remaining: input };
 
-    if mode == Mode::Normal {
+    if matches!(mode, Mode::Normal | Mode::Visual(_)) {
       while let Some(Key::Char(c @ '0'..='9')) = parser.remaining.get(0).map(|k| k.key) {
         // Counts cannot start with 0 (as 0 is start-of-line).
         if c == '0' && count == 0 {
