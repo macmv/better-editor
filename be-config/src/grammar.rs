@@ -13,7 +13,6 @@ pub enum Action {
   SetMode { mode: Mode, delta: i32 },
   OpenSearch,
   Append { after: bool },
-  Move { movement: Move },
   Edit { edit: Edit },
   Tab { shift: bool },
   Control { char: char },
@@ -53,7 +52,6 @@ pub enum Move {
 
 #[derive(Debug)]
 pub enum Edit {
-  Insert,
   Replace,
   Delete,
   Cut,
@@ -219,10 +217,64 @@ impl Keybinds {
     Err(ActionError::Incomplete)
   }
 
+  fn parse_char(&self, keys: &[KeyStroke]) -> Result<char, ActionError> {
+    match keys.get(0).ok_or(ActionError::Incomplete)?.key {
+      Key::Char(c) => Ok(c),
+      _ => Err(ActionError::Unrecognized),
+    }
+  }
+
   fn parse_move(&self, mut keys: &[KeyStroke]) -> Result<be_input::Move, ActionError> {
     let (m, n) = self.movement.get(&keys)?;
     keys = &keys[n..];
     self.translate_move(m, keys)
+  }
+
+  fn translate_action(
+    &self,
+    a: &grammar::Action,
+    keys: &[KeyStroke],
+  ) -> Result<be_input::Action, ActionError> {
+    use crate::grammar::Action as G;
+    use be_input::Action::*;
+
+    Ok(match *a {
+      G::SetMode { mode, delta } => SetMode { mode, delta },
+      G::OpenSearch => OpenSearch,
+      G::Append { after } => Append { after },
+      G::Edit { ref edit } => Edit { count: None, e: self.translate_edit(edit, keys)? },
+      G::Tab { shift } => Tab { shift },
+      G::Control { char } => Control { char },
+      G::Navigate { nav } => Navigate { nav },
+      G::Autocomplete => Autocomplete,
+      G::MoveCompletion { next } => MoveCompletion { next },
+      G::Yank => Yank,
+      G::ClipboardCopy => ClipboardCopy,
+      G::ClipboardPaste => ClipboardPaste,
+    })
+  }
+
+  fn translate_edit(
+    &self,
+    e: &grammar::Edit,
+    keys: &[KeyStroke],
+  ) -> Result<be_input::Edit, ActionError> {
+    use crate::grammar::Edit as G;
+    use be_input::Edit::*;
+
+    Ok(match *e {
+      G::Replace => Replace(self.parse_char(keys)?),
+      G::Delete => Delete(self.parse_move(keys)?),
+      G::Cut => Cut(self.parse_move(keys)?),
+      G::DeleteLine => DeleteLine,
+      G::CutLine => CutLine,
+      G::DeleteRestOfLine => DeleteRestOfLine,
+      G::Paste { after } => Paste { after },
+      G::Backspace => Backspace,
+      G::Undo => Undo,
+      G::Redo => Redo,
+      G::SwitchCase => SwitchCase,
+    })
   }
 
   fn translate_move(

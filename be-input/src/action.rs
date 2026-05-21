@@ -19,7 +19,7 @@ pub enum Action {
   ClipboardPaste,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Navigation {
   OpenWorkspace,
   OpenSearch,
