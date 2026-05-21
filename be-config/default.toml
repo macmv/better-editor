@@ -29,3 +29,124 @@ children = [
 
 [[layout.tab]]
 pane = "terminal"
+
+# All keybinds are a sequence of keys, which take the following form:
+# - "<key>" - A typed key, like 'a' or '3'.
+# - "ESC" - Escape
+# - "SP" - Space
+# - "DEL" - Delete
+# - "BS" - Backspace (delete on MacOS)
+# - "TAB" - Tab
+# - "UP" - Up arrow
+# - "DOWN" - Down arrow
+# - "LEFT" - Left arrow
+# - "RIGHT" - Right arrow
+#
+# Additionally, modifiers may be added with the following syntax:
+# - "C-<key>" (control)
+# - "M-<key>" (meta/super/windows)
+# - "A-<key>" (alt)
+# - "S-<key>" (shift - ignored for normal character keys)
+#
+# For example, the following sequence would require control+alt+w to be pressed,
+# then shift+5 (assuming % is where shift+5 is) to be pressed:
+# "C-A-w %"
+
+[keybinds.settings]
+# To enter any navigation bind, first press this key. Applies in any mode.
+navigate = "C-w"
+
+[keybinds.navigation]
+"h" = { action = "navigate", nav = "left" }
+"j" = { action = "navigate", nav = "down" }
+"k" = { action = "navigate", nav = "up" }
+"l" = { action = "navigate", nav = "right" }
+"0" = { action = "navigate", nav = { nav = "tab", tab = 0 } }
+"1" = { action = "navigate", nav = { nav = "tab", tab = 1 } }
+"2" = { action = "navigate", nav = { nav = "tab", tab = 2 } }
+"3" = { action = "navigate", nav = { nav = "tab", tab = 3 } }
+"4" = { action = "navigate", nav = { nav = "tab", tab = 4 } }
+"5" = { action = "navigate", nav = { nav = "tab", tab = 5 } }
+"6" = { action = "navigate", nav = { nav = "tab", tab = 6 } }
+"7" = { action = "navigate", nav = { nav = "tab", tab = 7 } }
+"8" = { action = "navigate", nav = { nav = "tab", tab = 8 } }
+"9" = { action = "navigate", nav = { nav = "tab", tab = 9 } }
+"\\" = { action = "navigate", nav = "open_workspace" }
+"C-\\" = { action = "navigate", nav = "open_workspace" }
+"v" = { action = "navigate", nav = { nav = "split", axis = "vertical" } }
+"f" = { action = "navigate", nav = { nav = "split", axis = "horizontal" } }
+
+[keybinds.normal]
+"i" = { action = "set_mode", mode = "insert" }
+"a" = { action = "set_mode", mode = "insert", delta = 1 }
+"o" = { action = "append", after = true }
+"O" = { action = "append", after = false }
+"C-v" = { action = "set_mode", mode = "visual_block" }
+"V" = { action = "set_mode", mode = "visual_line" }
+"v" = { action = "set_mode", mode = "visual_character" }
+"R" = { action = "set_mode", mode = "replace" }
+":" = { action = "set_mode", mode = "command" }
+"/" = "open_search"
+"SP s" = { action = "navigate", nav = "open_search" }
+
+"r" = "replace"
+"x" = "delete_single"
+"d" = "delete"
+"d d" = "delete_line"
+"c" = "cut"
+"c c" = "cut_line"
+"D" = "delete_rest_of_line"
+"p" = { edit = "paste", after = true }
+"P" = { edit = "paste", after = false }
+"u" = "undo"
+"C-r" = "redo"
+"~" = "switch_case"
+
+[keybinds.visual.all]
+"y" = "yank"
+"Y" = "yank"
+"x" = "delete"
+"d" = "delete"
+"ESC" = { action = "set_mode", mode = "normal" }
+
+[keybinds.visual.block]
+"C-v" = { action = "set_mode", mode = "normal" }
+"V" = { action = "set_mode", mode = "visual_line" }
+"v" = { action = "set_mode", mode = "visual_character" }
+
+[keybinds.visual.line]
+"C-v" = { action = "set_mode", mode = "visual_block" }
+"V" = { action = "set_mode", mode = "normal" }
+"v" = { action = "set_mode", mode = "visual_character" }
+
+[keybinds.visual.character]
+"C-v" = { action = "set_mode", mode = "visual_block" }
+"V" = { action = "set_mode", mode = "visual_line" }
+"v" = { action = "set_mode", mode = "normal" }
+
+# Moves occur in normal and visual mode. They are optionally prefixed by a count.
+[keybinds.movement]
+"h" = "left"
+"j" = "down"
+"k" = "up"
+"l" = "right"
+"w" = "next_word"
+"e" = "end_word"
+"b" = "prev_word"
+"0" = "line_start"
+"^" = "line_start_of_text"
+"$" = "line_end"
+"%" = "matching_bracket"
+"n" = { move = "search_result", direction = "next" }
+"N" = { move = "search_result", direction = "prev" }
+"g g" = "goto_line"
+"g d" = "goto_definition"
+"g r" = "goto_reference"
+"G" = "goto_end"
+"f" = { move = "find", direction = "next" }
+"F" = { move = "find", direction = "prev" }
+"] c" = { move = "change", direction = "next" }
+"[ c" = { move = "change", direction = "prev" }
+"] g" = { move = "diagnostic", direction = "next" }
+"[ g" = { move = "diagnostic", direction = "prev" }
+"C-t" = "back_definition"

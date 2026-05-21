@@ -175,7 +175,8 @@ impl State {
       }
     }
 
-    match Action::from_input(self.mode(), &self.keys) {
+    let res = store.config.borrow().settings.keybinds.parse(self.mode(), &self.keys);
+    match res {
       Ok(action) => {
         self.perform_action(action, store);
         self.keys.clear();
