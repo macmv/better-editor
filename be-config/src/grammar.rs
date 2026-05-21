@@ -123,7 +123,7 @@ impl Keybinds {
         parser.parse_action(&self.visual.all),
         parser.parse_move().map(|m| Action::Move { count: NonZero::new(parser.count), m })
       ),
-      Mode::Insert => {
+      Mode::Insert | Mode::Command => {
         let key = parser.remaining[0];
         match key.key {
           #[cfg(not(target_os = "macos"))]
