@@ -243,7 +243,7 @@ impl KeyParser<'_> {
       G::DeleteSingle => Delete(be_input::Move::Single(Direction::Right)),
       G::DeleteLine => DeleteLine,
       G::CutLine => CutLine,
-      G::DeleteRestOfLine => DeleteRestOfLine,
+      G::DeleteRestOfLine => Delete(be_input::Move::LineEnd),
       G::Paste { after } => Paste { after },
       G::Backspace => Backspace,
       G::Undo => Undo,

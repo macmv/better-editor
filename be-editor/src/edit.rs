@@ -80,13 +80,6 @@ impl EditorState {
 
         self.auto_indent(VerticalDirection::Up);
       }
-      Edit::DeleteRestOfLine => {
-        self.delete_copy(
-          self.doc.cursor_offset(self.cursor)
-            ..self.doc.offset_by_graphemes(self.doc.byte_of_line(self.cursor.line + 1), -1),
-        );
-        self.clamp_column();
-      }
       Edit::Paste { after } => self.paste(after),
       Edit::Backspace => {
         if self.doc.cursor_offset(self.cursor) > 0 {
@@ -152,7 +145,7 @@ impl EditorState {
     }
 
     let inclusive = match m {
-      Move::EndWord => true,
+      Move::EndWord | Move::LineEnd => true,
       _ => false,
     };
 
@@ -348,6 +341,19 @@ mod tests {
     editor.check(expect![@r#"
       foo
       ⟦b⟧az
+    "#]);
+  }
+
+  #[test]
+  fn delete_rest_of_line() {
+    let mut editor = editor("foo\nbar\nbaz\n");
+    editor.perform_move(Move::Single(Direction::Down), None);
+    editor.perform_move(Move::Single(Direction::Right), None);
+    editor.perform_edit(Edit::Delete(Move::LineEnd));
+    editor.check(expect![@r#"
+      foo
+      ⟦b⟧
+      baz
     "#]);
   }
 }

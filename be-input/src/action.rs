@@ -74,7 +74,6 @@ pub enum Edit {
   Cut(Move),
   DeleteLine,
   CutLine,
-  DeleteRestOfLine,
   Paste { after: bool },
   Backspace,
   Undo,
