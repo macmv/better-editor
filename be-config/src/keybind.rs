@@ -260,7 +260,7 @@ impl ParseKey for grammar::Edit {
       Some("delete") => Ok(Delete),
       Some("cut") => Ok(Cut),
       Some("delete_line") => Ok(DeleteLine),
-      Some("cut_line") => Ok(DeleteLine),
+      Some("cut_line") => Ok(CutLine),
       Some("delete_rest_of_line") => Ok(DeleteRestOfLine),
       Some("paste") => Ok(Paste { after: p.get("after")? }),
       Some("backspace") => Ok(Backspace),
