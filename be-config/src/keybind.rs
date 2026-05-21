@@ -78,8 +78,15 @@ fn parse_key_stroke(key: &str) -> Result<KeyStroke, String> {
   }
 
   match key {
-    "SP" => out.key = Key::Char(' '),
     "ESC" => out.key = Key::Escape,
+    "SP" => out.key = Key::Char(' '),
+    "DEL" => out.key = Key::Delete,
+    "BS" => out.key = Key::Backspace,
+    "TAB" => out.key = Key::Tab,
+    "UP" => out.key = Key::ArrowUp,
+    "DOWN" => out.key = Key::ArrowDown,
+    "LEFT" => out.key = Key::ArrowLeft,
+    "RIGHT" => out.key = Key::ArrowRight,
 
     _ if iter.peek() == Some(&'-') => {
       let mut c = first;
@@ -90,6 +97,7 @@ fn parse_key_stroke(key: &str) -> Result<KeyStroke, String> {
           'M' => out.sup = true,
           'C' => out.control = true,
           'A' => out.alt = true,
+          'S' => out.shift = true,
           _ => return Err(format!("invalid key: {}", key)),
         }
 
