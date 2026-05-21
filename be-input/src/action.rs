@@ -82,6 +82,7 @@ pub enum Edit {
   SwitchCase,
 }
 
+#[derive(Debug)]
 pub enum ActionError {
   Unrecognized,
   Incomplete,
