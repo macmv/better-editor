@@ -211,6 +211,13 @@ impl KeyParser<'_> {
     self.translate_move(m)
   }
 
+  fn parse_move_for_edit(&mut self) -> Result<be_input::Move, ActionError> {
+    match self.mode {
+      Mode::Normal => self.parse_move(),
+      _ => Ok(be_input::Move::Single(Direction::Right)),
+    }
+  }
+
   fn translate_action(&mut self, a: &grammar::Action) -> Result<be_input::Action, ActionError> {
     use crate::grammar::Action as G;
     use be_input::Action::*;
@@ -234,8 +241,8 @@ impl KeyParser<'_> {
 
     Ok(match *e {
       G::Replace => Replace(self.parse_char()?),
-      G::Delete => Delete(self.parse_move()?),
-      G::Cut => Cut(self.parse_move()?),
+      G::Delete => Delete(self.parse_move_for_edit()?),
+      G::Cut => Cut(self.parse_move_for_edit()?),
       G::DeleteLine => DeleteLine,
       G::CutLine => CutLine,
       G::DeleteRestOfLine => DeleteRestOfLine,
