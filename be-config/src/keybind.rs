@@ -8,18 +8,18 @@ use crate::{grammar, parse::ParseValue};
 
 #[derive(Default, Config, Clone)]
 pub struct Keybinds {
-  settings: KeybindSettings,
-  normal:   KeyMap<grammar::Action>,
-  visual:   VisualKeybinds,
-  movement: KeyMap<grammar::Move>,
+  pub(crate) settings: KeybindSettings,
+  pub(crate) normal:   KeyMap<grammar::Action>,
+  pub(crate) visual:   VisualKeybinds,
+  pub(crate) movement: KeyMap<grammar::Move>,
 }
 
 #[derive(Default, Config, Clone)]
 pub struct VisualKeybinds {
-  all:       KeyMap<grammar::Action>,
-  block:     KeyMap<grammar::Action>,
-  line:      KeyMap<grammar::Action>,
-  character: KeyMap<grammar::Action>,
+  pub(crate) all:       KeyMap<grammar::Action>,
+  pub(crate) block:     KeyMap<grammar::Action>,
+  pub(crate) line:      KeyMap<grammar::Action>,
+  pub(crate) character: KeyMap<grammar::Action>,
 }
 
 #[derive(Default, Config, Clone)]
@@ -28,7 +28,7 @@ pub struct KeybindSettings {
 }
 
 pub struct KeyMap<T> {
-  keys: Arc<HashMap<Key, T>>,
+  pub(crate) keys: Arc<HashMap<Key, T>>,
 }
 
 impl<T> Default for KeyMap<T> {
@@ -40,7 +40,7 @@ impl<T> Clone for KeyMap<T> {
 }
 
 #[derive(Default, Clone, PartialEq, Eq, Hash)]
-pub struct Key(SmallVec<[KeyStroke; 4]>);
+pub struct Key(pub SmallVec<[KeyStroke; 4]>);
 
 impl Key {
   fn parse_str(s: &str) -> Result<Self, String> {
@@ -288,6 +288,7 @@ impl ParseKey for grammar::Move {
       Some("matching_bracket") => Ok(MatchingBracket),
       Some("goto_line") => Ok(FileStart),
       Some("goto_end") => Ok(FileEnd),
+      Some("find") => Ok(Char(p.get("direction")?)),
       Some("search_result") => Ok(Result(p.get("direction")?)),
       Some("change") => Ok(Change(p.get("direction")?)),
       Some("diagnostic") => Ok(Diagnostic(p.get("direction")?)),

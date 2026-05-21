@@ -115,6 +115,8 @@ navigate = "SP"
 "g d" = "goto_definition"
 "g r" = "goto_reference"
 "G" = "goto_end"
+"f" = { move = "find", direction = "next" }
+"F" = { move = "find", direction = "prev" }
 "] c" = { move = "change", direction = "next" }
 "[ c" = { move = "change", direction = "prev" }
 "] g" = { move = "diagnostic", direction = "next" }

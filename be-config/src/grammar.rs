@@ -4,7 +4,7 @@ use std::num::NonZero;
 
 use be_input::{ActionError, ChangeDirection, Direction, Key, KeyStroke, Mode, Navigation};
 
-use crate::keybind::Keybinds;
+use crate::keybind::{KeyMap, Keybinds};
 
 pub enum Action {
   SetMode { mode: Mode, delta: i32 },
@@ -22,7 +22,7 @@ pub enum Action {
   ClipboardPaste,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Move {
   Single(Direction),
 
@@ -216,51 +216,56 @@ impl Keybinds {
     Err(ActionError::Incomplete)
   }
 
-  fn parse_move(&self, keys: &[KeyStroke]) -> Result<be_input::Move, ActionError> {
+  fn parse_move(&self, mut keys: &[KeyStroke]) -> Result<be_input::Move, ActionError> {
+    use crate::grammar::Move as G;
     use be_input::Move::*;
 
-    Ok(match keys[0].key {
-      Key::Char('h') | Key::ArrowLeft | Key::Backspace => Single(Direction::Left),
-      Key::Char('j') | Key::ArrowDown => Single(Direction::Down),
-      Key::Char('k') | Key::ArrowUp => Single(Direction::Up),
-      Key::Char('l') | Key::ArrowRight => Single(Direction::Right),
-      Key::Char('w') => NextWord,
-      Key::Char('e') => EndWord,
-      Key::Char('b') => PrevWord,
-      Key::Char('0') => LineStart,
-      Key::Char('^') => LineStartOfText,
-      Key::Char('$') => LineEnd,
-      Key::Char('%') => MatchingBracket,
-      Key::Char('n') => Result(ChangeDirection::Next),
-      Key::Char('N') => Result(ChangeDirection::Prev),
-      Key::Char('g') => match keys.get(1).ok_or(ActionError::Incomplete)?.key {
-        Key::Char('g') => FileStart,
-        Key::Char('d') => GotoDefinition,
-        Key::Char('r') => GotoReference,
-        _ => return Err(ActionError::Unrecognized),
-      },
-      Key::Char('G') => FileEnd,
-      Key::Char('f') => match keys.get(1).ok_or(ActionError::Incomplete)?.key {
-        Key::Char(c) => Char(c, ChangeDirection::Next),
-        _ => return Err(ActionError::Unrecognized),
-      },
-      Key::Char('F') => match keys.get(1).ok_or(ActionError::Incomplete)?.key {
-        Key::Char(c) => Char(c, ChangeDirection::Prev),
-        _ => return Err(ActionError::Unrecognized),
-      },
-      Key::Char('[') => match keys.get(1).ok_or(ActionError::Incomplete)?.key {
-        Key::Char('c') => Change(ChangeDirection::Prev),
-        Key::Char('g') => Diagnostic(ChangeDirection::Prev),
-        _ => return Err(ActionError::Unrecognized),
-      },
-      Key::Char(']') => match keys.get(1).ok_or(ActionError::Incomplete)?.key {
-        Key::Char('c') => Change(ChangeDirection::Next),
-        Key::Char('g') => Diagnostic(ChangeDirection::Next),
-        _ => return Err(ActionError::Unrecognized),
-      },
-      Key::Char('t') if keys[0].control => BackDefinition,
+    let (m, n) = self.movement.get(&keys)?;
+    keys = &keys[n..];
 
-      _ => return Err(ActionError::Unrecognized),
+    Ok(match *m {
+      G::Single(d) => Single(d),
+      G::NextWord => NextWord,
+      G::EndWord => EndWord,
+      G::PrevWord => PrevWord,
+      G::LineStart => LineStart,
+      G::LineStartOfText => LineStartOfText,
+      G::LineEnd => LineEnd,
+      G::MatchingBracket => MatchingBracket,
+      G::FileStart => FileStart,
+      G::FileEnd => FileEnd,
+      G::Result(d) => Result(d),
+      G::Change(d) => Change(d),
+      G::Diagnostic(d) => Diagnostic(d),
+      G::GotoDefinition => GotoDefinition,
+      G::GotoReference => GotoReference,
+      G::Char(d) => match keys.first().ok_or(ActionError::Incomplete)?.key {
+        Key::Char(c) => Char(c, d),
+        _ => return Err(ActionError::Unrecognized),
+      },
+      G::BackDefinition => BackDefinition,
     })
+  }
+}
+
+impl<T> KeyMap<T> {
+  fn get(&self, seq: &[KeyStroke]) -> Result<(&T, usize), ActionError> {
+    if seq.is_empty() {
+      return Err(ActionError::Incomplete);
+    }
+
+    let mut found_partial = false;
+
+    for (k, v) in self.keys.iter() {
+      if k.0.starts_with(seq) {
+        found_partial = true;
+      }
+
+      if seq.starts_with(&k.0) {
+        return Ok((v, k.0.len()));
+      }
+    }
+
+    Err(if found_partial { ActionError::Incomplete } else { ActionError::Unrecognized })
   }
 }
