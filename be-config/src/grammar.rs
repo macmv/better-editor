@@ -61,7 +61,10 @@ pub enum Edit {
 }
 
 struct KeyParser<'a> {
-  keybinds:  &'a Keybinds,
+  keybinds: &'a Keybinds,
+  mode:     Mode,
+
+  count:     u32,
   remaining: &'a [KeyStroke],
 }
 
@@ -69,21 +72,8 @@ impl Keybinds {
   pub fn parse(&self, mode: Mode, input: &[KeyStroke]) -> Result<be_input::Action, ActionError> {
     use be_input::*;
 
-    let mut count = 0;
-    let mut parser = KeyParser { keybinds: self, remaining: input };
-
-    if matches!(mode, Mode::Normal | Mode::Visual(_)) {
-      while let Some(Key::Char(c @ '0'..='9')) = parser.remaining.get(0).map(|k| k.key) {
-        // Counts cannot start with 0 (as 0 is start-of-line).
-        if c == '0' && count == 0 {
-          break;
-        }
-
-        count *= 10;
-        count += u32::from(c) - u32::from('0');
-        parser.skip();
-      }
-    }
+    let mut parser = KeyParser { keybinds: self, mode, count: 0, remaining: input };
+    parser.parse_count();
 
     if parser.remaining.is_empty() {
       return Err(ActionError::Incomplete);
@@ -120,22 +110,22 @@ impl Keybinds {
     let action = match mode {
       Mode::Normal => parse_chain!(
         parser.parse_action(&self.normal),
-        parser.parse_move().map(|m| Action::Move { count: NonZero::new(count), m })
+        parser.parse_move().map(|m| Action::Move { count: NonZero::new(parser.count), m })
       ),
       Mode::Visual(VisualMode::Line) => parse_chain!(
         parser.parse_action(&self.visual.line),
         parser.parse_action(&self.visual.all),
-        parser.parse_move().map(|m| Action::Move { count: NonZero::new(count), m })
+        parser.parse_move().map(|m| Action::Move { count: NonZero::new(parser.count), m })
       ),
       Mode::Visual(VisualMode::Block) => parse_chain!(
         parser.parse_action(&self.visual.block),
         parser.parse_action(&self.visual.all),
-        parser.parse_move().map(|m| Action::Move { count: NonZero::new(count), m })
+        parser.parse_move().map(|m| Action::Move { count: NonZero::new(parser.count), m })
       ),
       Mode::Visual(VisualMode::Character) => parse_chain!(
         parser.parse_action(&self.visual.character),
         parser.parse_action(&self.visual.all),
-        parser.parse_move().map(|m| Action::Move { count: NonZero::new(count), m })
+        parser.parse_move().map(|m| Action::Move { count: NonZero::new(parser.count), m })
       ),
       Mode::Insert => {
         let key = parser.remaining[0];
@@ -180,6 +170,21 @@ impl KeyParser<'_> {
       panic!("cannot skip with no keys remaining");
     }
     self.remaining = &self.remaining[1..];
+  }
+
+  fn parse_count(&mut self) {
+    if matches!(self.mode, Mode::Normal | Mode::Visual(_)) {
+      while let Some(Key::Char(c @ '0'..='9')) = self.remaining.get(0).map(|k| k.key) {
+        // Counts cannot start with 0 (as 0 is start-of-line).
+        if c == '0' && self.count == 0 {
+          break;
+        }
+
+        self.count *= 10;
+        self.count += u32::from(c) - u32::from('0');
+        self.skip();
+      }
+    }
   }
 
   fn parse_char(&mut self) -> Result<char, ActionError> {
