@@ -7,7 +7,7 @@ use crate::{
   keybind::{KeyMap, Keybinds},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Action {
   SetMode { mode: Mode, delta: i32 },
   OpenSearch,
@@ -47,7 +47,7 @@ pub enum Move {
   BackDefinition,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Edit {
   Replace,
   Delete,

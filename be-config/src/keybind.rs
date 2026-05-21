@@ -350,7 +350,7 @@ impl ParseKey for grammar::Move {
   }
 }
 
-impl<T: ParseKey> ParseValue for KeyMap<T> {
+impl<T: ParseKey + Clone> ParseValue for KeyMap<T> {
   fn parse(
     &mut self,
     value: toml::Spanned<toml::de::DeValue>,
@@ -358,7 +358,7 @@ impl<T: ParseKey> ParseValue for KeyMap<T> {
   ) -> Result<(), String> {
     match value.as_ref() {
       toml::de::DeValue::Table(table) => {
-        let mut keys = HashMap::new();
+        let keys = Arc::make_mut(&mut self.keys);
 
         for (k, v) in table {
           let k = match Key::parse_str(k.get_ref()) {
@@ -368,6 +368,12 @@ impl<T: ParseKey> ParseValue for KeyMap<T> {
               continue;
             }
           };
+
+          if v.as_ref().as_table().is_some_and(|t| t.is_empty()) {
+            keys.remove(&k);
+            continue;
+          }
+
           let v = match T::parse(&KeybindParser { value: v.as_ref() }) {
             Ok(v) => v,
             Err(e) => {
@@ -378,8 +384,6 @@ impl<T: ParseKey> ParseValue for KeyMap<T> {
 
           keys.insert(k, v);
         }
-
-        self.keys = keys.into();
 
         Ok(())
       }

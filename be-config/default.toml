@@ -51,6 +51,8 @@ pane = "terminal"
 # For example, the following sequence would require control+alt+w to be pressed,
 # then shift+5 (assuming % is where shift+5 is) to be pressed:
 # "C-A-w %"
+#
+# Actions can be replaced by setting a keybind to an empty table, {}.
 
 [keybinds.settings]
 # To enter any navigation bind, first press this key. Applies in any mode.
