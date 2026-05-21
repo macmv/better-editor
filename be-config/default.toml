@@ -53,7 +53,7 @@ navigate = "SP"
 
 [keybinds.normal]
 "i" = { action = "set_mode", mode = "insert" }
-"a" = { action = "set_mode", mode = "insert" } # TODO
+"a" = { action = "set_mode", mode = "insert", delta = 1 }
 "o" = { action = "append", after = true }
 "O" = { action = "append", after = false }
 "C-v" = { action = "set_mode", mode = "visual_block" }
