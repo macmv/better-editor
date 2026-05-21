@@ -4,7 +4,10 @@ use std::num::NonZero;
 
 use be_input::{ActionError, ChangeDirection, Direction, Key, KeyStroke, Mode, Navigation};
 
-use crate::keybind::{KeyMap, Keybinds};
+use crate::{
+  grammar,
+  keybind::{KeyMap, Keybinds},
+};
 
 pub enum Action {
   SetMode { mode: Mode, delta: i32 },
@@ -217,11 +220,18 @@ impl Keybinds {
   }
 
   fn parse_move(&self, mut keys: &[KeyStroke]) -> Result<be_input::Move, ActionError> {
-    use crate::grammar::Move as G;
-    use be_input::Move::*;
-
     let (m, n) = self.movement.get(&keys)?;
     keys = &keys[n..];
+    self.translate_move(m, keys)
+  }
+
+  fn translate_move(
+    &self,
+    m: &grammar::Move,
+    keys: &[KeyStroke],
+  ) -> Result<be_input::Move, ActionError> {
+    use crate::grammar::Move as G;
+    use be_input::Move::*;
 
     Ok(match *m {
       G::Single(d) => Single(d),
