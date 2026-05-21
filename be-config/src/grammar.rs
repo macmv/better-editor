@@ -81,25 +81,27 @@ impl Keybinds {
       };
     }
 
-    let mut iter = input.iter().copied();
-
-    while let Some(key) = iter.next() {
+    let mut keys = &input[..];
+    while let [key, ..] = keys {
       return match (mode, key.key) {
-        (_, Key::Char('w')) if key.control => match iter.next().ok_or(ActionError::Incomplete)?.key
-        {
-          Key::Char('\\') => Ok(Action::Navigate { nav: Navigation::OpenWorkspace }),
-          Key::Char('h') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Left) }),
-          Key::Char('j') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Down) }),
-          Key::Char('k') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Up) }),
-          Key::Char('l') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Right) }),
-          Key::Char('v') => Ok(Action::Navigate { nav: Navigation::Split(Axis::Vertical) }),
-          Key::Char('f') => Ok(Action::Navigate { nav: Navigation::Split(Axis::Horizontal) }),
-          Key::Char(c @ '0'..='9') => Ok(Action::Navigate { nav: Navigation::Tab(c as u8 - b'0') }),
-          _ => Err(ActionError::Unrecognized),
-        },
+        (_, Key::Char('w')) if key.control => {
+          match keys.get(1).ok_or(ActionError::Incomplete)?.key {
+            Key::Char('\\') => Ok(Action::Navigate { nav: Navigation::OpenWorkspace }),
+            Key::Char('h') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Left) }),
+            Key::Char('j') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Down) }),
+            Key::Char('k') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Up) }),
+            Key::Char('l') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Right) }),
+            Key::Char('v') => Ok(Action::Navigate { nav: Navigation::Split(Axis::Vertical) }),
+            Key::Char('f') => Ok(Action::Navigate { nav: Navigation::Split(Axis::Horizontal) }),
+            Key::Char(c @ '0'..='9') => {
+              Ok(Action::Navigate { nav: Navigation::Tab(c as u8 - b'0') })
+            }
+            _ => Err(ActionError::Unrecognized),
+          }
+        }
 
         (Mode::Normal, Key::Char(' ')) if !key.control => {
-          match iter.next().ok_or(ActionError::Incomplete)?.key {
+          match keys.get(1).ok_or(ActionError::Incomplete)?.key {
             Key::Char('s') => Ok(Action::Navigate { nav: Navigation::OpenSearch }),
             _ => Err(ActionError::Unrecognized),
           }
@@ -135,31 +137,35 @@ impl Keybinds {
 
         (Mode::Normal, Key::Char('0')) if count != 0 => {
           count *= 10;
+          keys = &keys[1..];
           continue;
         }
         (Mode::Normal, Key::Char(c @ '1'..='9')) => {
           count *= 10;
           count += u32::from(c) - u32::from('0');
+          keys = &keys[1..];
           continue;
         }
 
         // === edits ===
         (Mode::Normal, Key::Char('r')) if !key.control => {
-          match iter.next().ok_or(ActionError::Incomplete)?.key {
+          match keys.get(1).ok_or(ActionError::Incomplete)?.key {
             Key::Char(c) => e!(Replace(c)),
             _ => Err(ActionError::Unrecognized),
           }
         }
         (Mode::Normal, Key::Char('x')) => e!(Delete(Move::Single(Direction::Right))),
-        (Mode::Normal, Key::Char('d')) => match iter.next().ok_or(ActionError::Incomplete)? {
+        (Mode::Normal, Key::Char('d')) => match keys.get(1).ok_or(ActionError::Incomplete)? {
           KeyStroke { key: Key::Char('d'), .. } => e!(DeleteLine),
-          k => {
-            self.parse_move(k, iter).map(|m| Action::Edit { e: Edit::Delete(m), count: None })
-          }
+          _ => self
+            .parse_move(&keys[1..])
+            .map(|m| Action::Edit { e: Edit::Delete(m), count: None }),
         },
-        (Mode::Normal, Key::Char('c')) => match iter.next().ok_or(ActionError::Incomplete)? {
+        (Mode::Normal, Key::Char('c')) => match keys.get(1).ok_or(ActionError::Incomplete)? {
           KeyStroke { key: Key::Char('c'), .. } => e!(CutLine),
-          k => self.parse_move(k, iter).map(|m| Action::Edit { e: Edit::Cut(m), count: None }),
+          _ => {
+            self.parse_move(&keys[1..]).map(|m| Action::Edit { e: Edit::Cut(m), count: None })
+          }
         },
         (Mode::Normal, Key::Char('D')) => e!(DeleteRestOfLine),
         (Mode::Normal, Key::Char('p')) => e!(Paste { after: true }),
@@ -200,7 +206,7 @@ impl Keybinds {
         (Mode::Normal, Key::Char('/')) => Ok(Action::OpenSearch),
 
         (Mode::Normal | Mode::Visual(_), _) => {
-          self.parse_move(key, iter).map(|m| Action::Move { count: NonZero::new(count), m })
+          self.parse_move(keys).map(|m| Action::Move { count: NonZero::new(count), m })
         }
 
         _ => Err(ActionError::Unrecognized),
@@ -210,14 +216,10 @@ impl Keybinds {
     Err(ActionError::Incomplete)
   }
 
-  fn parse_move(
-    &self,
-    key: KeyStroke,
-    mut iter: impl Iterator<Item = KeyStroke>,
-  ) -> Result<be_input::Move, ActionError> {
+  fn parse_move(&self, keys: &[KeyStroke]) -> Result<be_input::Move, ActionError> {
     use be_input::Move::*;
 
-    Ok(match key.key {
+    Ok(match keys[0].key {
       Key::Char('h') | Key::ArrowLeft | Key::Backspace => Single(Direction::Left),
       Key::Char('j') | Key::ArrowDown => Single(Direction::Down),
       Key::Char('k') | Key::ArrowUp => Single(Direction::Up),
@@ -231,32 +233,32 @@ impl Keybinds {
       Key::Char('%') => MatchingBracket,
       Key::Char('n') => Result(ChangeDirection::Next),
       Key::Char('N') => Result(ChangeDirection::Prev),
-      Key::Char('g') => match iter.next().ok_or(ActionError::Incomplete)?.key {
+      Key::Char('g') => match keys.get(1).ok_or(ActionError::Incomplete)?.key {
         Key::Char('g') => FileStart,
         Key::Char('d') => GotoDefinition,
         Key::Char('r') => GotoReference,
         _ => return Err(ActionError::Unrecognized),
       },
       Key::Char('G') => FileEnd,
-      Key::Char('f') => match iter.next().ok_or(ActionError::Incomplete)?.key {
+      Key::Char('f') => match keys.get(1).ok_or(ActionError::Incomplete)?.key {
         Key::Char(c) => Char(c, ChangeDirection::Next),
         _ => return Err(ActionError::Unrecognized),
       },
-      Key::Char('F') => match iter.next().ok_or(ActionError::Incomplete)?.key {
+      Key::Char('F') => match keys.get(1).ok_or(ActionError::Incomplete)?.key {
         Key::Char(c) => Char(c, ChangeDirection::Prev),
         _ => return Err(ActionError::Unrecognized),
       },
-      Key::Char('[') => match iter.next().ok_or(ActionError::Incomplete)?.key {
+      Key::Char('[') => match keys.get(1).ok_or(ActionError::Incomplete)?.key {
         Key::Char('c') => Change(ChangeDirection::Prev),
         Key::Char('g') => Diagnostic(ChangeDirection::Prev),
         _ => return Err(ActionError::Unrecognized),
       },
-      Key::Char(']') => match iter.next().ok_or(ActionError::Incomplete)?.key {
+      Key::Char(']') => match keys.get(1).ok_or(ActionError::Incomplete)?.key {
         Key::Char('c') => Change(ChangeDirection::Next),
         Key::Char('g') => Diagnostic(ChangeDirection::Next),
         _ => return Err(ActionError::Unrecognized),
       },
-      Key::Char('t') if key.control => BackDefinition,
+      Key::Char('t') if keys[0].control => BackDefinition,
 
       _ => return Err(ActionError::Unrecognized),
     })
