@@ -1,6 +1,6 @@
 use std::num::NonZero;
 
-use be_input::{ActionError, ChangeDirection, Direction, Key, KeyStroke, Mode};
+use be_input::{ActionError, ChangeDirection, Direction, Key, KeyStroke, Mode, Navigation};
 
 use crate::{
   grammar,
@@ -15,6 +15,7 @@ pub enum Action {
   Edit { edit: Edit },
   Autocomplete,
   MoveCompletion { next: bool },
+  Navigate { nav: Navigation },
   Yank,
   ClipboardCopy,
   ClipboardPaste,
@@ -232,6 +233,7 @@ impl KeyParser<'_> {
       G::Edit { ref edit } => Edit { count: None, e: self.translate_edit(edit)? },
       G::Autocomplete => Autocomplete,
       G::MoveCompletion { next } => MoveCompletion { next },
+      G::Navigate { nav } => Navigate { nav },
       G::Yank => Yank,
       G::ClipboardCopy => ClipboardCopy,
       G::ClipboardPaste => ClipboardPaste,

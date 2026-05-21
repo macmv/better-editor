@@ -8,10 +8,11 @@ use crate::{grammar, parse::ParseValue};
 
 #[derive(Default, Config, Clone)]
 pub struct Keybinds {
-  pub(crate) settings: KeybindSettings,
-  pub(crate) normal:   KeyMap<grammar::Action>,
-  pub(crate) visual:   VisualKeybinds,
-  pub(crate) movement: KeyMap<grammar::Move>,
+  pub(crate) settings:   KeybindSettings,
+  pub(crate) navigation: KeyMap<grammar::Action>,
+  pub(crate) normal:     KeyMap<grammar::Action>,
+  pub(crate) visual:     VisualKeybinds,
+  pub(crate) movement:   KeyMap<grammar::Move>,
 }
 
 #[derive(Default, Config, Clone)]
@@ -200,6 +201,27 @@ impl ParseKey for i32 {
 
 // Simple types
 
+impl ParseKey for be_input::Navigation {
+  fn parse(p: &KeybindParser) -> Result<Self, String> {
+    use be_input::{Direction, Navigation::*};
+
+    match p.string_or("nav") {
+      Some("open_workspace") => Ok(OpenWorkspace),
+      Some("open_search") => Ok(OpenSearch),
+      Some("up") => Ok(Direction(Direction::Up)),
+      Some("down") => Ok(Direction(Direction::Down)),
+      Some("left") => Ok(Direction(Direction::Left)),
+      Some("right") => Ok(Direction(Direction::Right)),
+      Some("create_split") => Ok(Split(p.get("axis")?)),
+      Some("tab") => {
+        Ok(Tab(u8::try_from(p.get::<i32>("tab")?).map_err(|_| format!("invalid tab"))?))
+      }
+      Some(v) => return Err(format!("unknown navigation '{v}'")),
+      _ => return Err(format!("expected string")),
+    }
+  }
+}
+
 impl ParseKey for be_input::Mode {
   fn parse(p: &KeybindParser) -> Result<Self, String> {
     use be_input::{Mode::*, VisualMode};
@@ -213,6 +235,19 @@ impl ParseKey for be_input::Mode {
       Some("replace") => Ok(Replace),
       Some("command") => Ok(Command),
       Some(v) => return Err(format!("unknown mode '{v}'")),
+      _ => return Err(format!("expected string")),
+    }
+  }
+}
+
+impl ParseKey for be_input::Axis {
+  fn parse(p: &KeybindParser) -> Result<Self, String> {
+    use be_input::Axis;
+
+    match p.string() {
+      Some("horizontal") => Ok(Axis::Horizontal),
+      Some("vertical") => Ok(Axis::Vertical),
+      Some(v) => return Err(format!("unknown axis '{v}'")),
       _ => return Err(format!("expected string")),
     }
   }
@@ -243,6 +278,7 @@ impl ParseKey for grammar::Action {
       Some("append") => Ok(Append { after: p.get("after")? }),
       Some("autocomplete") => Ok(Autocomplete),
       Some("move_completion") => Ok(MoveCompletion { next: p.get("next")? }),
+      Some("navigate") => Ok(Navigate { nav: p.get("nav")? }),
       Some("yank") => Ok(Yank),
       Some("clipboard_copy") => Ok(ClipboardCopy),
       Some("clipboard_paste") => Ok(ClipboardPaste),
