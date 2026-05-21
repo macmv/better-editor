@@ -68,7 +68,7 @@ navigate = "C-w"
 "SP s" = { action = "navigate", nav = "open_search" }
 
 "r" = "replace"
-"x" = "delete"
+"x" = "delete_single"
 "d" = "delete"
 "d d" = "delete_line"
 "c" = "cut"

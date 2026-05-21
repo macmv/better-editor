@@ -294,6 +294,7 @@ impl ParseKey for grammar::Edit {
     match p.string_or("edit") {
       Some("replace") => Ok(Replace),
       Some("delete") => Ok(Delete),
+      Some("delete_single") => Ok(DeleteSingle),
       Some("cut") => Ok(Cut),
       Some("delete_line") => Ok(DeleteLine),
       Some("cut_line") => Ok(CutLine),

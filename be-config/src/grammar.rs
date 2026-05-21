@@ -51,6 +51,7 @@ pub enum Move {
 pub enum Edit {
   Replace,
   Delete,
+  DeleteSingle,
   Cut,
   DeleteLine,
   CutLine,
@@ -239,6 +240,7 @@ impl KeyParser<'_> {
       G::Replace => Replace(self.parse_char()?),
       G::Delete => Delete(self.parse_move_for_edit()?),
       G::Cut => Cut(self.parse_move_for_edit()?),
+      G::DeleteSingle => Delete(be_input::Move::Single(Direction::Right)),
       G::DeleteLine => DeleteLine,
       G::CutLine => CutLine,
       G::DeleteRestOfLine => DeleteRestOfLine,
