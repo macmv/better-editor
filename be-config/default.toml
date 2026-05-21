@@ -65,7 +65,9 @@ navigate = "SP"
 
 "r" = "replace"
 "x" = "delete"
+"d" = "delete"
 "d d" = "delete_line"
+"c" = "cut"
 "c c" = "cut_line"
 "D" = "delete_rest_of_line"
 "p" = { edit = "paste", after = true }

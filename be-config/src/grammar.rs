@@ -1,6 +1,6 @@
 use std::num::NonZero;
 
-use be_input::{ActionError, ChangeDirection, Direction, Key, KeyStroke, Mode, Navigation};
+use be_input::{ActionError, ChangeDirection, Direction, Key, KeyStroke, Mode};
 
 use crate::{
   grammar,
@@ -70,18 +70,6 @@ impl Keybinds {
     use be_input::*;
 
     let mut count = 0;
-
-    macro_rules! e {
-      ($($e:tt)*) => {
-        Ok(Action::Edit { count: NonZero::new(count), e: Edit::$($e)* })
-      };
-    }
-    macro_rules! m {
-      ($($e:tt)*) => {
-        Ok(Action::Move { count: NonZero::new(count), m: Move::$($e)* })
-      };
-    }
-
     let mut parser = KeyParser { keybinds: self, remaining: input };
 
     if matches!(mode, Mode::Normal | Mode::Visual(_)) {
@@ -97,127 +85,92 @@ impl Keybinds {
       }
     }
 
-    let key = parser.remaining.get(0).ok_or(ActionError::Incomplete)?;
-    return match (mode, key.key) {
-      (_, Key::Char('w')) if key.control => {
-        match parser.remaining.get(1).ok_or(ActionError::Incomplete)?.key {
-          Key::Char('\\') => Ok(Action::Navigate { nav: Navigation::OpenWorkspace }),
-          Key::Char('h') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Left) }),
-          Key::Char('j') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Down) }),
-          Key::Char('k') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Up) }),
-          Key::Char('l') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Right) }),
-          Key::Char('v') => Ok(Action::Navigate { nav: Navigation::Split(Axis::Vertical) }),
-          Key::Char('f') => Ok(Action::Navigate { nav: Navigation::Split(Axis::Horizontal) }),
-          Key::Char(c @ '0'..='9') => Ok(Action::Navigate { nav: Navigation::Tab(c as u8 - b'0') }),
-          _ => Err(ActionError::Unrecognized),
+    if parser.remaining.is_empty() {
+      return Err(ActionError::Incomplete);
+    }
+
+    if parser.remaining[0].key == Key::Char('w') && parser.remaining[0].control {
+      return match parser.remaining.get(1).ok_or(ActionError::Incomplete)?.key {
+        Key::Char('\\') => Ok(Action::Navigate { nav: Navigation::OpenWorkspace }),
+        Key::Char('h') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Left) }),
+        Key::Char('j') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Down) }),
+        Key::Char('k') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Up) }),
+        Key::Char('l') => Ok(Action::Navigate { nav: Navigation::Direction(Direction::Right) }),
+        Key::Char('v') => Ok(Action::Navigate { nav: Navigation::Split(Axis::Vertical) }),
+        Key::Char('f') => Ok(Action::Navigate { nav: Navigation::Split(Axis::Horizontal) }),
+        Key::Char(c @ '0'..='9') => Ok(Action::Navigate { nav: Navigation::Tab(c as u8 - b'0') }),
+        _ => Err(ActionError::Unrecognized),
+      };
+    }
+
+    macro_rules! parse_chain {
+      ($e:expr$(, $rest:expr)* $(,)?) => {
+        match $e {
+          Ok(action) => action,
+          Err(ActionError::Incomplete) => return Err(ActionError::Incomplete),
+          Err(ActionError::Unrecognized) => parse_chain!($($rest),*),
         }
-      }
+      };
 
-      (Mode::Normal, Key::Char(' ')) if !key.control => {
-        match parser.remaining.get(1).ok_or(ActionError::Incomplete)?.key {
-          Key::Char('s') => Ok(Action::Navigate { nav: Navigation::OpenSearch }),
-          _ => Err(ActionError::Unrecognized),
-        }
-      }
+      () => {
+        return Err(ActionError::Unrecognized)
+      };
+    }
 
-      #[cfg(not(target_os = "macos"))]
-      (Mode::Insert, Key::Char('C')) if key.control => Ok(Action::ClipboardCopy),
-      #[cfg(not(target_os = "macos"))]
-      (Mode::Insert, Key::Char('V')) if key.control => Ok(Action::ClipboardPaste),
-      #[cfg(target_os = "macos")]
-      (Mode::Insert, Key::Char('c')) if key.sup => Ok(Action::ClipboardCopy),
-      #[cfg(target_os = "macos")]
-      (Mode::Insert, Key::Char('v')) if key.sup => Ok(Action::ClipboardPaste),
-
-      (Mode::Insert, Key::Char(' ')) if key.control => Ok(Action::Autocomplete),
-      (Mode::Insert, Key::Char('p')) if key.control => Ok(Action::MoveCompletion { next: false }),
-      (Mode::Insert, Key::Char('n')) if key.control => Ok(Action::MoveCompletion { next: true }),
-      (Mode::Insert, Key::Char(c)) if key.control => Ok(Action::Control { char: c }),
-      (Mode::Insert, Key::Tab) => Ok(Action::Tab { shift: key.shift }),
-
-      (Mode::Insert | Mode::Command, Key::Char(c)) => e!(Insert(c)),
-      (Mode::Insert | Mode::Command, Key::Backspace) => e!(Backspace),
-      (Mode::Insert | Mode::Command, Key::Escape) => {
-        Ok(Action::SetMode { mode: Mode::Normal, delta: -1 })
-      }
-      (Mode::Insert | Mode::Command, Key::ArrowUp) => m!(Single(Direction::Up)),
-      (Mode::Insert | Mode::Command, Key::ArrowDown) => m!(Single(Direction::Down)),
-      (Mode::Insert | Mode::Command, Key::ArrowLeft) => m!(Single(Direction::Left)),
-      (Mode::Insert | Mode::Command, Key::ArrowRight) => m!(Single(Direction::Right)),
-
-      (Mode::Visual(_), Key::Escape) => Ok(Action::SetMode { mode: Mode::Normal, delta: 0 }),
-      (Mode::Replace, Key::Escape) => Ok(Action::SetMode { mode: Mode::Normal, delta: -1 }),
-
-      // === edits ===
-      (Mode::Normal, Key::Char('r')) if !key.control => {
-        match parser.remaining.get(1).ok_or(ActionError::Incomplete)?.key {
-          Key::Char(c) => e!(Replace(c)),
-          _ => Err(ActionError::Unrecognized),
-        }
-      }
-      (Mode::Normal, Key::Char('x')) => e!(Delete(Move::Single(Direction::Right))),
-      (Mode::Normal, Key::Char('d')) => {
-        match parser.remaining.get(1).ok_or(ActionError::Incomplete)? {
-          KeyStroke { key: Key::Char('d'), .. } => e!(DeleteLine),
-          _ => {
-            parser.skip();
-            parser.parse_move().map(|m| Action::Edit { e: Edit::Delete(m), count: None })
-          }
-        }
-      }
-      (Mode::Normal, Key::Char('c')) => {
-        match parser.remaining.get(1).ok_or(ActionError::Incomplete)? {
-          KeyStroke { key: Key::Char('c'), .. } => e!(CutLine),
-          _ => {
-            parser.skip();
-            parser.parse_move().map(|m| Action::Edit { e: Edit::Cut(m), count: None })
-          }
-        }
-      }
-      (Mode::Normal, Key::Char('D')) => e!(DeleteRestOfLine),
-      (Mode::Normal, Key::Char('p')) => e!(Paste { after: true }),
-      (Mode::Normal, Key::Char('P')) => e!(Paste { after: false }),
-      (Mode::Normal, Key::Char('u')) => e!(Undo),
-      (Mode::Normal, Key::Char('r')) if key.control => e!(Redo),
-      (Mode::Normal, Key::Char('~')) => e!(SwitchCase),
-
-      // === visual ===
-      (Mode::Visual(_), Key::Char('y' | 'Y')) => Ok(Action::Yank),
-      (Mode::Visual(_), Key::Char('x' | 'd')) => e!(Delete(Move::Single(Direction::Right))),
-
-      // === modes ===
-      (Mode::Normal, Key::Char('i')) => Ok(Action::SetMode { mode: Mode::Insert, delta: 0 }),
-      (Mode::Normal, Key::Char('a')) => Ok(Action::SetMode { mode: Mode::Insert, delta: 1 }),
-      (Mode::Normal, Key::Char('o')) => Ok(Action::Append { after: true }),
-      (Mode::Normal, Key::Char('O')) => Ok(Action::Append { after: false }),
-      (Mode::Visual(VisualMode::Block), Key::Char('v')) if key.control => {
-        Ok(Action::SetMode { mode: Mode::Normal, delta: 0 })
-      }
-      (Mode::Normal | Mode::Visual(_), Key::Char('v')) if key.control => {
-        Ok(Action::SetMode { mode: Mode::Visual(VisualMode::Block), delta: 0 })
-      }
-      (Mode::Visual(VisualMode::Character), Key::Char('v')) => {
-        Ok(Action::SetMode { mode: Mode::Normal, delta: 0 })
-      }
-      (Mode::Normal | Mode::Visual(_), Key::Char('v')) => {
-        Ok(Action::SetMode { mode: Mode::Visual(VisualMode::Character), delta: 0 })
-      }
-      (Mode::Visual(VisualMode::Line), Key::Char('V')) => {
-        Ok(Action::SetMode { mode: Mode::Normal, delta: 0 })
-      }
-      (Mode::Normal | Mode::Visual(_), Key::Char('V')) => {
-        Ok(Action::SetMode { mode: Mode::Visual(VisualMode::Line), delta: 0 })
-      }
-      (Mode::Normal, Key::Char('R')) => Ok(Action::SetMode { mode: Mode::Replace, delta: 0 }),
-      (Mode::Normal, Key::Char(':')) => Ok(Action::SetMode { mode: Mode::Command, delta: 0 }),
-      (Mode::Normal, Key::Char('/')) => Ok(Action::OpenSearch),
-
-      (Mode::Normal | Mode::Visual(_), _) => {
+    let action = match mode {
+      Mode::Normal => parse_chain!(
+        parser.parse_action(&self.normal),
         parser.parse_move().map(|m| Action::Move { count: NonZero::new(count), m })
-      }
+      ),
+      Mode::Visual(VisualMode::Line) => parse_chain!(
+        parser.parse_action(&self.visual.line),
+        parser.parse_action(&self.visual.all),
+        parser.parse_move().map(|m| Action::Move { count: NonZero::new(count), m })
+      ),
+      Mode::Visual(VisualMode::Block) => parse_chain!(
+        parser.parse_action(&self.visual.block),
+        parser.parse_action(&self.visual.all),
+        parser.parse_move().map(|m| Action::Move { count: NonZero::new(count), m })
+      ),
+      Mode::Visual(VisualMode::Character) => parse_chain!(
+        parser.parse_action(&self.visual.character),
+        parser.parse_action(&self.visual.all),
+        parser.parse_move().map(|m| Action::Move { count: NonZero::new(count), m })
+      ),
+      Mode::Insert => {
+        let key = parser.remaining[0];
+        match key.key {
+          #[cfg(not(target_os = "macos"))]
+          Key::Char('C') if key.control => Action::ClipboardCopy,
+          #[cfg(not(target_os = "macos"))]
+          Key::Char('V') if key.control => Action::ClipboardPaste,
+          #[cfg(target_os = "macos")]
+          Key::Char('c') if key.sup => Action::ClipboardCopy,
+          #[cfg(target_os = "macos")]
+          Key::Char('v') if key.sup => Action::ClipboardPaste,
 
-      _ => Err(ActionError::Unrecognized),
+          Key::Char(' ') if key.control => Action::Autocomplete,
+          Key::Char('p') if key.control => Action::MoveCompletion { next: false },
+          Key::Char('n') if key.control => Action::MoveCompletion { next: true },
+          Key::Char(c) if key.control => Action::Control { char: c },
+          Key::Tab => Action::Tab { shift: key.shift },
+
+          Key::Char(c) => Action::Edit { count: None, e: Edit::Insert(c) },
+          Key::Backspace => Action::Edit { count: None, e: Edit::Backspace },
+          Key::Escape => Action::SetMode { mode: Mode::Normal, delta: -1 },
+
+          Key::ArrowUp => Action::Move { count: None, m: Move::Single(Direction::Up) },
+          Key::ArrowDown => Action::Move { count: None, m: Move::Single(Direction::Down) },
+          Key::ArrowLeft => Action::Move { count: None, m: Move::Single(Direction::Left) },
+          Key::ArrowRight => Action::Move { count: None, m: Move::Single(Direction::Right) },
+
+          _ => return Err(ActionError::Unrecognized),
+        }
+      }
+      _ => return Err(ActionError::Unrecognized),
     };
+
+    Ok(action)
   }
 }
 
@@ -236,6 +189,15 @@ impl KeyParser<'_> {
 
     self.remaining = &self.remaining[1..];
     Ok(c)
+  }
+
+  fn parse_action(
+    &mut self,
+    keybinds: &KeyMap<grammar::Action>,
+  ) -> Result<be_input::Action, ActionError> {
+    let (a, n) = keybinds.get(&self.remaining)?;
+    self.remaining = &self.remaining[n..];
+    self.translate_action(a)
   }
 
   fn parse_move(&mut self) -> Result<be_input::Move, ActionError> {
