@@ -63,6 +63,11 @@ pub enum Edit {
   SwitchCase,
 }
 
+struct KeyParser<'a> {
+  keybinds:  &'a Keybinds,
+  remaining: &'a [KeyStroke],
+}
+
 impl Keybinds {
   pub fn parse(&self, mode: Mode, input: &[KeyStroke]) -> Result<be_input::Action, ActionError> {
     use be_input::*;
@@ -222,17 +227,29 @@ impl Keybinds {
     }
   }
 
-  fn parse_move(&self, mut keys: &[KeyStroke]) -> Result<be_input::Move, ActionError> {
-    let (m, n) = self.movement.get(&keys)?;
-    keys = &keys[n..];
-    self.translate_move(m, keys)
+  fn parse_move(&self, keys: &[KeyStroke]) -> Result<be_input::Move, ActionError> {
+    let mut parser = KeyParser { keybinds: self, remaining: keys };
+    parser.parse_move()
+  }
+}
+
+impl KeyParser<'_> {
+  fn parse_char(&mut self) -> Result<char, ActionError> {
+    let Key::Char(c) = self.remaining.get(0).ok_or(ActionError::Incomplete)?.key else {
+      return Err(ActionError::Unrecognized);
+    };
+
+    self.remaining = &self.remaining[1..];
+    Ok(c)
   }
 
-  fn translate_action(
-    &self,
-    a: &grammar::Action,
-    keys: &[KeyStroke],
-  ) -> Result<be_input::Action, ActionError> {
+  fn parse_move(&mut self) -> Result<be_input::Move, ActionError> {
+    let (m, n) = self.keybinds.movement.get(&self.remaining)?;
+    self.remaining = &self.remaining[n..];
+    self.translate_move(m)
+  }
+
+  fn translate_action(&mut self, a: &grammar::Action) -> Result<be_input::Action, ActionError> {
     use crate::grammar::Action as G;
     use be_input::Action::*;
 
@@ -240,7 +257,7 @@ impl Keybinds {
       G::SetMode { mode, delta } => SetMode { mode, delta },
       G::OpenSearch => OpenSearch,
       G::Append { after } => Append { after },
-      G::Edit { ref edit } => Edit { count: None, e: self.translate_edit(edit, keys)? },
+      G::Edit { ref edit } => Edit { count: None, e: self.translate_edit(edit)? },
       G::Navigate { nav } => Navigate { nav },
       G::Autocomplete => Autocomplete,
       G::MoveCompletion { next } => MoveCompletion { next },
@@ -250,18 +267,14 @@ impl Keybinds {
     })
   }
 
-  fn translate_edit(
-    &self,
-    e: &grammar::Edit,
-    keys: &[KeyStroke],
-  ) -> Result<be_input::Edit, ActionError> {
+  fn translate_edit(&mut self, e: &grammar::Edit) -> Result<be_input::Edit, ActionError> {
     use crate::grammar::Edit as G;
     use be_input::Edit::*;
 
     Ok(match *e {
-      G::Replace => Replace(self.parse_char(keys)?),
-      G::Delete => Delete(self.parse_move(keys)?),
-      G::Cut => Cut(self.parse_move(keys)?),
+      G::Replace => Replace(self.parse_char()?),
+      G::Delete => Delete(self.parse_move()?),
+      G::Cut => Cut(self.parse_move()?),
       G::DeleteLine => DeleteLine,
       G::CutLine => CutLine,
       G::DeleteRestOfLine => DeleteRestOfLine,
@@ -273,11 +286,7 @@ impl Keybinds {
     })
   }
 
-  fn translate_move(
-    &self,
-    m: &grammar::Move,
-    keys: &[KeyStroke],
-  ) -> Result<be_input::Move, ActionError> {
+  fn translate_move(&mut self, m: &grammar::Move) -> Result<be_input::Move, ActionError> {
     use crate::grammar::Move as G;
     use be_input::Move::*;
 
@@ -297,10 +306,7 @@ impl Keybinds {
       G::Diagnostic(d) => Diagnostic(d),
       G::GotoDefinition => GotoDefinition,
       G::GotoReference => GotoReference,
-      G::Char(d) => match keys.first().ok_or(ActionError::Incomplete)?.key {
-        Key::Char(c) => Char(c, d),
-        _ => return Err(ActionError::Unrecognized),
-      },
+      G::Char(d) => Char(self.parse_char()?, d),
       G::BackDefinition => BackDefinition,
     })
   }
