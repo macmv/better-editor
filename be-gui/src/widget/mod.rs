@@ -17,7 +17,7 @@ pub use button::Button;
 pub use stack::{Align, Justify, Stack};
 pub use text::Text;
 
-use crate::{CursorKind, Layout, MouseEvent, Render, RenderStore, WidgetId, WidgetPath};
+use crate::{CursorKind, Layout, Location, MouseEvent, Render, RenderStore, WidgetId, WidgetPath};
 
 pub struct WidgetStore {
   pub content: Box<dyn Widget>,
@@ -42,7 +42,7 @@ pub struct WidgetLayout<'a, 'b> {
   widgets: &'a mut WidgetCollection,
 
   seen:    HashSet<WidgetId>,
-  next_id: u32,
+  next_id: HashMap<Location, u32>,
 }
 
 pub struct LayoutCtx<'a, 'b> {
@@ -308,7 +308,7 @@ impl WidgetCollection {
   }
 
   pub fn begin<'a, 'b>(&'a mut self, layout: &'a mut Layout<'b>) -> WidgetLayout<'a, 'b> {
-    WidgetLayout { layout, widgets: self, seen: HashSet::new(), next_id: 0 }
+    WidgetLayout { layout, widgets: self, seen: HashSet::new(), next_id: HashMap::new() }
   }
 
   pub fn draw(&mut self, render: &mut Render) {
@@ -335,15 +335,17 @@ impl WidgetCollection {
 }
 
 impl WidgetLayout<'_, '_> {
+  #[track_caller]
   pub fn add_widget<'b, W: Widget + 'static>(&'b mut self, widget: W) -> WidgetMut<'b, W> {
-    let path = self.next_path();
+    let loc = Location::new(std::panic::Location::caller());
+    let idx = {
+      let entry = self.next_id.entry(loc).or_insert(0);
+      let idx = *entry;
+      *entry += 1;
+      idx
+    };
+    let path = WidgetPath { loc, idx };
     self.add_widget_with_path(path, widget)
-  }
-
-  fn next_path(&mut self) -> WidgetPath {
-    let id = self.next_id;
-    self.next_id += 1;
-    WidgetPath(vec![id])
   }
 
   fn add_widget_with_path<'b, W: Widget + 'static>(
@@ -352,6 +354,9 @@ impl WidgetLayout<'_, '_> {
     widget: W,
   ) -> WidgetMut<'b, W> {
     let id = if let Some(id) = self.clean_widget_at::<W>(&path) {
+      *(&mut *self.widgets.get_mut(id).unwrap().content as &mut dyn Any)
+        .downcast_mut::<W>()
+        .unwrap() = widget;
       id
     } else {
       self.widgets.create(WidgetStore::new(path, widget))
@@ -364,23 +369,14 @@ impl WidgetLayout<'_, '_> {
   }
 
   fn clean_widget_at<W: Widget + 'static>(&self, path: &WidgetPath) -> Option<WidgetId> {
-    if let Some(id) = self.widgets.get_path(&path) {
-      if (&*self.widgets.get(id).unwrap().content as &dyn Any).type_id()
-        != std::any::TypeId::of::<W>()
-      {
-        return None;
-      }
+    let id = self.widgets.get_path(path)?;
+    let existing = self.widgets.get(id).unwrap();
 
-      for child in self.widgets.get(id).unwrap().children() {
-        if !self.seen.contains(child) {
-          return None;
-        }
-      }
-
-      Some(id)
-    } else {
-      None
+    if (&*existing.content as &dyn Any).type_id() != std::any::TypeId::of::<W>() {
+      return None;
     }
+
+    Some(id)
   }
 
   pub fn finish(self, root: WidgetId) {

@@ -2,6 +2,7 @@ mod render;
 
 use std::{
   collections::HashMap,
+  fmt,
   hash::Hash,
   ops::{Index, IndexMut},
   path::PathBuf,
@@ -123,8 +124,36 @@ pub struct ViewId(u64);
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct WidgetId(u64);
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct WidgetPath(Vec<u32>);
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+pub struct Location {
+  pub file: &'static str,
+  pub line: u32,
+  pub col:  u32,
+}
+
+impl Location {
+  pub fn new(loc: &std::panic::Location<'static>) -> Self {
+    Location { file: loc.file(), line: loc.line(), col: loc.column() }
+  }
+}
+
+impl fmt::Debug for Location {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}:{}:{}", self.file, self.line, self.col)
+  }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+pub struct WidgetPath {
+  loc: Location,
+  idx: u32,
+}
+
+impl fmt::Debug for WidgetPath {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{:?}[{}]", self.loc, self.idx)
+  }
+}
 
 impl ViewId {
   pub const TABS: ViewId = ViewId(u64::MAX);
