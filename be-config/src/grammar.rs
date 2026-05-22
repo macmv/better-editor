@@ -285,17 +285,24 @@ impl<T> KeyMap<T> {
     }
 
     let mut found_partial = false;
+    let mut best_match = None;
 
     for (k, v) in self.keys.iter() {
       if k.0.starts_with(seq) {
         found_partial = true;
       }
 
-      if seq.starts_with(&k.0) {
-        return Ok((v, k.0.len()));
+      if seq.starts_with(&k.0) && best_match.is_none_or(|(_, l)| l < k.0.len()) {
+        best_match = Some((v, k.0.len()));
       }
     }
 
-    Err(if found_partial { ActionError::Incomplete } else { ActionError::Unrecognized })
+    if let Some(best) = best_match {
+      Ok(best)
+    } else if found_partial {
+      Err(ActionError::Incomplete)
+    } else {
+      Err(ActionError::Unrecognized)
+    }
   }
 }
