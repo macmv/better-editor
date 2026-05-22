@@ -1,9 +1,12 @@
 use std::collections::HashMap;
 
 use be_input::Direction;
-use kurbo::{Axis, Point, Rect, Size};
+use kurbo::{Arc, Axis, BezPath, Point, Rect, Size, Vec2};
 
-use crate::{Distance, Layout, RenderStore, ViewId, view::View};
+use crate::{Layout, RenderStore, ViewId, render::Render, view::View};
+
+/// The width of the divider between split panes, in pixels.
+pub const DIVIDER_WIDTH: f64 = 4.0;
 
 pub enum Pane {
   View(ViewId),
@@ -86,18 +89,25 @@ impl Pane {
 
   fn resize_inner(&mut self, path: &[usize], index: usize, delta: f64, size: Size) {
     if let Pane::Split(split) = self {
+      let num_dividers = (split.items.len().saturating_sub(1)) as f64;
       if path.is_empty() {
         let axis_size = match split.axis {
-          Axis::Vertical => size.width,
-          Axis::Horizontal => size.height,
+          Axis::Vertical => size.width - num_dividers * DIVIDER_WIDTH,
+          Axis::Horizontal => size.height - num_dividers * DIVIDER_WIDTH,
         };
         split.resize_divider(index, delta, axis_size);
       } else {
         let child_idx = path[0];
         let percent = split.items[child_idx].0;
         let child_size = match split.axis {
-          Axis::Vertical => Size::new(percent * size.width, size.height),
-          Axis::Horizontal => Size::new(size.width, percent * size.height),
+          Axis::Vertical => {
+            let usable = size.width - num_dividers * DIVIDER_WIDTH;
+            Size::new(percent * usable, size.height)
+          }
+          Axis::Horizontal => {
+            let usable = size.height - num_dividers * DIVIDER_WIDTH;
+            Size::new(size.width, percent * usable)
+          }
         };
         split.items[child_idx].1.resize_inner(&path[1..], index, delta, child_size);
       }
@@ -188,6 +198,110 @@ impl Pane {
     }
   }
 
+  pub fn draw_dividers(&self, render: &mut Render, offset: Point, size: Size) {
+    const RADIUS: f64 = 8.0;
+
+    fn bevel(origin: impl Into<Point>, direction: Vec2) -> BezPath {
+      let origin = origin.into();
+
+      let (start, sweep): (f64, f64) = if direction.x == 1.0 && direction.y == 1.0 {
+        (180.0, 90.0)
+      } else if direction.x == -1.0 && direction.y == 1.0 {
+        (0.0, -90.0)
+      } else if direction.x == 1.0 && direction.y == -1.0 {
+        (180.0, -90.0)
+      } else {
+        (0.0, 90.0)
+      };
+
+      let mut bevel = BezPath::new();
+      bevel.move_to((origin.x + RADIUS * direction.x, origin.y));
+      bevel.line_to((origin.x, origin.y));
+      bevel.line_to((origin.x, origin.y + RADIUS * direction.y));
+      bevel.extend(
+        Arc::new(
+          (origin.x + RADIUS * direction.x, origin.y + RADIUS * direction.y),
+          Vec2::splat(RADIUS),
+          start.to_radians(),
+          sweep.to_radians(),
+          0.0,
+        )
+        .append_iter(0.1),
+      );
+      return bevel;
+    }
+
+    let color = render.theme().background_lower;
+
+    if let Pane::Split(split) = self {
+      let num_dividers = (split.items.len().saturating_sub(1)) as f64;
+      match split.axis {
+        Axis::Vertical => {
+          let usable = size.width - num_dividers * DIVIDER_WIDTH;
+          let mut raw_x = 0.0;
+          let mut x = offset.x;
+          for (i, (percent, item)) in split.items.iter().enumerate() {
+            let item_width = percent * usable;
+            raw_x += item_width;
+            if i < split.items.len() - 1 {
+              let center = (offset.x + raw_x + DIVIDER_WIDTH / 2.0).round();
+              let x0 = center - DIVIDER_WIDTH / 2.0;
+              let x1 = center + DIVIDER_WIDTH / 2.0;
+
+              item.draw_dividers(render, Point::new(x, offset.y), Size::new(x0 - x, size.height));
+              render.fill(&Rect::new(x0, offset.y, x1, offset.y + size.height), color);
+
+              render.fill(&bevel((x0, offset.y), Vec2::new(-1.0, 1.0)), color);
+              render.fill(&bevel((x1, offset.y), Vec2::new(1.0, 1.0)), color);
+              render.fill(&bevel((x0, offset.y + size.height), Vec2::new(-1.0, -1.0)), color);
+              render.fill(&bevel((x1, offset.y + size.height), Vec2::new(1.0, -1.0)), color);
+
+              x = x1;
+              raw_x += DIVIDER_WIDTH;
+            } else {
+              item.draw_dividers(
+                render,
+                Point::new(x, offset.y),
+                Size::new(offset.x + size.width - x, size.height),
+              );
+            }
+          }
+        }
+        Axis::Horizontal => {
+          let usable = size.height - num_dividers * DIVIDER_WIDTH;
+          let mut raw_y = 0.0;
+          let mut y = offset.y;
+          for (i, (percent, item)) in split.items.iter().enumerate() {
+            let item_height = percent * usable;
+            raw_y += item_height;
+            if i < split.items.len() - 1 {
+              let center = (offset.y + raw_y + DIVIDER_WIDTH / 2.0).round();
+              let y0 = center - DIVIDER_WIDTH / 2.0;
+              let y1 = center + DIVIDER_WIDTH / 2.0;
+
+              item.draw_dividers(render, Point::new(offset.x, y), Size::new(size.width, y0 - y));
+              render.fill(&Rect::new(offset.x, y0, offset.x + size.width, y1), color);
+
+              render.fill(&bevel((offset.x, y0), Vec2::new(1.0, -1.0)), color);
+              render.fill(&bevel((offset.x + size.width, y0), Vec2::new(-1.0, -1.0)), color);
+              render.fill(&bevel((offset.x, y1), Vec2::new(1.0, 1.0)), color);
+              render.fill(&bevel((offset.x + size.width, y1), Vec2::new(-1.0, 1.0)), color);
+
+              y = y1;
+              raw_y += DIVIDER_WIDTH;
+            } else {
+              item.draw_dividers(
+                render,
+                Point::new(offset.x, y),
+                Size::new(size.width, offset.y + size.height - y),
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+
   pub fn views(&self) -> ViewsIter<'_> { ViewsIter { stack: vec![self] } }
 }
 
@@ -197,38 +311,53 @@ impl Split {
 
   fn layout(&self, views: &mut HashMap<ViewId, View>, layout: &mut Layout) {
     let mut bounds = Rect::from_origin_size(Point::ZERO, layout.size());
+    let num_dividers = (self.items.len().saturating_sub(1)) as f64;
 
     match self.axis {
       Axis::Vertical => {
-        for (percent, item) in self.items.iter() {
-          let mut distance = Distance::Percent(*percent).to_pixels_in(layout.size().width);
-          if distance < 0.0 {
-            distance += layout.size().width;
-          }
+        let usable = layout.size().width - num_dividers * DIVIDER_WIDTH;
+        let mut raw_x = 0.0;
+        for (i, (percent, item)) in self.items.iter().enumerate() {
+          let distance = percent * usable;
+          raw_x += distance;
 
-          bounds.x1 = bounds.x0 + distance;
-          layout.clipped(bounds, |layout| item.layout(views, layout));
-          bounds.x0 += distance;
+          if i < self.items.len() - 1 {
+            let center = (raw_x + DIVIDER_WIDTH / 2.0).round();
+            bounds.x1 = center - DIVIDER_WIDTH / 2.0;
+            layout.clipped(bounds, |layout| item.layout(views, layout));
+            bounds.x0 = center + DIVIDER_WIDTH / 2.0;
+            raw_x += DIVIDER_WIDTH;
+          } else {
+            bounds.x1 = layout.size().width;
+            layout.clipped(bounds, |layout| item.layout(views, layout));
+          }
         }
       }
 
       Axis::Horizontal => {
-        for (percent, item) in self.items.iter() {
-          let mut distance = Distance::Percent(*percent).to_pixels_in(layout.size().height);
-          if distance < 0.0 {
-            distance += layout.size().height;
-          }
+        let usable = layout.size().height - num_dividers * DIVIDER_WIDTH;
+        let mut raw_y = 0.0;
+        for (i, (percent, item)) in self.items.iter().enumerate() {
+          let distance = percent * usable;
+          raw_y += distance;
 
-          bounds.y1 = bounds.y0 + distance;
-          layout.clipped(bounds, |layout| item.layout(views, layout));
-          bounds.y0 += distance;
+          if i < self.items.len() - 1 {
+            let center = (raw_y + DIVIDER_WIDTH / 2.0).round();
+            bounds.y1 = center - DIVIDER_WIDTH / 2.0;
+            layout.clipped(bounds, |layout| item.layout(views, layout));
+            bounds.y0 = center + DIVIDER_WIDTH / 2.0;
+            raw_y += DIVIDER_WIDTH;
+          } else {
+            bounds.y1 = layout.size().height;
+            layout.clipped(bounds, |layout| item.layout(views, layout));
+          }
         }
       }
     }
   }
 
   fn hit_pane(&self, pos: Point, size: Size, path: &mut Vec<usize>) -> Option<HitResult> {
-    const DIVIDER_HIT: f64 = 4.0;
+    const HIT_WIDTH: f64 = 8.0;
 
     let total = match self.axis {
       Axis::Vertical => size.width,
@@ -239,19 +368,29 @@ impl Split {
       Axis::Horizontal => pos.y,
     };
 
-    let mut offset = 0.0;
-    let boundaries: Vec<f64> = self
-      .items
-      .iter()
-      .map(|(p, _)| {
-        offset += p * total;
-        offset
-      })
-      .collect();
+    let num_dividers = (self.items.len().saturating_sub(1)) as f64;
+    let usable = total - num_dividers * DIVIDER_WIDTH;
 
-    // Check dividers before recursing into children.
-    for (i, &boundary) in boundaries[..boundaries.len() - 1].iter().enumerate() {
-      if (coord - boundary).abs() < DIVIDER_HIT {
+    // Compute the start and end of each item region, accounting for divider gaps.
+    let mut offset = 0.0;
+    let mut regions: Vec<(f64, f64)> = Vec::new();
+    for (i, (p, _)) in self.items.iter().enumerate() {
+      let item_size = p * usable;
+      let start = offset;
+      let end = offset + item_size;
+      regions.push((start, end));
+      offset = end;
+      if i < self.items.len() - 1 {
+        offset += DIVIDER_WIDTH;
+      }
+    }
+
+    // Check dividers first (the gaps between regions), with an extended hit zone.
+    let hit_margin = (HIT_WIDTH - DIVIDER_WIDTH) / 2.0;
+    for (i, _) in regions[..regions.len() - 1].iter().enumerate() {
+      let divider_start = regions[i].1 - hit_margin;
+      let divider_end = regions[i + 1].0 + hit_margin;
+      if coord >= divider_start && coord < divider_end {
         return Some(HitResult::Divider(SplitPath {
           path:  path.clone(),
           index: i,
@@ -260,23 +399,20 @@ impl Split {
       }
     }
 
-    let mut prev = 0.0;
-    for (i, (&boundary, (_, item))) in boundaries.iter().zip(self.items.iter()).enumerate() {
-      if coord < boundary || i == self.items.len() - 1 {
+    // Recurse into the child that contains the coordinate.
+    for (i, ((start, end), (_, item))) in regions.iter().zip(self.items.iter()).enumerate() {
+      if coord < *end || i == self.items.len() - 1 {
         path.push(i);
         let (child_pos, child_size) = match self.axis {
-          Axis::Vertical => {
-            (Point::new(pos.x - prev, pos.y), Size::new(boundary - prev, size.height))
-          }
+          Axis::Vertical => (Point::new(pos.x - start, pos.y), Size::new(end - start, size.height)),
           Axis::Horizontal => {
-            (Point::new(pos.x, pos.y - prev), Size::new(size.width, boundary - prev))
+            (Point::new(pos.x, pos.y - start), Size::new(size.width, end - start))
           }
         };
         let result = item.hit_pane_inner(child_pos, child_size, path);
         path.pop();
         return result;
       }
-      prev = boundary;
     }
 
     None

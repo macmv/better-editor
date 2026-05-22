@@ -541,6 +541,8 @@ impl WorkspaceLayout {
           let view = state.views.get_mut(view).unwrap();
           render.clipped(view.bounds, |render| view.draw(render));
         }
+        tab.content.draw_dividers(render, Point::ZERO, render.size());
+
         if let Some(popup) = &mut tab.popup {
           render.clipped(popup.bounds(render.size()), |render| popup.draw(render));
         }
