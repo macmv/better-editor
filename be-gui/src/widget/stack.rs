@@ -12,7 +12,6 @@ pub struct Stack {
   cross_size: Option<f64>,
 
   children: Vec<WidgetId>,
-  sizes:    Vec<Rect>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -35,16 +34,7 @@ pub enum Justify {
 
 impl Stack {
   pub fn new(axis: Axis, align: Align, justify: Justify, children: Vec<WidgetId>) -> Self {
-    Stack {
-      axis,
-      align,
-      justify,
-      children,
-      gap: 0.0,
-      main_size: None,
-      cross_size: None,
-      sizes: vec![],
-    }
+    Stack { axis, align, justify, children, gap: 0.0, main_size: None, cross_size: None }
   }
 
   pub fn gap(mut self, gap: f64) -> Self {
@@ -65,19 +55,21 @@ impl Stack {
 }
 
 impl Widget for Stack {
-  fn layout(&mut self, layout: &mut LayoutCtx) -> Option<kurbo::Size> {
-    self.sizes.clear();
+  type State = ();
+
+  fn layout(&self, _state: &mut (), layout: &mut LayoutCtx) -> Option<kurbo::Size> {
+    let mut sizes = Vec::with_capacity(self.children.len());
     let mut size = Size::new(0.0, 0.0);
     for child in self.children.iter() {
       let child_size = layout.layout_widget(*child);
       match self.axis {
         Axis::Horizontal => {
-          self.sizes.push(Rect::from_origin_size((size.width, 0.0), child_size));
+          sizes.push(Rect::from_origin_size((size.width, 0.0), child_size));
           size.width += child_size.width;
           size.height = child_size.height.max(size.height);
         }
         Axis::Vertical => {
-          self.sizes.push(Rect::from_origin_size((0.0, size.height), child_size));
+          sizes.push(Rect::from_origin_size((0.0, size.height), child_size));
           size.height += child_size.height;
           size.width = child_size.width.max(size.width);
         }
@@ -124,7 +116,7 @@ impl Widget for Stack {
       self.gap
     };
 
-    for (&child, bounds) in self.children.iter().zip(self.sizes.iter_mut()) {
+    for (&child, bounds) in self.children.iter().zip(sizes.iter_mut()) {
       match self.axis {
         Axis::Horizontal => {
           let main_width = bounds.width();

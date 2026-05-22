@@ -1,5 +1,5 @@
 use std::{
-  any::Any,
+  any::{Any, TypeId},
   collections::{HashMap, HashSet},
   fmt,
   ops::{Deref, DerefMut},
@@ -20,11 +20,11 @@ pub use text::Text;
 use crate::{CursorKind, Layout, Location, MouseEvent, Render, RenderStore, WidgetId, WidgetPath};
 
 pub struct WidgetStore {
-  pub content: Box<dyn Widget>,
+  content:     Box<dyn DynWidget>,
+  state:       Box<dyn Any>,
   /// Bounds of this widget, relative to the parent.
   pub bounds:  Rect,
   pub path:    WidgetPath,
-
   pub visible: bool,
 }
 
@@ -52,47 +52,72 @@ pub struct LayoutCtx<'a, 'b> {
 }
 
 pub struct WidgetMut<'a, W: Widget> {
-  pub id:     WidgetId,
-  pub widget: &'a mut W,
+  pub id:    WidgetId,
+  pub state: &'a mut W::State,
 }
 
-impl fmt::Debug for WidgetCollection {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    writeln!(f, "WidgetCollection {{")?;
-    match self.root {
-      None => {
-        writeln!(f, "  root: None")?;
-      }
-      Some(root) => {
-        writeln!(f, "  root: {:?}", root)?;
-        writeln!(f, "  tree:")?;
+trait DynWidget {
+  fn dyn_layout(&self, state: &mut dyn Any, layout: &mut LayoutCtx) -> Option<Size>;
+  fn dyn_draw(&self, state: &dyn Any, render: &mut Render);
+  fn dyn_on_mouse(&self, state: &mut dyn Any, mouse: &MouseEvent);
+  fn dyn_children(&self) -> &[WidgetId];
+  fn dyn_type_id(&self) -> TypeId;
+  fn dyn_type_name(&self) -> &'static str;
+}
 
-        let mut stack = vec![(root, 2usize)];
-        while let Some((id, depth)) = stack.pop() {
-          let indent = "  ".repeat(depth);
-          match self.widgets.get(&id) {
-            Some(store) => {
-              writeln!(
-                f,
-                "{}- {:?} path: {:?} type: {} bounds: {:?}",
-                indent,
-                id,
-                store.path,
-                store.content.type_name(),
-                store.bounds
-              )?;
-              for &child in store.children().iter().rev() {
-                stack.push((child, depth + 1));
-              }
-            }
-            None => {
-              writeln!(f, "{}- {:?} path: <missing>", indent, id)?;
-            }
-          }
-        }
-      }
+impl<W: Widget + 'static> DynWidget for W {
+  fn dyn_layout(&self, state: &mut dyn Any, layout: &mut LayoutCtx) -> Option<Size> {
+    W::layout(self, state.downcast_mut::<W::State>().unwrap(), layout)
+  }
+  fn dyn_draw(&self, state: &dyn Any, render: &mut Render) {
+    W::draw(self, state.downcast_ref::<W::State>().unwrap(), render)
+  }
+  fn dyn_on_mouse(&self, state: &mut dyn Any, mouse: &MouseEvent) {
+    W::on_mouse(self, state.downcast_mut::<W::State>().unwrap(), mouse)
+  }
+  fn dyn_children(&self) -> &[WidgetId] { W::children(self) }
+  fn dyn_type_id(&self) -> TypeId { TypeId::of::<W>() }
+  fn dyn_type_name(&self) -> &'static str { std::any::type_name::<W>() }
+}
+
+pub trait Widget: 'static {
+  type State: Default + 'static;
+
+  fn layout(&self, state: &mut Self::State, layout: &mut LayoutCtx) -> Option<Size> {
+    let _ = (state, layout);
+    None
+  }
+  fn children(&self) -> &[WidgetId] { &[] }
+  fn draw(&self, state: &Self::State, render: &mut Render) { let _ = (state, render); }
+  fn on_mouse(&self, state: &mut Self::State, mouse: &MouseEvent) { let _ = (state, mouse); }
+}
+
+impl WidgetStore {
+  pub fn new<W: Widget + 'static>(path: WidgetPath, widget: W) -> Self {
+    WidgetStore {
+      content: Box::new(widget),
+      state: Box::new(W::State::default()),
+      bounds: Rect::ZERO,
+      path,
+      visible: true,
     }
-    writeln!(f, "}}")
+  }
+
+  pub fn hide(&mut self) { self.visible = false }
+  pub fn show(&mut self) { self.visible = true }
+
+  pub fn children(&self) -> &[WidgetId] { self.content.dyn_children() }
+
+  pub fn animated(&self) -> bool { false }
+
+  pub fn layout(&mut self, layout: &mut LayoutCtx) -> Size {
+    if let Some(size) = self.content.dyn_layout(&mut *self.state, layout) {
+      let current = layout.current_bounds();
+      self.bounds = current.with_size(size);
+    } else {
+      self.bounds = layout.current_bounds();
+    }
+    self.bounds.size()
   }
 }
 
@@ -110,62 +135,6 @@ pub struct Corners {
   pub top_right:    f64,
   pub bottom_left:  f64,
   pub bottom_right: f64,
-}
-
-pub trait Widget: std::any::Any {
-  fn layout(&mut self, layout: &mut LayoutCtx) -> Option<Size> {
-    let _ = layout;
-    None
-  }
-
-  fn children(&self) -> &[WidgetId] { &[] }
-
-  fn draw(&mut self, render: &mut Render) { let _ = render; }
-
-  fn on_mouse(&mut self, mouse: &MouseEvent) { let _ = mouse; }
-  /// Called when the widget becomes visible or invisible.
-  fn on_visible(&mut self, visible: bool) { let _ = visible; }
-  /// Called when the widget gains or loses keyboard focus.
-  fn on_focus(&mut self, focus: bool) { let _ = focus; }
-
-  fn type_name(&self) -> &'static str { std::any::type_name::<Self>() }
-
-  fn apply_if<U: Widget + 'static>(self, cond: bool, f: impl FnOnce(Self) -> U) -> Box<dyn Widget>
-  where
-    Self: Sized + 'static,
-  {
-    if cond { Box::new(f(self)) } else { Box::new(self) }
-  }
-}
-
-impl WidgetStore {
-  pub fn new(path: WidgetPath, content: impl Widget + 'static) -> Self {
-    WidgetStore { content: Box::new(content), bounds: Rect::ZERO, path, visible: true }
-  }
-
-  pub fn hide(&mut self) { self.visible = false }
-  pub fn show(&mut self) { self.visible = true }
-
-  pub fn children(&self) -> &[WidgetId] { self.content.children() }
-
-  pub fn animated(&self) -> bool { false }
-
-  pub fn layout(&mut self, layout: &mut LayoutCtx) -> Size {
-    if let Some(size) = self.content.layout(layout) {
-      let current = layout.current_bounds();
-      self.bounds = current.with_size(size);
-    } else {
-      self.bounds = layout.current_bounds();
-    }
-    self.bounds.size()
-  }
-
-  pub fn cast<W: Widget>(&self) -> Option<&W> {
-    (&*self.content as &dyn std::any::Any).downcast_ref()
-  }
-  pub fn cast_mut<W: Widget>(&mut self) -> Option<&mut W> {
-    (&mut *self.content as &mut dyn std::any::Any).downcast_mut()
-  }
 }
 
 #[allow(unused)]
@@ -195,6 +164,46 @@ impl From<f64> for Corners {
   fn from(c: f64) -> Self { Corners::all(c) }
 }
 
+impl fmt::Debug for WidgetCollection {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    writeln!(f, "WidgetCollection {{")?;
+    match self.root {
+      None => {
+        writeln!(f, "  root: None")?;
+      }
+      Some(root) => {
+        writeln!(f, "  root: {:?}", root)?;
+        writeln!(f, "  tree:")?;
+
+        let mut stack = vec![(root, 2usize)];
+        while let Some((id, depth)) = stack.pop() {
+          let indent = "  ".repeat(depth);
+          match self.widgets.get(&id) {
+            Some(store) => {
+              writeln!(
+                f,
+                "{}- {:?} path: {:?} type: {} bounds: {:?}",
+                indent,
+                id,
+                store.path,
+                store.content.dyn_type_name(),
+                store.bounds
+              )?;
+              for &child in store.children().iter().rev() {
+                stack.push((child, depth + 1));
+              }
+            }
+            None => {
+              writeln!(f, "{}- {:?} path: <missing>", indent, id)?;
+            }
+          }
+        }
+      }
+    }
+    writeln!(f, "}}")
+  }
+}
+
 impl WidgetCollection {
   pub fn new() -> Self {
     WidgetCollection {
@@ -219,7 +228,7 @@ impl WidgetCollection {
   pub fn create(&mut self, store: WidgetStore) -> WidgetId {
     let id = self.next_widget_id;
     self.next_widget_id.0 += 1;
-    self.paths.insert(store.path.clone(), id);
+    self.paths.insert(store.path, id);
     self.widgets.insert(id, store);
     id
   }
@@ -236,11 +245,11 @@ impl WidgetCollection {
 
         self.hover_path(new_path);
 
-        for w in self.hover_path.iter().rev() {
+        for w in self.hover_path.clone().iter().rev() {
           if let Some(w) = self.widgets.get_mut(w)
             && let Some(ev) = ev.within(&w.bounds)
           {
-            w.content.on_mouse(&ev);
+            w.content.dyn_on_mouse(&mut *w.state, &ev);
           }
         }
       }
@@ -249,10 +258,10 @@ impl WidgetCollection {
         self.hover_path(vec![]);
       }
       MouseEvent::Button { .. } | MouseEvent::Scroll { .. } => {
-        for w in self.hover_path.iter().rev() {
-          let widget = self.widgets.get_mut(w).unwrap();
+        for w in self.hover_path.clone().iter().rev() {
+          let widget = self.widgets.get_mut(&w).unwrap();
           if let Some(ev) = ev.within(&widget.bounds) {
-            widget.content.on_mouse(&ev)
+            widget.content.dyn_on_mouse(&mut *widget.state, &ev);
           }
         }
       }
@@ -271,19 +280,18 @@ impl WidgetCollection {
 
       for w in self.hover_path[diverge_idx..].iter().rev() {
         if let Some(w) = self.widgets.get_mut(w) {
-          w.content.on_mouse(&MouseEvent::Leave);
+          w.content.dyn_on_mouse(&mut *w.state, &MouseEvent::Leave);
         }
       }
       for w in path[diverge_idx..].iter().rev() {
-        self.widgets.get_mut(w).unwrap().content.on_mouse(&MouseEvent::Enter);
+        let w = self.widgets.get_mut(w).unwrap();
+        w.content.dyn_on_mouse(&mut *w.state, &MouseEvent::Enter);
       }
 
       self.hover_path = path;
     }
   }
 
-  /// Returns a list of all widgets hit by the given point. Parents are returned
-  /// first.
   fn hit_widgets(&self, pos: Point, size: Size) -> Option<Vec<WidgetId>> {
     let mut path = vec![];
 
@@ -323,8 +331,8 @@ impl WidgetCollection {
 
         let bounds = widget.bounds + outer_bounds.origin().to_vec2();
         render.clipped(bounds, |render| {
-          let mut widget = self.widgets.remove(&id).unwrap();
-          widget.content.draw(render);
+          let widget = self.widgets.remove(&id).unwrap();
+          widget.content.dyn_draw(&*widget.state, render);
           self.widgets.insert(id, widget);
         });
         let widget = self.widgets.get(&id).unwrap();
@@ -354,9 +362,7 @@ impl WidgetLayout<'_, '_> {
     widget: W,
   ) -> WidgetMut<'b, W> {
     let id = if let Some(id) = self.clean_widget_at::<W>(&path) {
-      *(&mut *self.widgets.get_mut(id).unwrap().content as &mut dyn Any)
-        .downcast_mut::<W>()
-        .unwrap() = widget;
+      self.widgets.get_mut(id).unwrap().content = Box::new(widget);
       id
     } else {
       self.widgets.create(WidgetStore::new(path, widget))
@@ -364,18 +370,16 @@ impl WidgetLayout<'_, '_> {
     if !self.seen.insert(id) {
       eprintln!("duplicate widget at path {:?}", self.widgets.get(id).unwrap().path);
     }
-    let widget = self.widgets.get_mut(id).unwrap();
-    WidgetMut { id, widget: (&mut *widget.content as &mut dyn Any).downcast_mut().unwrap() }
+    let store = self.widgets.get_mut(id).unwrap();
+    WidgetMut { id, state: store.state.downcast_mut::<W::State>().unwrap() }
   }
 
   fn clean_widget_at<W: Widget + 'static>(&self, path: &WidgetPath) -> Option<WidgetId> {
     let id = self.widgets.get_path(path)?;
     let existing = self.widgets.get(id).unwrap();
-
-    if (&*existing.content as &dyn Any).type_id() != std::any::TypeId::of::<W>() {
+    if existing.content.dyn_type_id() != TypeId::of::<W>() {
       return None;
     }
-
     Some(id)
   }
 
@@ -434,11 +438,11 @@ impl DerefMut for LayoutCtx<'_, '_> {
 }
 
 impl<W: Widget> Deref for WidgetMut<'_, W> {
-  type Target = W;
+  type Target = W::State;
 
-  fn deref(&self) -> &Self::Target { self.widget }
+  fn deref(&self) -> &W::State { self.state }
 }
 
 impl<W: Widget> DerefMut for WidgetMut<'_, W> {
-  fn deref_mut(&mut self) -> &mut Self::Target { self.widget }
+  fn deref_mut(&mut self) -> &mut W::State { self.state }
 }
