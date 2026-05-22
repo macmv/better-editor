@@ -113,6 +113,9 @@ impl EditorView {
 
   pub fn open(&mut self, path: &std::path::Path, workspace: &mut Workspace) -> io::Result<()> {
     self.editor = workspace.open_file(path)?;
+    if let Focus::Unfocused { ref mut cursor } = self.focus {
+      *cursor = Cursor::START;
+    }
     self.cached_layouts.clear();
     Ok(())
   }
