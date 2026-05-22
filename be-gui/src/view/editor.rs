@@ -109,6 +109,8 @@ impl EditorView {
     // TODO: Save if unsaved.
     self.editor = editor.editor.clone();
     self.focus = Focus::Unfocused { cursor: editor.cursor() };
+    self.horizontal_scroll = editor.horizontal_scroll;
+    self.vertical_scroll = editor.vertical_scroll;
     self.cached_layouts.clear();
   }
 
