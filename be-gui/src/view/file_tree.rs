@@ -1,6 +1,5 @@
 use std::{
   ops::{BitOr, BitOrAssign},
-  path::Path,
   sync::LazyLock,
 };
 
@@ -184,16 +183,15 @@ impl FileTree {
     visit_dir(&mut self.tree, &mut 0, self.active)
   }
 
-  pub fn open(&mut self, path: &Path) {
+  pub fn open(&mut self, path: &WorkspacePath) {
     let mut curr = &mut self.tree;
     let mut new_active = 0;
 
-    let Ok(path) = path.strip_prefix(".") else { return };
     let mut components = path.components().peekable();
 
     while let Some(component) = components.next() {
       match component {
-        std::path::Component::Normal(name) => {
+        be_fs::Component::Normal(name) => {
           let Some(items) = curr.items.as_mut() else { return };
 
           match items.iter_mut().find(|it| {

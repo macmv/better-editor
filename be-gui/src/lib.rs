@@ -8,7 +8,7 @@ use std::{
 };
 
 use be_editor::CursorOrLsp;
-use be_fs::WorkspaceRoot;
+use be_fs::{WorkspacePath, WorkspaceRoot};
 use be_input::{Action, KeyStroke, Mode, Navigation};
 use be_workspace::{Workspace, WorkspaceEvent};
 use kurbo::{Axis, Point, Rect, Size};
@@ -607,8 +607,13 @@ impl WorkspaceLayout {
       }
     }
 
-    if let Some(tree) = self.current_file_tree_mut() {
-      tree.open(path);
+    if let Ok(rel) = path.strip_prefix(self.workspace.root.as_path())
+      && let Some(rel_str) = rel.to_str()
+    {
+      let rel_str = rel_str.to_owned();
+      if let Some(tree) = self.current_file_tree_mut() {
+        tree.open(WorkspacePath::new(&rel_str));
+      }
     }
   }
 
