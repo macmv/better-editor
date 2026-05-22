@@ -14,7 +14,7 @@ use be_workspace::{Workspace, WorkspaceEvent};
 use kurbo::{Axis, Point, Rect, Size};
 pub use render::*;
 
-use pane::Pane;
+use pane::{HitResult, Pane, SplitPath};
 use view::View;
 
 use crate::{
@@ -67,7 +67,8 @@ struct WorkspaceLayout {
   tabs:          Vec<Tab>,
   views:         ViewCollection,
   tab_layout:    WidgetCollection,
-  current_hover: Option<ViewId>,
+  current_hover: Option<HitResult>,
+  dragging:      Option<(SplitPath, f64)>,
   notify:        Notify,
 }
 
@@ -290,6 +291,7 @@ impl WorkspaceLayout {
       views: ViewCollection::new(),
       tab_layout: WidgetCollection::new(),
       current_hover: None,
+      dragging: None,
       notify: store.notifier(),
     };
 
@@ -415,20 +417,34 @@ impl WorkspaceLayout {
     }
   }
 
-  fn hit_view(&self, pos: Point, size: kurbo::Size) -> Option<ViewId> {
+  fn hit_pane(&self, pos: Point, size: kurbo::Size) -> Option<HitResult> {
     if pos.y < size.height - 25.0 {
       let tab = &self.tabs[self.active];
-      tab.content.hit_view(pos, Size::new(size.width, size.height - 25.0))
+      tab.content.hit_pane(pos, Size::new(size.width, size.height - 25.0))
     } else {
-      Some(ViewId::TABS)
+      Some(HitResult::View(ViewId::TABS))
     }
   }
 
   fn on_mouse(&mut self, ev: MouseEvent, size: kurbo::Size, store: &RenderStore) -> CursorKind {
-    match ev {
+    match &ev {
       MouseEvent::Move { pos } => {
-        let new_view = self.hit_view(pos, size);
-        match (self.current_hover, new_view) {
+        let pos = *pos;
+
+        if let Some((ref path, ref mut last)) = self.dragging {
+          let coord = if path.axis == Axis::Vertical { pos.x } else { pos.y };
+          let delta = coord - *last;
+          *last = coord;
+          let content_size = Size::new(size.width, size.height - 25.0);
+          let path = path.clone();
+          self.tabs[self.active].content.resize(&path, delta, content_size);
+        }
+
+        let new_hover = self.hit_pane(pos, size);
+
+        let old_id = self.current_hover.as_ref().and_then(HitResult::view_id);
+        let new_id = new_hover.as_ref().and_then(HitResult::view_id);
+        match (old_id, new_id) {
           (Some(old), Some(new)) if old != new => {
             self.send_mouse_event(old, &MouseEvent::Leave, size, store);
             self.send_mouse_event(new, &MouseEvent::Enter, size, store);
@@ -442,21 +458,47 @@ impl WorkspaceLayout {
           _ => {}
         }
 
-        self.current_hover = new_view;
+        self.current_hover = new_hover;
       }
 
       MouseEvent::Leave => {
-        if let Some(old) = self.current_hover {
-          self.send_mouse_event(old, &MouseEvent::Leave, size, store);
-          self.current_hover = None;
+        if let Some(id) = self.current_hover.as_ref().and_then(HitResult::view_id) {
+          self.send_mouse_event(id, &MouseEvent::Leave, size, store);
         }
+        self.current_hover = None;
+        self.dragging = None;
+      }
+
+      MouseEvent::Button { pos, pressed: true, .. } => {
+        if let Some(HitResult::Divider(ref path)) = self.current_hover {
+          let coord = if path.axis == Axis::Vertical { pos.x } else { pos.y };
+          self.dragging = Some((path.clone(), coord));
+        }
+      }
+
+      MouseEvent::Button { pressed: false, .. } => {
+        self.dragging = None;
       }
 
       _ => {}
     }
 
-    if let Some(current) = self.current_hover {
-      self.send_mouse_event(current, &ev, size, store).unwrap_or(CursorKind::Default)
+    if let Some((ref path, _)) = self.dragging {
+      return match path.axis {
+        Axis::Vertical => CursorKind::ResizeEastWest,
+        Axis::Horizontal => CursorKind::ResizeNorthSouth,
+      };
+    }
+
+    if let Some(HitResult::Divider(ref path)) = self.current_hover {
+      return match path.axis {
+        Axis::Vertical => CursorKind::ResizeEastWest,
+        Axis::Horizontal => CursorKind::ResizeNorthSouth,
+      };
+    }
+
+    if let Some(id) = self.current_hover.as_ref().and_then(HitResult::view_id) {
+      self.send_mouse_event(id, &ev, size, store).unwrap_or(CursorKind::Default)
     } else {
       CursorKind::Default
     }

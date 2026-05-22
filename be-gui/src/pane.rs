@@ -1,13 +1,40 @@
 use std::collections::HashMap;
 
 use be_input::Direction;
-use kurbo::{Axis, Point, Rect};
+use kurbo::{Axis, Point, Rect, Size};
 
 use crate::{Distance, Layout, RenderStore, ViewId, view::View};
 
 pub enum Pane {
   View(ViewId),
   Split(Split),
+}
+
+/// Identifies a split divider within the pane tree.
+///
+/// `path` is the sequence of child indices to walk from the root `Pane` down
+/// to the `Split` that owns the divider. `index` is which gap within that
+/// split (between `items[index]` and `items[index + 1]`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct SplitPath {
+  path:     Vec<usize>,
+  index:    usize,
+  pub axis: Axis,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum HitResult {
+  View(ViewId),
+  Divider(SplitPath),
+}
+
+impl HitResult {
+  pub fn view_id(&self) -> Option<ViewId> {
+    match self {
+      HitResult::View(id) => Some(*id),
+      HitResult::Divider(_) => None,
+    }
+  }
 }
 
 pub struct Split {
@@ -42,10 +69,38 @@ impl Pane {
     }
   }
 
-  pub fn hit_view(&self, pos: Point, size: kurbo::Size) -> Option<ViewId> {
+  pub fn hit_pane(&self, pos: Point, size: Size) -> Option<HitResult> {
+    self.hit_pane_inner(pos, size, &mut vec![])
+  }
+
+  fn hit_pane_inner(&self, pos: Point, size: Size, path: &mut Vec<usize>) -> Option<HitResult> {
     match self {
-      Pane::View(id) => Some(*id),
-      Pane::Split(split) => split.hit_view(pos, size),
+      Pane::View(id) => Some(HitResult::View(*id)),
+      Pane::Split(split) => split.hit_pane(pos, size, path),
+    }
+  }
+
+  pub fn resize(&mut self, path: &SplitPath, delta: f64, content_size: Size) {
+    self.resize_inner(&path.path, path.index, delta, content_size);
+  }
+
+  fn resize_inner(&mut self, path: &[usize], index: usize, delta: f64, size: Size) {
+    if let Pane::Split(split) = self {
+      if path.is_empty() {
+        let axis_size = match split.axis {
+          Axis::Vertical => size.width,
+          Axis::Horizontal => size.height,
+        };
+        split.resize_divider(index, delta, axis_size);
+      } else {
+        let child_idx = path[0];
+        let percent = split.items[child_idx].0;
+        let child_size = match split.axis {
+          Axis::Vertical => Size::new(percent * size.width, size.height),
+          Axis::Horizontal => Size::new(size.width, percent * size.height),
+        };
+        split.items[child_idx].1.resize_inner(&path[1..], index, delta, child_size);
+      }
     }
   }
 
@@ -172,42 +227,70 @@ impl Split {
     }
   }
 
-  pub fn hit_view(&self, pos: Point, size: kurbo::Size) -> Option<ViewId> {
-    let mut bounds = Rect::from_origin_size(Point::ZERO, size);
+  fn hit_pane(&self, pos: Point, size: Size, path: &mut Vec<usize>) -> Option<HitResult> {
+    const DIVIDER_HIT: f64 = 4.0;
 
-    match self.axis {
-      Axis::Vertical => {
-        for (percent, item) in self.items.iter() {
-          let mut distance = Distance::Percent(*percent).to_pixels_in(size.width);
-          if distance < 0.0 {
-            distance += size.width;
-          }
+    let total = match self.axis {
+      Axis::Vertical => size.width,
+      Axis::Horizontal => size.height,
+    };
+    let coord = match self.axis {
+      Axis::Vertical => pos.x,
+      Axis::Horizontal => pos.y,
+    };
 
-          bounds.x1 = bounds.x0 + distance;
-          if bounds.contains(pos) {
-            return item.hit_view(pos - bounds.origin().to_vec2(), bounds.size());
-          }
-          bounds.x0 += distance;
-        }
-      }
+    let mut offset = 0.0;
+    let boundaries: Vec<f64> = self
+      .items
+      .iter()
+      .map(|(p, _)| {
+        offset += p * total;
+        offset
+      })
+      .collect();
 
-      Axis::Horizontal => {
-        for (percent, item) in self.items.iter() {
-          let mut distance = Distance::Percent(*percent).to_pixels_in(size.height);
-          if distance < 0.0 {
-            distance += size.height;
-          }
-
-          bounds.y1 = bounds.y0 + distance;
-          if bounds.contains(pos) {
-            return item.hit_view(pos - bounds.origin().to_vec2(), bounds.size());
-          }
-          bounds.y0 += distance;
-        }
+    // Check dividers before recursing into children.
+    for (i, &boundary) in boundaries[..boundaries.len() - 1].iter().enumerate() {
+      if (coord - boundary).abs() < DIVIDER_HIT {
+        return Some(HitResult::Divider(SplitPath {
+          path:  path.clone(),
+          index: i,
+          axis:  self.axis,
+        }));
       }
     }
 
+    let mut prev = 0.0;
+    for (i, (&boundary, (_, item))) in boundaries.iter().zip(self.items.iter()).enumerate() {
+      if coord < boundary || i == self.items.len() - 1 {
+        path.push(i);
+        let (child_pos, child_size) = match self.axis {
+          Axis::Vertical => {
+            (Point::new(pos.x - prev, pos.y), Size::new(boundary - prev, size.height))
+          }
+          Axis::Horizontal => {
+            (Point::new(pos.x, pos.y - prev), Size::new(size.width, boundary - prev))
+          }
+        };
+        let result = item.hit_pane_inner(child_pos, child_size, path);
+        path.pop();
+        return result;
+      }
+      prev = boundary;
+    }
+
     None
+  }
+
+  fn resize_divider(&mut self, index: usize, delta: f64, axis_size: f64) {
+    let delta_pct = delta / axis_size;
+    let min = 0.05;
+    let new_a = self.items[index].0 + delta_pct;
+    let new_b = self.items[index + 1].0 - delta_pct;
+    if new_a >= min && new_b >= min {
+      self.items[index].0 = new_a;
+      self.items[index + 1].0 = new_b;
+    }
   }
 
   /// Returns true if the focus changed.
