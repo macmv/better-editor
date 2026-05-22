@@ -95,6 +95,10 @@ impl Widget for Stack {
       }
     }
 
+    if self.children.is_empty() {
+      return Some(size);
+    }
+
     let mut main = match (self.axis, self.align) {
       (_, Align::Start | Align::SpaceBetween) => 0.0,
       (Axis::Horizontal, Align::Center) => (layout.current_bounds().width() - size.width) / 2.0,
