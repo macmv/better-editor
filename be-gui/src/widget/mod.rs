@@ -35,7 +35,6 @@ pub struct WidgetCollection {
 
   pub(crate) root: Option<WidgetId>,
   hover_path:      Vec<WidgetId>,
-  bounds:          Rect,
 }
 
 pub struct WidgetLayout<'a, 'b> {
@@ -204,7 +203,6 @@ impl WidgetCollection {
       widgets:        HashMap::new(),
       root:           None,
       hover_path:     Vec::new(),
-      bounds:         Rect::ZERO,
     }
   }
 
@@ -310,7 +308,6 @@ impl WidgetCollection {
   }
 
   pub fn begin<'a, 'b>(&'a mut self, layout: &'a mut Layout<'b>) -> WidgetLayout<'a, 'b> {
-    self.bounds = layout.current_bounds();
     WidgetLayout { layout, widgets: self, seen: HashSet::new(), next_id: 0 }
   }
 
