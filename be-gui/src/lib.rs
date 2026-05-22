@@ -686,6 +686,7 @@ impl WorkspaceLayout {
   }
 
   fn layout_tabs(&mut self, layout: &mut Layout) {
+    let tab_height = layout.size().height;
     let mut tab_layout = self.tab_layout.begin(layout);
 
     let mut left = vec![];
@@ -705,12 +706,16 @@ impl WorkspaceLayout {
 
     let left = tab_layout
       .add_widget(
-        crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, left).gap(5.0),
+        crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, left)
+          .gap(5.0)
+          .cross_size(tab_height),
       )
       .id;
     let right = tab_layout
       .add_widget(
-        crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, right).gap(5.0),
+        crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, right)
+          .gap(5.0)
+          .cross_size(tab_height),
       )
       .id;
     let root = tab_layout
