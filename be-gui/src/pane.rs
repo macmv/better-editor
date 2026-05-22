@@ -121,6 +121,41 @@ impl Pane {
     }
   }
 
+  /// Returns the active `ViewId` of the pane immediately adjacent to `view`
+  /// in the split tree, or `None` if `view` is not found or has no sibling.
+  pub fn neighbor_of(&self, view: ViewId) -> Option<ViewId> {
+    match self {
+      Pane::View(_) => None,
+      Pane::Split(split) => {
+        // Check if any direct child contains `view`.
+        let pos = split.items.iter().position(|(_, pane)| pane.contains(view));
+        if let Some(idx) = pos {
+          // Pick the sibling immediately after, or before if idx is last.
+          let sibling_idx =
+            if idx + 1 < split.items.len() { idx + 1 } else { idx.saturating_sub(1) };
+          if sibling_idx != idx {
+            return Some(split.items[sibling_idx].1.active());
+          }
+        }
+        // Recurse into children.
+        for (_, pane) in &split.items {
+          if let Some(id) = pane.neighbor_of(view) {
+            return Some(id);
+          }
+        }
+        None
+      }
+    }
+  }
+
+  /// Returns true if this pane is or contains `view`.
+  fn contains(&self, view: ViewId) -> bool {
+    match self {
+      Pane::View(id) => *id == view,
+      Pane::Split(split) => split.items.iter().any(|(_, pane)| pane.contains(view)),
+    }
+  }
+
   pub fn focus(&mut self, direction: Direction) -> Option<ViewId> {
     match self {
       Pane::View(_) => None,

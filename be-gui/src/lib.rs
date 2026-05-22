@@ -563,9 +563,41 @@ impl WorkspaceLayout {
   }
 
   fn open(&mut self, path: &std::path::Path, cursor: Option<CursorOrLsp>) {
-    if let ViewContent::Editor(e) =
-      &mut self.views.get_mut(self.tabs[self.active].content.active()).unwrap().content
+    let active_id = self.tabs[self.active].content.active();
+    let active_is_editor =
+      matches!(&self.views.get(active_id).unwrap().content, ViewContent::Editor(_));
+
+    // When a non-editor view (e.g. file tree) opens a file, target its
+    // geometric neighbor.
+    let target_id = if active_is_editor {
+      active_id
+    } else {
+      self.tabs[self.active].content.neighbor_of(active_id).unwrap_or(active_id)
+    };
+
+    // If the neighbor isn't an editor either, fall back to any visible editor.
+    let target_id = if matches!(&self.views.get(target_id).unwrap().content, ViewContent::Editor(_))
     {
+      target_id
+    } else if let Some(id) = self
+      .views
+      .views
+      .iter()
+      .filter(|(_, v)| v.visible())
+      .find_map(|(id, v)| matches!(v.content, ViewContent::Editor(_)).then_some(*id))
+    {
+      id
+    } else {
+      return;
+    };
+
+    if !active_is_editor && target_id != active_id {
+      self.tabs[self.active].content.focus_view(target_id);
+      self.views.get_mut(active_id).unwrap().on_focus(false);
+      self.views.get_mut(target_id).unwrap().on_focus(true);
+    }
+
+    if let ViewContent::Editor(e) = &mut self.views.get_mut(target_id).unwrap().content {
       let res = e.open(path, &mut self.workspace);
       if let Some(cursor) = cursor
         && res.is_ok()
@@ -573,39 +605,10 @@ impl WorkspaceLayout {
         let cursor = cursor.into_cursor(e.editor.doc());
         e.editor.move_to(cursor);
       }
+    }
 
-      if let Some(tree) = self.current_file_tree_mut() {
-        tree.open(path);
-      }
-    } else if let Some(e) =
-      self.views.views.values_mut().filter(|v| v.visible()).find_map(|v| match &mut v.content {
-        ViewContent::Editor(e) => Some(e),
-        _ => None,
-      })
-    {
-      let res = e.open(path, &mut self.workspace);
-      if let Some(cursor) = cursor
-        && res.is_ok()
-      {
-        let cursor = cursor.into_cursor(e.editor.doc());
-        e.editor.move_to(cursor);
-      }
-
-      let prev_focus = self.active_tab().content.active();
-      // FIXME: Need some way of focusing a particular view id.
-      match &mut self.active_tab_mut().content {
-        Pane::Split(s) => s.active = 1,
-        _ => {}
-      }
-
-      let new_focus = self.active_tab().content.active();
-
-      self.views.get_mut(prev_focus).unwrap().on_focus(false);
-      self.views.get_mut(new_focus).unwrap().on_focus(true);
-
-      if let Some(tree) = self.current_file_tree_mut() {
-        tree.open(path);
-      }
+    if let Some(tree) = self.current_file_tree_mut() {
+      tree.open(path);
     }
   }
 
