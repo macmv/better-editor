@@ -108,6 +108,7 @@ impl EditorView {
   pub fn split_from(&mut self, editor: &EditorView) {
     // TODO: Save if unsaved.
     self.editor = editor.editor.clone();
+    self.focus = Focus::Unfocused { cursor: editor.cursor() };
     self.cached_layouts.clear();
   }
 
