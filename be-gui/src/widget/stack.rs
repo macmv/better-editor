@@ -157,19 +157,6 @@ impl Widget for Stack {
       layout.set_bounds(child, *bounds);
     }
 
-    if let Some(main_size) = self.main_size {
-      match self.axis {
-        Axis::Horizontal => size.width = main_size,
-        Axis::Vertical => size.height = main_size,
-      }
-    }
-    if let Some(cross_size) = self.cross_size {
-      match self.axis {
-        Axis::Horizontal => size.height = cross_size,
-        Axis::Vertical => size.width = cross_size,
-      }
-    }
-
     Some(size)
   }
 
