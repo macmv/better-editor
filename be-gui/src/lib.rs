@@ -469,12 +469,23 @@ impl WorkspaceLayout {
         self.dragging = None;
       }
 
-      MouseEvent::Button { pos, pressed: true, .. } => {
-        if let Some(HitResult::Divider(ref path)) = self.current_hover {
+      MouseEvent::Button { pos, pressed: true, .. } => match &self.current_hover {
+        Some(HitResult::Divider(path)) => {
           let coord = if path.axis == Axis::Vertical { pos.x } else { pos.y };
           self.dragging = Some((path.clone(), coord));
         }
-      }
+        Some(HitResult::View(id)) if *id != ViewId::TABS => {
+          let id = *id;
+          let tab = &mut self.tabs[self.active];
+          let prev_focus = tab.content.active();
+          if id != prev_focus {
+            tab.content.focus_view(id);
+            self.views.get_mut(prev_focus).unwrap().on_focus(false);
+            self.views.get_mut(id).unwrap().on_focus(true);
+          }
+        }
+        _ => {}
+      },
 
       MouseEvent::Button { pressed: false, .. } => {
         self.dragging = None;

@@ -128,6 +128,23 @@ impl Pane {
     }
   }
 
+  /// Sets active indices at every level of the tree so that `view` becomes the
+  /// active leaf.  Returns true if the view was found.
+  pub fn focus_view(&mut self, view: ViewId) -> bool {
+    match self {
+      Pane::View(id) => *id == view,
+      Pane::Split(split) => {
+        for (i, (_, pane)) in split.items.iter_mut().enumerate() {
+          if pane.focus_view(view) {
+            split.active = i;
+            return true;
+          }
+        }
+        false
+      }
+    }
+  }
+
   pub fn close(&mut self, view: ViewId, views: &mut HashMap<ViewId, View>) {
     match self {
       Pane::View(v) => {
