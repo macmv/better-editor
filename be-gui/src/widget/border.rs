@@ -11,6 +11,7 @@ pub struct Border {
 }
 
 impl Border {
+  #[allow(dead_code)]
   pub fn draw_border(&self, render: &mut crate::Render) {
     if self.radius == Corners::all(0.0) {
       if self.borders.left > 0.0 {
