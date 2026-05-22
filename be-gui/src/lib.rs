@@ -716,7 +716,15 @@ impl WorkspaceLayout {
     }
 
     let mut right = vec![];
-    right.push(tab_layout.add_widget(crate::widget::Text::new("Rust")).id);
+    match self.views.get(self.tabs[self.active].content.active()).unwrap().content {
+      ViewContent::Editor(ref e) => {
+        if let Some(ft) = e.editor.file_type() {
+          let name = &e.editor.config.borrow().languages[&ft].display_name;
+          right.push(tab_layout.add_widget(crate::widget::Text::new(name)).id);
+        }
+      }
+      _ => {}
+    }
 
     let left = tab_layout
       .add_widget(
