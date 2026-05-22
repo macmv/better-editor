@@ -129,8 +129,8 @@ impl Widget for Stack {
           bounds.x1 = main + main_width;
           bounds.y0 = match self.justify {
             Justify::Start => 0.0,
-            Justify::Center => (layout.current_bounds().height() - size.height) / 2.0,
-            Justify::End => layout.current_bounds().height() - size.height,
+            Justify::Center => (size.height - cross_width) / 2.0,
+            Justify::End => size.height - cross_width,
           };
           bounds.y1 = bounds.y0 + cross_width;
           main += main_width + gap;
@@ -142,8 +142,8 @@ impl Widget for Stack {
           bounds.y1 = main + main_width;
           bounds.x0 = match self.justify {
             Justify::Start => 0.0,
-            Justify::Center => (layout.current_bounds().width() - size.width) / 2.0,
-            Justify::End => layout.current_bounds().width() - size.width,
+            Justify::Center => (size.width - cross_width) / 2.0,
+            Justify::End => size.width - cross_width,
           };
           bounds.x1 = bounds.x0 + cross_width;
           main += main_width + gap;
