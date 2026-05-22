@@ -37,6 +37,8 @@ impl EditorState {
     let (file, doc) = OpenedFile::open(&canon)?;
     self.file = Some(file);
     self.doc = doc;
+    self.history.clear();
+    self.history_position = 0;
     self.damage_all = true;
 
     self.on_open_file();
