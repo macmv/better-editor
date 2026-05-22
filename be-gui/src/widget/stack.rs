@@ -8,6 +8,9 @@ pub struct Stack {
   justify: Justify,
   gap:     f64,
 
+  main_size:  Option<f64>,
+  cross_size: Option<f64>,
+
   children: Vec<WidgetId>,
   sizes:    Vec<Rect>,
 }
@@ -32,11 +35,31 @@ pub enum Justify {
 
 impl Stack {
   pub fn new(axis: Axis, align: Align, justify: Justify, children: Vec<WidgetId>) -> Self {
-    Stack { axis, align, justify, children, gap: 0.0, sizes: vec![] }
+    Stack {
+      axis,
+      align,
+      justify,
+      children,
+      gap: 0.0,
+      main_size: None,
+      cross_size: None,
+      sizes: vec![],
+    }
   }
 
   pub fn gap(mut self, gap: f64) -> Self {
     self.gap = gap;
+    self
+  }
+
+  #[allow(dead_code)]
+  pub fn main_size(mut self, main_size: f64) -> Self {
+    self.main_size = Some(main_size);
+    self
+  }
+
+  pub fn cross_size(mut self, cross_size: f64) -> Self {
+    self.cross_size = Some(cross_size);
     self
   }
 }
@@ -58,6 +81,17 @@ impl Widget for Stack {
           size.height += child_size.height;
           size.width = child_size.width.max(size.width);
         }
+      }
+    }
+
+    match self.axis {
+      Axis::Horizontal => {
+        size.width = self.main_size.unwrap_or(size.width);
+        size.height = self.cross_size.unwrap_or(size.height);
+      }
+      Axis::Vertical => {
+        size.height = self.main_size.unwrap_or(size.height);
+        size.width = self.cross_size.unwrap_or(size.width);
       }
     }
 
@@ -117,6 +151,19 @@ impl Widget for Stack {
       };
 
       layout.set_bounds(child, *bounds);
+    }
+
+    if let Some(main_size) = self.main_size {
+      match self.axis {
+        Axis::Horizontal => size.width = main_size,
+        Axis::Vertical => size.height = main_size,
+      }
+    }
+    if let Some(cross_size) = self.cross_size {
+      match self.axis {
+        Axis::Horizontal => size.height = cross_size,
+        Axis::Vertical => size.width = cross_size,
+      }
     }
 
     Some(size)
