@@ -57,6 +57,14 @@ impl<S: Summary> Dimension<S> for S {
   fn add_summary(&mut self, summary: &S) { Summary::add_summary(self, summary) }
 }
 
+/// A dimension that tracks nothing, for cursors that only walk items.
+#[derive(Clone, Copy, Default, Debug)]
+pub struct Nothing;
+
+impl<S: Summary> Dimension<S> for Nothing {
+  fn add_summary(&mut self, _: &S) {}
+}
+
 /// Something a cursor can seek to, compared against a dimension value.
 pub trait SeekTarget<D> {
   /// Compares the target against a location. `Less` means the target is before
@@ -116,6 +124,11 @@ fn sum_of<'a, S: Summary + 'a>(summaries: impl Iterator<Item = &'a S>) -> S {
 }
 
 impl<T: Item> Node<T> {
+  /// Builds a leaf from items whose summaries are already known.
+  fn leaf_with(items: Vec<T>, summaries: Vec<T::Summary>) -> Node<T> {
+    Node::Leaf { summary: sum_of(summaries.iter()), items, summaries }
+  }
+
   fn leaf(items: Vec<T>) -> Node<T> {
     let summaries: Vec<_> = items.iter().map(T::summary).collect();
     Node::Leaf { summary: sum_of(summaries.iter()), items, summaries }
@@ -365,8 +378,14 @@ impl<T: Item> SumTree<T> {
 
 fn tree_of<T: Item>(node: Arc<Node<T>>) -> SumTree<T> { SumTree { root: Some(node) } }
 
-fn leaf_tree<T: Item>(items: &[T]) -> SumTree<T> {
-  if items.is_empty() { SumTree::new() } else { tree_of(Arc::new(Node::leaf(items.to_vec()))) }
+fn leaf_tree<T: Item>(items: &[T], summaries: &[T::Summary]) -> SumTree<T> {
+  if items.is_empty() {
+    SumTree::new()
+  } else {
+    // Reuse the cached summaries: computing an item's summary can be expensive
+    // (for a rope, it scans the text).
+    tree_of(Arc::new(Node::leaf_with(items.to_vec(), summaries.to_vec())))
+  }
 }
 
 fn concat<T: Item>(a: SumTree<T>, b: SumTree<T>) -> SumTree<T> {
@@ -466,7 +485,10 @@ where
         }
         *pos = end;
       }
-      (leaf_tree(&items[..idx]), leaf_tree(&items[idx..]))
+      (
+        leaf_tree(&items[..idx], &summaries[..idx]),
+        leaf_tree(&items[idx..], &summaries[idx..]),
+      )
     }
     Node::Internal { children, .. } => {
       let mut found = None;
@@ -506,6 +528,36 @@ fn even_chunks<V>(v: Vec<V>) -> Vec<Vec<V>> {
   (0..groups).map(|i| iter.by_ref().take(base + (i < extra) as usize).collect()).collect()
 }
 
+/// Builds the upper levels of a tree over `level`, a row of leaves.
+fn tree_from_leaves<T: Item>(mut level: Vec<Arc<Node<T>>>) -> SumTree<T> {
+  let mut height = 0;
+  while level.len() > 1 {
+    height += 1;
+    level = even_chunks(level).into_iter().map(|c| Arc::new(Node::internal(height, c))).collect();
+  }
+  SumTree { root: level.pop() }
+}
+
+impl<T: Item> SumTree<T> {
+  /// Builds a tree from items and their summaries, bottom-up with full nodes.
+  /// Each summary must equal `item.summary()`. This lets the caller compute
+  /// the summaries elsewhere, for example on several threads.
+  pub fn from_parts(items: Vec<T>, summaries: Vec<T::Summary>) -> Self {
+    assert_eq!(items.len(), summaries.len());
+    if items.is_empty() {
+      return SumTree::new();
+    }
+
+    // Both are cut into the same groups, since the sizes only depend on the length.
+    let level = even_chunks(items)
+      .into_iter()
+      .zip(even_chunks(summaries))
+      .map(|(items, summaries)| Arc::new(Node::leaf_with(items, summaries)))
+      .collect();
+    tree_from_leaves(level)
+  }
+}
+
 impl<T: Item> FromIterator<T> for SumTree<T> {
   /// Builds the tree bottom-up with full nodes.
   fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
@@ -514,15 +566,8 @@ impl<T: Item> FromIterator<T> for SumTree<T> {
       return SumTree::new();
     }
 
-    let mut level: Vec<Arc<Node<T>>> =
-      even_chunks(items).into_iter().map(|c| Arc::new(Node::leaf(c))).collect();
-
-    let mut height = 0;
-    while level.len() > 1 {
-      height += 1;
-      level = even_chunks(level).into_iter().map(|c| Arc::new(Node::internal(height, c))).collect();
-    }
-    SumTree { root: level.pop() }
+    let level = even_chunks(items).into_iter().map(|c| Arc::new(Node::leaf(c))).collect();
+    tree_from_leaves(level)
   }
 }
 
@@ -552,6 +597,16 @@ pub struct Cursor<'a, T: Item, D: Dimension<T::Summary>> {
   stack: Vec<Frame<'a, T, D>>,
   /// The dimension summed over everything before the current item.
   start: D,
+}
+
+impl<T: Item, D: Clone> Clone for Frame<'_, T, D> {
+  fn clone(&self) -> Self { Frame { node: self.node, index: self.index, base: self.base.clone() } }
+}
+
+impl<'a, T: Item, D: Dimension<T::Summary>> Clone for Cursor<'a, T, D> {
+  fn clone(&self) -> Self {
+    Cursor { tree: self.tree, stack: self.stack.clone(), start: self.start.clone() }
+  }
 }
 
 struct Frame<'a, T: Item, D> {
@@ -745,6 +800,87 @@ impl<'a, T: Item, D: Dimension<T::Summary>> Cursor<'a, T, D> {
     }
   }
 
+  /// The summary of the items from this cursor's item up to, but not
+  /// including, `end`'s item, in O(log n). `end` must be at or after this
+  /// cursor, in the same tree. A cursor past the end counts as after the last
+  /// item.
+  pub fn summary_until<D2: Dimension<T::Summary>>(&self, end: &Cursor<'a, T, D2>) -> T::Summary {
+    let mut total = T::Summary::default();
+    let a = &self.stack;
+    let b = &end.stack;
+    if a.is_empty() {
+      return total;
+    }
+    debug_assert!(std::ptr::eq(self.tree, end.tree));
+
+    // The index `end` takes at a level. Past the end is one past the last entry
+    // of the root.
+    let b_index = |level: usize| -> usize {
+      match b.get(level) {
+        Some(f) => f.index,
+        None => match a[level].node {
+          Node::Internal { children, .. } => children.len(),
+          Node::Leaf { items, .. } => items.len(),
+        },
+      }
+    };
+
+    // The shallowest level where the two paths differ.
+    let depth = a.len();
+    let Some(l) = (0..depth).find(|&l| a[l].index != b_index(l)) else { return total };
+    debug_assert!(a[l].index < b_index(l), "end is before the cursor");
+
+    // What is left of this cursor's path below `l`, deepest first.
+    for k in (l + 1..depth).rev() {
+      match a[k].node {
+        Node::Leaf { summaries, .. } => {
+          for s in &summaries[a[k].index..] {
+            Summary::add_summary(&mut total, s);
+          }
+        }
+        Node::Internal { children, .. } => {
+          for c in &children[a[k].index + 1..] {
+            Summary::add_summary(&mut total, c.summary());
+          }
+        }
+      }
+    }
+
+    // Everything between the two paths where they diverge.
+    match a[l].node {
+      Node::Leaf { summaries, .. } => {
+        for s in &summaries[a[l].index..b_index(l)] {
+          Summary::add_summary(&mut total, s);
+        }
+      }
+      Node::Internal { children, .. } => {
+        for c in &children[a[l].index + 1..b_index(l)] {
+          Summary::add_summary(&mut total, c.summary());
+        }
+      }
+    }
+
+    // What `end`'s path covers before it, below `l`, shallowest first.
+    if !b.is_empty() {
+      for k in l + 1..depth {
+        match b[k].node {
+          Node::Leaf { summaries, .. } => {
+            for s in &summaries[..b[k].index] {
+              Summary::add_summary(&mut total, s);
+            }
+          }
+          Node::Internal { children, .. } => {
+            for c in &children[..b[k].index] {
+              Summary::add_summary(&mut total, c.summary());
+            }
+          }
+        }
+      }
+    }
+
+    total
+  }
+
   /// Like [`Cursor::seek`], but starts from the current position instead of
   /// the root, so it costs O(log d) for a target `d` items ahead. The target
   /// must not be before the current item (with the same or a later bias than
@@ -830,7 +966,7 @@ impl<'a, T: Item, D: Dimension<T::Summary>> Cursor<'a, T, D> {
 }
 
 pub struct Iter<'a, T: Item> {
-  cursor: Cursor<'a, T, T::Summary>,
+  cursor: Cursor<'a, T, Nothing>,
 }
 
 impl<'a, T: Item> Iterator for Iter<'a, T> {
@@ -893,6 +1029,75 @@ mod tests {
     }
   }
 
+  /// A summary that concatenates strings: order matters.
+  #[derive(Clone, Default, Debug, PartialEq)]
+  struct Text {
+    text:  String,
+    count: usize,
+  }
+
+  impl Summary for Text {
+    fn add_summary(&mut self, o: &Self) {
+      self.text.push_str(&o.text);
+      self.count += o.count;
+    }
+  }
+
+  #[derive(Clone)]
+  struct Word(String);
+
+  impl Item for Word {
+    type Summary = Text;
+
+    fn summary(&self) -> Text { Text { text: self.0.clone(), count: 1 } }
+  }
+
+  #[derive(Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+  struct Index(usize);
+
+  impl Dimension<Text> for Index {
+    fn add_summary(&mut self, s: &Text) { self.0 += s.count }
+  }
+
+  #[test]
+  fn summary_until_is_ordered() {
+    for n in [0, 1, 3, 4, 5, 9, 17, 40, 130] {
+      let words: Vec<String> = (0..n).map(|i| format!("<{i}>")).collect();
+      let t: SumTree<Word> = words.iter().map(|w| Word(w.clone())).collect();
+      t.check();
+
+      for i in 0..=n {
+        for j in i..=n {
+          let mut a = t.cursor::<Index>();
+          a.seek(&Index(i), Bias::Right);
+          let mut b = t.cursor::<Index>();
+          b.seek(&Index(j), Bias::Right);
+
+          let got = a.summary_until(&b);
+          assert_eq!(got.text, words[i..j].concat(), "n={n} i={i} j={j}");
+          assert_eq!(got.count, j - i);
+        }
+      }
+    }
+  }
+
+  #[test]
+  fn prev_walks_backwards() {
+    let words: Vec<String> = (0..70).map(|i| format!("<{i}>")).collect();
+    let t: SumTree<Word> = words.iter().map(|w| Word(w.clone())).collect();
+
+    let mut c = t.cursor::<Index>();
+    c.seek(&Index(1000), Bias::Right);
+    assert!(c.item().is_none());
+    for i in (0..70).rev() {
+      assert!(c.prev());
+      assert_eq!(c.item().unwrap().0, words[i]);
+      assert_eq!(c.start(), &Index(i));
+    }
+    assert!(!c.prev());
+    assert_eq!(c.item().unwrap().0, words[0]);
+  }
+
   #[test]
   fn empty() {
     let t = SumTree::<Num>::new();
@@ -917,6 +1122,19 @@ mod tests {
     assert_eq!(t.summary(), Sum { count: 200, total: (0..200).sum() });
     assert_eq!(t.first(), Some(&Num(0)));
     assert_eq!(t.last(), Some(&Num(199)));
+  }
+
+  #[test]
+  fn from_parts_matches_from_iter() {
+    for n in 0..100 {
+      let v: Vec<usize> = (0..n).collect();
+      let items: Vec<Num> = v.iter().map(|&n| Num(n)).collect();
+      let summaries: Vec<_> = items.iter().map(Item::summary).collect();
+      let t = SumTree::from_parts(items, summaries);
+      t.check();
+      assert_eq!(contents(&t), v);
+      assert_eq!(t.summary(), tree(&v).summary());
+    }
   }
 
   #[test]
