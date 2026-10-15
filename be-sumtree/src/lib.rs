@@ -485,10 +485,7 @@ where
         }
         *pos = end;
       }
-      (
-        leaf_tree(&items[..idx], &summaries[..idx]),
-        leaf_tree(&items[idx..], &summaries[idx..]),
-      )
+      (leaf_tree(&items[..idx], &summaries[..idx]), leaf_tree(&items[idx..], &summaries[idx..]))
     }
     Node::Internal { children, .. } => {
       let mut found = None;
@@ -548,7 +545,8 @@ impl<T: Item> SumTree<T> {
       return SumTree::new();
     }
 
-    // Both are cut into the same groups, since the sizes only depend on the length.
+    // Both are cut into the same groups, since the sizes only depend on the
+    // length.
     let level = even_chunks(items)
       .into_iter()
       .zip(even_chunks(summaries))

@@ -743,7 +743,8 @@ impl WorkspaceLayout {
     let mut left = vec![];
 
     for (i, tab) in self.tabs.iter().enumerate() {
-      let button = tab_layout.add_widget(crate::widget::Button::new(&tab.title).active(i == self.active));
+      let button =
+        tab_layout.add_widget(crate::widget::Button::new(&tab.title).active(i == self.active));
 
       if button.pressed() {
         self.active = i;
