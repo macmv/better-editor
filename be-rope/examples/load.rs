@@ -16,6 +16,10 @@ fn main() {
     }
     let rope = b.build();
     let e = t.elapsed();
-    println!("{name:6} {} MB in {e:?} = {:.0} MB/s", rope.byte_len() >> 20, rope.byte_len() as f64 / 1048576.0 / e.as_secs_f64());
+    println!(
+      "{name:6} {} MB in {e:?} = {:.0} MB/s",
+      rope.byte_len() >> 20,
+      rope.byte_len() as f64 / 1048576.0 / e.as_secs_f64()
+    );
   }
 }

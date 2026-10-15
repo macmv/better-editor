@@ -8,10 +8,12 @@
 pub mod grapheme;
 pub mod iter;
 mod rope;
+mod search;
 mod slice;
 mod summary;
 
 pub use rope::{Rope, RopeBuilder};
+pub use search::{Find, RFind};
 pub use slice::RopeSlice;
 
 #[cfg(test)]

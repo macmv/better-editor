@@ -248,16 +248,16 @@ fn full_step(st: Full, cat: Cat, incb: Incb) -> (Full, bool) {
 /// The minimized machine.
 struct Dfa {
   /// The number of states.
-  n:     usize,
+  n:      usize,
   /// `trans[state * NUM_CLASSES + class]` is the next state, and whether the
   /// character begins a cluster.
-  trans: Vec<(u8, bool)>,
+  trans:  Vec<(u8, bool)>,
   /// The class of each ASCII character.
-  ascii: [u8; 128],
+  ascii:  [u8; 128],
   /// The state after an ordinary character. From here, every printable ASCII
   /// character begins a cluster and leads back to this state, so runs of them
   /// can be skipped.
-  plain: u8,
+  plain:  u8,
   /// The state after each ASCII byte that forgets what came before it (every
   /// one but `\r`), whatever the state was.
   forget: [u8; 128],
@@ -358,7 +358,8 @@ fn build_dfa() -> Dfa {
   }
   for a in (0..128u8).filter(|&b| simple(b)) {
     for b in (0..128u8).filter(|&b| simple(b)) {
-      let (state, breaks) = trans[forget[a as usize] as usize * NUM_CLASSES + ascii[b as usize] as usize];
+      let (state, breaks) =
+        trans[forget[a as usize] as usize * NUM_CLASSES + ascii[b as usize] as usize];
       assert_eq!((state, breaks), (forget[b as usize], true));
     }
   }

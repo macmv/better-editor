@@ -388,3 +388,87 @@ fn queries_on_a_huge_line_are_fast() {
   let elapsed = start.elapsed();
   assert!(elapsed.as_secs_f64() < 5.0, "took {elapsed:?}");
 }
+
+/// Text and patterns from a tiny alphabet, so matches are dense and overlap.
+const SEARCH_ALPHABET: &[&str] = &["a", "a", "b", "\u{e9}", "\u{1f600}"];
+
+fn random_search_text(rng: &mut Rng, max: usize) -> String {
+  let n = rng.next(max + 1);
+  (0..n).map(|_| SEARCH_ALPHABET[rng.next(SEARCH_ALPHABET.len())]).collect()
+}
+
+#[track_caller]
+fn check_search(slice: RopeSlice<'_>, m: &str, pattern: &str) {
+  let want: Vec<usize> =
+    if pattern.is_empty() { vec![] } else { m.match_indices(pattern).map(|(i, _)| i).collect() };
+  assert_eq!(slice.find(pattern).collect::<Vec<_>>(), want, "find {pattern:?} in {m:?}");
+
+  let want: Vec<usize> =
+    if pattern.is_empty() { vec![] } else { m.rmatch_indices(pattern).map(|(i, _)| i).collect() };
+  assert_eq!(slice.rfind(pattern).collect::<Vec<_>>(), want, "rfind {pattern:?} in {m:?}");
+}
+
+#[test]
+fn search_basics() {
+  let r = Rope::from("foo bar baz ooo quoox");
+  assert_eq!(r.find("oo").collect::<Vec<_>>(), [1, 12, 18]);
+  assert_eq!(r.rfind("oo").collect::<Vec<_>>(), [18, 13, 1]);
+  assert_eq!(r.find("").count(), 0);
+  assert_eq!(r.rfind("").count(), 0);
+  assert_eq!(r.find("missing").count(), 0);
+  assert_eq!(Rope::new().find("a").count(), 0);
+  assert_eq!(Rope::new().rfind("a").count(), 0);
+
+  // Offsets are relative to the slice.
+  assert_eq!(r.byte_slice(4..).find("ba").collect::<Vec<_>>(), [0, 4]);
+  assert_eq!(r.byte_slice(..9).rfind("ba").collect::<Vec<_>>(), [4]);
+  assert_eq!(r.byte_slice(..13).rfind("ba").collect::<Vec<_>>(), [8, 4]);
+}
+
+#[test]
+fn search_across_chunk_boundaries() {
+  // Every chunk is a few bytes, and the pattern is longer than a chunk.
+  let text = "ab".repeat(100);
+  let r = Rope::from(text.as_str());
+  assert!(r.chunks().count() > 10);
+  for len in 1..=3 * MAX_CHUNK {
+    let pattern = &text[1..1 + len];
+    check_search(r.as_slice(), &text, pattern);
+  }
+}
+
+#[test]
+fn search_matches_str() {
+  let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
+  for _ in 0..2000 {
+    let text = random_search_text(&mut rng, 300);
+    let mut rope = Rope::from(text.as_str());
+    let mut m = text;
+
+    // Edit it, so the chunks are not evenly sized.
+    for _ in 0..rng.next(4) {
+      let a = random_boundary(&mut rng, &m);
+      let b = a + random_boundary(&mut rng, &m[a..]);
+      let ins = random_search_text(&mut rng, 20);
+      rope.replace(a..b, &ins);
+      m.replace_range(a..b, &ins);
+    }
+
+    let lo = random_boundary(&mut rng, &m);
+    let hi = lo + random_boundary(&mut rng, &m[lo..]);
+    let slice = rope.byte_slice(lo..hi);
+
+    // A pattern cut from the text, so it matches, or a random one.
+    let pattern = if rng.next(3) > 0 && !m.is_empty() {
+      let a = random_boundary(&mut rng, &m);
+      let b = (a + rng.next(3 * MAX_CHUNK)).min(m.len());
+      let b = if m.is_char_boundary(b) { b } else { m.ceil_char_boundary(b) };
+      m[a..b].to_string()
+    } else {
+      random_search_text(&mut rng, 6)
+    };
+
+    check_search(rope.as_slice(), &m, &pattern);
+    check_search(slice, &m[lo..hi], &pattern);
+  }
+}

@@ -6,7 +6,7 @@ use std::{
 use be_sumtree::Bias;
 
 use crate::{
-  Rope,
+  Find, RFind, Rope,
   grapheme::{self, State},
   iter::{Bytes, Chars, Chunks, Graphemes, Lines, RawLines},
   summary::{GraphemeCount, NewlineCount, Offsets, Pos, Utf16Offset},
@@ -85,6 +85,14 @@ impl<'a> RopeSlice<'a> {
   pub fn graphemes(&self) -> Graphemes<'a> { Graphemes::new(*self) }
   pub fn raw_lines(&self) -> RawLines<'a> { RawLines::new(*self) }
   pub fn lines(&self) -> Lines<'a> { Lines::new(*self) }
+
+  /// The byte offsets, relative to this slice, of the non-overlapping matches
+  /// of `pattern`, front to back. An empty pattern matches nothing.
+  pub fn find<'p>(&self, pattern: &'p str) -> Find<'a, 'p> { Find::new(*self, pattern) }
+
+  /// Like [`find`](Self::find), but back to front, and the matches don't
+  /// overlap when counted from the end.
+  pub fn rfind<'p>(&self, pattern: &'p str) -> RFind<'a, 'p> { RFind::new(*self, pattern) }
 
   /// The additive offsets (everything but graphemes) of the start and end.
   fn bounds(&self) -> (Offsets, Offsets) {

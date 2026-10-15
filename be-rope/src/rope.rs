@@ -8,7 +8,7 @@ use std::{
 use be_sumtree::{Bias, Item, SumTree};
 
 use crate::{
-  RopeSlice,
+  Find, RFind, RopeSlice,
   iter::{Bytes, Chars, Chunks, Graphemes, Lines, RawLines},
   summary::{ByteOffset, Offsets, Pos, TextSummary},
 };
@@ -252,6 +252,8 @@ impl Rope {
   pub fn bytes(&self) -> Bytes<'_> { self.as_slice().bytes() }
   pub fn graphemes(&self) -> Graphemes<'_> { self.as_slice().graphemes() }
   pub fn lines(&self) -> Lines<'_> { self.as_slice().lines() }
+  pub fn find<'p>(&self, pattern: &'p str) -> Find<'_, 'p> { self.as_slice().find(pattern) }
+  pub fn rfind<'p>(&self, pattern: &'p str) -> RFind<'_, 'p> { self.as_slice().rfind(pattern) }
   pub fn raw_lines(&self) -> RawLines<'_> { self.as_slice().raw_lines() }
 }
 
