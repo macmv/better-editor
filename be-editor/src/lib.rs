@@ -1,9 +1,10 @@
 use std::{cell::RefCell, collections::HashSet, ops::Range, path::PathBuf, rc::Rc};
 
 use be_config::{Config, LanguageName};
-use be_doc::{Change, Column, Cursor, Document, DocumentSnapshot, Edit, Line, crop::RopeSlice};
+use be_doc::{Change, Column, Cursor, Document, DocumentSnapshot, Edit, Line};
 use be_git::{LineDiffSimilarity, Repo};
 use be_input::{Action, Clipboard, Direction, Mode, Move, VerticalDirection, VisualMode};
+use be_rope::RopeSlice;
 use be_shared::SharedHandle;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -565,7 +566,7 @@ impl EditorState {
     if !matches!(iter.next(), Some(b'}' | b']' | b')')) {
       return;
     }
-    let whitespace = iter.len();
+    let whitespace = line.byte_len() - 1;
     if !iter.all(|c| c.is_ascii_whitespace()) {
       return;
     }

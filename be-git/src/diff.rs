@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
-use be_doc::{DocumentSnapshot, crop::RopeSlice};
+use be_doc::DocumentSnapshot;
+use be_rope::RopeSlice;
 use imara_diff::{Algorithm, Diff, InternedInput, TokenSource};
 use siphasher::sip::SipHasher;
 
@@ -114,7 +115,7 @@ impl LineHunk {
 
 struct DocLines<'a>(&'a DocumentSnapshot);
 #[derive(Clone, Copy, PartialEq, Eq)]
-struct RopeSliceHash<'a>(be_doc::crop::RopeSlice<'a>);
+struct RopeSliceHash<'a>(be_rope::RopeSlice<'a>);
 
 impl Hash for RopeSliceHash<'_> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -131,10 +132,8 @@ impl Hash for RopeSliceHash<'_> {
 
 impl<'a> TokenSource for DocLines<'a> {
   type Token = RopeSliceHash<'a>;
-  type Tokenizer = std::iter::Map<
-    be_doc::crop::iter::RawLines<'a>,
-    fn(be_doc::crop::RopeSlice<'a>) -> RopeSliceHash<'a>,
-  >;
+  type Tokenizer =
+    std::iter::Map<be_rope::iter::RawLines<'a>, fn(be_rope::RopeSlice<'a>) -> RopeSliceHash<'a>>;
 
   fn tokenize(&self) -> Self::Tokenizer { self.0.raw_lines().map(|l| RopeSliceHash(l)) }
 
@@ -146,7 +145,7 @@ impl<'a> TokenSource for DocLines<'a> {
 
 impl<'a> TokenSource for CharTokens<'a> {
   type Token = char;
-  type Tokenizer = be_doc::crop::iter::Chars<'a>;
+  type Tokenizer = be_rope::iter::Chars<'a>;
 
   fn tokenize(&self) -> Self::Tokenizer { self.0.0.chars() }
 

@@ -3,7 +3,7 @@ use std::{
   path::Path,
 };
 
-use crop::RopeBuilder;
+use be_rope::RopeBuilder;
 
 use crate::{Document, DocumentSnapshot};
 

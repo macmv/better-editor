@@ -1,7 +1,17 @@
 use std::ops::{Range, RangeBounds};
 
-use crop::{Rope, RopeSlice};
+use be_rope::{Rope, RopeSlice};
 use unicode_width::UnicodeWidthStr;
+
+/// The display width of a grapheme, which may span multiple rope chunks.
+fn grapheme_width(g: RopeSlice<'_>) -> usize {
+  let mut chunks = g.chunks();
+  match (chunks.next(), chunks.next()) {
+    (None, _) => 0,
+    (Some(c), None) => c.width(),
+    _ => g.to_string().width(),
+  }
+}
 
 use crate::{Column, Cursor, Document, Line, Position, VisualColumn};
 
@@ -19,7 +29,7 @@ where
 }
 
 impl DocumentSnapshot {
-  pub fn raw_lines(&self) -> crop::iter::RawLines<'_> { self.rope.raw_lines() }
+  pub fn raw_lines(&self) -> be_rope::iter::RawLines<'_> { self.rope.raw_lines() }
 
   pub fn len(&self) -> usize { self.rope.byte_len() }
 
@@ -74,7 +84,7 @@ impl DocumentSnapshot {
     if let Some(term) = terminator
       && term.chars().all(|c| c.is_whitespace())
     {
-      self.byte_of_line(line + 1) - term.len()
+      self.byte_of_line(line + 1) - term.byte_len()
     } else {
       // If there is no terminator, we're at the end of the file.
       self.rope.byte_len()
@@ -90,7 +100,7 @@ impl DocumentSnapshot {
 
     let mut offset = 0;
     for g in self.rope.line(cursor.line.0).graphemes().take(cursor.column.0) {
-      offset += g.width();
+      offset += grapheme_width(g);
     }
     VisualColumn(offset)
   }
@@ -109,7 +119,7 @@ impl DocumentSnapshot {
         .line(line.0)
         .graphemes()
         .take_while(|g| {
-          offset += g.width();
+          offset += grapheme_width(*g);
           offset <= visual_column.0
         })
         .count(),
@@ -161,7 +171,7 @@ impl DocumentSnapshot {
 
   pub fn cursor_column_offset(&self, cursor: Cursor) -> usize {
     let line = self.line(cursor.line);
-    line.graphemes().take(cursor.column.0).map(|g| g.len()).sum()
+    line.graphemes().take(cursor.column.0).map(|g| g.byte_len()).sum()
   }
 
   pub fn offset_by_graphemes(&self, index: usize, offset: isize) -> usize {
@@ -172,7 +182,7 @@ impl DocumentSnapshot {
           .byte_slice(index..)
           .graphemes()
           .take(offset as usize)
-          .map(|g| g.len())
+          .map(|g| g.byte_len())
           .sum::<usize>()
     } else {
       index
@@ -182,7 +192,7 @@ impl DocumentSnapshot {
           .graphemes()
           .rev()
           .take(-offset as usize)
-          .map(|g| g.len())
+          .map(|g| g.byte_len())
           .sum::<usize>()
     }
   }
@@ -191,7 +201,7 @@ impl DocumentSnapshot {
   pub fn grapheme_slice(&self, cursor: Cursor, len: usize) -> Range<usize> {
     let offset = self.cursor_offset(cursor);
     let count =
-      self.rope.byte_slice(offset..).graphemes().take(len).map(|g| g.len()).sum::<usize>();
+      self.rope.byte_slice(offset..).graphemes().take(len).map(|g| g.byte_len()).sum::<usize>();
     offset..offset + count
   }
 
@@ -232,7 +242,7 @@ impl DocumentSnapshot {
       return Line(self.len_lines().saturating_sub(1));
     }
 
-    // NB: `crop::line_of_byte` panics on non-char boundaries, so advance to the
+    // NB: `line_of_byte` panics on non-char boundaries, so advance to the
     // next char.
     while byte < len && !self.rope.is_char_boundary(byte) {
       fatal!("byte {} is not a char boundary", byte);

@@ -183,7 +183,7 @@ struct RopeProvider<'a> {
 }
 
 impl<'a> TextProvider<&'a str> for RopeProvider<'a> {
-  type I = be_doc::crop::iter::Chunks<'a>;
+  type I = be_rope::iter::Chunks<'a>;
 
   fn text(&mut self, node: Node) -> Self::I {
     let slice = self.doc.range(node.byte_range());

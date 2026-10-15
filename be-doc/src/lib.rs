@@ -3,14 +3,13 @@ use std::{
   ops::{Add, Deref, Sub},
 };
 
-use crop::Rope;
+use be_rope::Rope;
 
 mod edit;
 mod fs;
 mod search;
 mod snap;
 
-pub use crop;
 pub use edit::{Change, Edit};
 pub use search::FindIter;
 pub use snap::DocumentSnapshot;
