@@ -10,8 +10,8 @@ use be_workspace::Workspace;
 use kurbo::{Arc, Circle, Insets, Line, Point, Rect, RoundedRect, Size, Stroke, Triangle, Vec2};
 
 use crate::{
-  CursorMode, Font, Layout, MouseButton, MouseEvent, Render, RenderStore, TextLayout,
-  theme::Underline, view::Scroll,
+  CursorMode, Font, Layout, LayoutBuilder, MouseButton, MouseEvent, Render, RenderStore,
+  TextLayout, theme::Underline, view::Scroll,
 };
 
 pub struct EditorView {
@@ -510,13 +510,17 @@ impl EditorView {
       };
 
       if line >= self.min_line.as_usize() && line <= self.max_line.as_usize() {
-        let cursor = layout.cursor(self.doc().cursor_column_offset(self.cursor()), mode)
+        let layout_cursor = layout.cursor(self.doc().cursor_column_offset(self.cursor()), mode);
+        let cursor = layout_cursor
           + Vec2::new(
             self.gutter_width() - self.horizontal_scroll.offset,
             start_y + (line - self.min_line.as_usize()) as f64 * line_height,
           );
         if self.focused() {
           render.fill(&cursor.ceil(), render.theme().text);
+          if matches!(mode, CursorMode::Block) {
+            self.draw_cursor_text(line, layout_cursor, cursor, render);
+          }
           self.draw_completions(cursor, render);
         } else {
           render.stroke(
@@ -743,7 +747,34 @@ impl EditorView {
       layout.scale(),
     );
 
-    let highlights = self.editor.highlights(index..max_index);
+    Self::style_line(
+      &self.editor,
+      theme,
+      &mut line_number_layout,
+      &line_string,
+      index,
+      max_index,
+      true,
+    );
+
+    let (text_layout, backgrounds) = line_number_layout.build(&line_string);
+    let text_layout = layout.build_layout(text_layout, backgrounds);
+
+    Some(entry.insert(text_layout))
+  }
+
+  /// Applies syntax highlighting and LSP styles to a layout of the line
+  /// starting at `index`.
+  fn style_line(
+    editor: &EditorState,
+    theme: &crate::theme::Theme,
+    line_number_layout: &mut LayoutBuilder,
+    line_string: &str,
+    index: usize,
+    max_index: usize,
+    backgrounds: bool,
+  ) {
+    let highlights = editor.highlights(index..max_index);
     let mut prev = index;
     for highlight in highlights {
       let mut pos = if highlight.pos > max_index { max_index } else { highlight.pos };
@@ -776,7 +807,7 @@ impl EditorView {
               .apply(range.clone(), parley::StyleProperty::UnderlineBrush(Some(c.into())));
           }
         }
-        if let Some(background) = highlight.background {
+        if backgrounds && let Some(background) = highlight.background {
           line_number_layout.background(range.clone(), background);
         }
       }
@@ -787,11 +818,45 @@ impl EditorView {
 
       prev = pos;
     }
+  }
 
-    let (text_layout, backgrounds) = line_number_layout.build(&line_string);
-    let text_layout = layout.build_layout(text_layout, backgrounds);
+  /// Draws the character under a block cursor in the background color, keeping
+  /// the font weight, underline, etc. of the underlying text.
+  fn draw_cursor_text(&self, line: usize, layout_cursor: Rect, cursor: Rect, render: &mut Render) {
+    let index = self.doc().byte_of_line(be_doc::Line(line));
+    let Some(raw_line) = self.doc().range(index..).raw_lines().next() else { return };
+    let line_string = raw_line.to_string();
 
-    Some(entry.insert(text_layout))
+    let offset = self.doc().cursor_column_offset(self.cursor());
+    let Some(c) = line_string.get(offset..).and_then(|s| s.chars().next()) else { return };
+    if c.is_whitespace() {
+      return;
+    }
+    let range = offset..offset + c.len_utf8();
+
+    let mut builder = render.store.text.layout_builder(
+      Font::Editor,
+      &line_string,
+      render.store.theme.text,
+      render.scale(),
+    );
+    Self::style_line(
+      &self.editor,
+      &render.store.theme,
+      &mut builder,
+      &line_string,
+      index,
+      index + line_string.len(),
+      false,
+    );
+    builder.color_range(range, render.store.theme.background);
+
+    let (built, backgrounds) = builder.build(&line_string);
+    let text = render.build_layout(built, backgrounds);
+
+    render.clipped(cursor.ceil(), |render| {
+      render.draw_text(&text, (-layout_cursor.x0, -layout_cursor.y0));
+    });
   }
 
   fn cursor_mode(&self) -> Option<CursorMode> {

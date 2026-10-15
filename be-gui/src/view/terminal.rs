@@ -274,6 +274,42 @@ impl TerminalView {
       );
       if self.focused {
         render.fill(&cursor.ceil(), render.theme().text);
+
+        let state_cursor = self.terminal.state().cursor;
+        if let Some(line) = self.terminal.visible_line(state_cursor.row) {
+          let line_string = line.to_string();
+          let offset: usize = line_string.chars().take(state_cursor.col).map(char::len_utf8).sum();
+          if let Some(c) = line_string[offset..].chars().next()
+            && !c.is_whitespace()
+          {
+            let mut flags = StyleFlags::empty();
+            let mut prev = 0;
+            for (style, i) in line.specific_styles(|_, s| s) {
+              if offset >= prev && offset < i {
+                flags = style.flags;
+                break;
+              }
+              prev = i;
+            }
+
+            let text = c.to_string();
+            let mut builder = render.store.text.layout_builder(
+              crate::Font::Terminal,
+              &text,
+              render.theme().background,
+              render.scale(),
+            );
+            if flags.contains(StyleFlags::BOLD) {
+              builder.apply(0..text.len(), parley::StyleProperty::FontWeight(FontWeight::BLACK));
+            }
+            if flags.contains(StyleFlags::UNDERLINE) {
+              builder.apply(0..text.len(), parley::StyleProperty::Underline(true));
+            }
+            let (built, backgrounds) = builder.build(&text);
+            let layout = render.build_layout(built, backgrounds);
+            render.draw_text(&layout, (cursor.x0, cursor.y0));
+          }
+        }
       } else {
         render.stroke(&cursor.inset(-0.5 * render.scale()), render.theme().text, Stroke::new(1.0));
       }

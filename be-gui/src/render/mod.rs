@@ -20,7 +20,7 @@ mod text;
 mod window;
 
 pub use cursor::CursorKind;
-pub use text::TextLayout;
+pub use text::{LayoutBuilder, TextLayout};
 
 #[derive(Debug)]
 pub enum Event {
