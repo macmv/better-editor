@@ -78,6 +78,9 @@ struct ViewCollection {
   views:        HashMap<ViewId, View>,
 }
 
+/// Extra space above the tab buttons, in pixels.
+const TAB_TOP_SPACING: f64 = 2.0;
+
 struct Tab {
   title:   String,
   content: Pane,
@@ -740,7 +743,7 @@ impl WorkspaceLayout {
     let mut left = vec![];
 
     for (i, tab) in self.tabs.iter().enumerate() {
-      let button = tab_layout.add_widget(crate::widget::Button::new(&tab.title));
+      let button = tab_layout.add_widget(crate::widget::Button::new(&tab.title).active(i == self.active));
 
       if button.pressed() {
         self.active = i;
@@ -764,7 +767,7 @@ impl WorkspaceLayout {
       .add_widget(
         crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, left)
           .gap(5.0)
-          .cross_size(tab_height),
+          .cross_size(tab_height - TAB_TOP_SPACING * 2.0),
       )
       .id;
     let right = tab_layout
@@ -778,7 +781,7 @@ impl WorkspaceLayout {
       .add_widget(crate::widget::Stack::new(
         Axis::Horizontal,
         Align::SpaceBetween,
-        Justify::Center,
+        Justify::End,
         vec![left, right],
       ))
       .id;

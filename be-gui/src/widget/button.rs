@@ -4,6 +4,7 @@ use crate::{Font, TextLayout, Widget, widget::LayoutCtx};
 
 pub struct Button {
   content: String,
+  active:  bool,
 }
 
 #[derive(Default)]
@@ -14,7 +15,13 @@ pub struct ButtonState {
 }
 
 impl Button {
-  pub fn new(content: &str) -> Self { Button { content: content.into() } }
+  pub fn new(content: &str) -> Self { Button { content: content.into(), active: false } }
+
+  /// Highlights the button as the currently selected one.
+  pub fn active(mut self, active: bool) -> Self {
+    self.active = active;
+    self
+  }
 }
 
 impl ButtonState {
@@ -54,8 +61,15 @@ impl Widget for Button {
         borders: super::Borders::all(0.0),
         radius:  super::Corners::all(BORDER_RADIUS),
       }
-      .draw_inside(render, render.theme().background_raised);
-      if state.hover {
+      .draw_inside(
+        render,
+        if self.active {
+          render.theme().background_raised_outline
+        } else {
+          render.theme().background_raised
+        },
+      );
+      if state.hover || self.active {
         border.draw_inside(render, render.theme().background_raised_outline);
       }
 
