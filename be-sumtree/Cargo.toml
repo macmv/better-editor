@@ -4,3 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+arbitrary = { version = "1", features = ["derive"], optional = true }
+
+[features]
+# Exposes the `model` harness (with `Arbitrary` ops) for fuzzing.
+fuzz = ["dep:arbitrary"]
+# Use a tiny node fan-out so small inputs build deep trees.
+small-nodes = []

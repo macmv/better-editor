@@ -16,11 +16,14 @@
 
 use std::{cmp::Ordering, sync::Arc};
 
-#[cfg(not(test))]
+#[cfg(not(any(test, feature = "small-nodes")))]
 const MAX: usize = 12;
-// A tiny fan-out makes the tests exercise deep trees.
-#[cfg(test)]
+// A tiny fan-out makes the tests and the fuzzer exercise deep trees.
+#[cfg(any(test, feature = "small-nodes"))]
 const MAX: usize = 4;
+
+#[cfg(any(test, feature = "fuzz"))]
+pub mod model;
 
 /// A monoid element. `Default` is the identity.
 pub trait Summary: Clone + Default {
@@ -222,7 +225,7 @@ impl<T: Item> Node<T> {
     self.finish()
   }
 
-  #[cfg(test)]
+  #[cfg(any(test, feature = "fuzz"))]
   fn check(&self) -> (u8, T::Summary)
   where
     T::Summary: PartialEq + std::fmt::Debug,
@@ -342,8 +345,10 @@ impl<T: Item> SumTree<T> {
     }
   }
 
-  #[cfg(test)]
-  fn check(&self)
+  /// Asserts the structural invariants: uniform leaf depth, node sizes, and
+  /// cached summaries matching their recomputed values.
+  #[cfg(any(test, feature = "fuzz"))]
+  pub fn check(&self)
   where
     T::Summary: PartialEq + std::fmt::Debug,
   {
@@ -653,41 +658,11 @@ impl<'a, T: Item> Iterator for Iter<'a, T> {
 
 #[cfg(test)]
 mod tests {
-  use super::*;
+  use super::{model::*, *};
 
-  #[derive(Clone, Default, Debug, PartialEq)]
-  struct Sum {
-    count: usize,
-    total: usize,
-  }
+  fn tree(v: &[usize]) -> SumTree<Num> { v.iter().map(|&n| Num(n)).collect() }
 
-  impl Summary for Sum {
-    fn add_summary(&mut self, o: &Self) {
-      self.count += o.count;
-      self.total += o.total;
-    }
-  }
-
-  #[derive(Clone, Debug, PartialEq)]
-  struct Num(usize);
-
-  impl Item for Num {
-    type Summary = Sum;
-
-    fn summary(&self) -> Sum { Sum { count: 1, total: self.0 } }
-  }
-
-  #[derive(Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
-  struct Count(usize);
-  #[derive(Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
-  struct Total(usize);
-
-  impl Dimension<Sum> for Count {
-    fn add_summary(&mut self, s: &Sum) { self.0 += s.count }
-  }
-  impl Dimension<Sum> for Total {
-    fn add_summary(&mut self, s: &Sum) { self.0 += s.total }
-  }
+  fn contents(t: &SumTree<Num>) -> Vec<usize> { t.iter().map(|n| n.0).collect() }
 
   struct Rng(u64);
 
@@ -698,11 +673,29 @@ mod tests {
       self.0 ^= self.0 << 17;
       (self.0 % n as u64) as usize
     }
+
+    fn vec(&mut self, max: usize) -> Vec<u8> {
+      (0..self.next(max)).map(|_| self.next(256) as u8).collect()
+    }
+
+    fn op(&mut self) -> Op {
+      match self.next(9) {
+        0 => Op::Push(self.next(256) as u8),
+        1 => Op::Append(self.vec(40)),
+        2 => Op::Splice {
+          a:   self.next(65536) as u16,
+          b:   self.next(65536) as u16,
+          new: self.vec(30),
+        },
+        3 => Op::SeekTotal { target: self.next(65536) as u16, left: self.next(2) == 0 },
+        4 => Op::SeekCount { target: self.next(65536) as u16, left: self.next(2) == 0 },
+        5 => Op::Split { at: self.next(65536) as u16, left: self.next(2) == 0 },
+        6 => Op::SplitTotal { at: self.next(65536) as u16, left: self.next(2) == 0 },
+        7 => Op::Snapshot,
+        _ => Op::UpdateLast(self.next(256) as u8),
+      }
+    }
   }
-
-  fn tree(v: &[usize]) -> SumTree<Num> { v.iter().map(|&n| Num(n)).collect() }
-
-  fn contents(t: &SumTree<Num>) -> Vec<usize> { t.iter().map(|n| n.0).collect() }
 
   #[test]
   fn empty() {
@@ -818,56 +811,10 @@ mod tests {
 
   #[test]
   fn randomized_against_vec() {
-    let mut rng = Rng(0x9e3779b97f4a7c15);
-    let mut t = SumTree::<Num>::new();
-    let mut model: Vec<usize> = vec![];
-
-    for _ in 0..2000 {
-      match rng.next(4) {
-        0 => {
-          let n = rng.next(5);
-          t.push(Num(n));
-          model.push(n);
-        }
-        1 => {
-          let extra: Vec<usize> = (0..rng.next(40)).map(|_| rng.next(5)).collect();
-          t.append(tree(&extra));
-          model.extend(extra);
-        }
-        2 => {
-          // Splice: replace a range with new items.
-          let a = rng.next(model.len() + 1);
-          let b = a + rng.next(model.len() - a + 1);
-          let new: Vec<usize> = (0..rng.next(30)).map(|_| rng.next(5)).collect();
-          let (left, rest) = t.split_at(&Count(a), Bias::Right);
-          let (_, right) = rest.split_at(&Count(b - a), Bias::Right);
-          t = left;
-          t.append(tree(&new));
-          t.append(right);
-          model.splice(a..b, new);
-        }
-        _ => {
-          // Seeks agree with a linear scan.
-          let total: usize = model.iter().sum();
-          let target = rng.next(total + 2);
-          let mut c = t.cursor::<Total>();
-          c.seek(&Total(target), Bias::Right);
-          let mut sum = 0;
-          let expected = model.iter().position(|&x| {
-            sum += x;
-            sum > target
-          });
-          match expected {
-            Some(i) => {
-              assert_eq!(c.item(), Some(&Num(model[i])));
-              assert_eq!(c.start().0, model[..i].iter().sum::<usize>());
-            }
-            None => assert!(c.item().is_none()),
-          }
-        }
-      }
-      t.check();
-      assert_eq!(contents(&t), model);
+    for seed in 1..=200u64 {
+      let mut rng = Rng(seed.wrapping_mul(0x9e3779b97f4a7c15) | 1);
+      let ops: Vec<Op> = (0..500).map(|_| rng.op()).collect();
+      run(&ops);
     }
   }
 }

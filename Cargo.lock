@@ -385,6 +385,17 @@ version = "0.1.0"
 [[package]]
 name = "be-sumtree"
 version = "0.1.0"
+dependencies = [
+ "arbitrary",
+]
+
+[[package]]
+name = "be-sumtree-fuzz"
+version = "0.0.0"
+dependencies = [
+ "be-sumtree",
+ "libfuzzer-sys",
+]
 
 [[package]]
 name = "be-task"

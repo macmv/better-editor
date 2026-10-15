@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["be-*", "be-crdt/fuzz"]
+members = ["be-*", "be-crdt/fuzz", "be-sumtree/fuzz"]
 
 [workspace.dependencies]
 expect-test = { git = "https://github.com/macmv/expect-test", rev = "6a120346f02d36002b50fe81bb9e19fa911577db" }
