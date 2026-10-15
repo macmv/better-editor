@@ -3,7 +3,6 @@ use kurbo::{Point, Vec2};
 use winit::{
   event::WindowEvent,
   event_loop::{self, ActiveEventLoop},
-  keyboard::NamedKey,
   window::Window,
 };
 
@@ -43,14 +42,7 @@ struct Init {
 
 #[derive(Default)]
 struct KeyState {
-  left_super:    bool,
-  right_super:   bool,
-  left_control:  bool,
-  right_control: bool,
-  left_alt:      bool,
-  right_alt:     bool,
-  left_shift:    bool,
-  right_shift:   bool,
+  mods: winit::keyboard::ModifiersState,
 }
 
 impl winit::application::ApplicationHandler<Event> for App {
@@ -131,39 +123,17 @@ impl winit::application::ApplicationHandler<Event> for App {
         event_loop.exit();
       }
 
-      WindowEvent::KeyboardInput {
-        event:
-          winit::event::KeyEvent {
-            logical_key:
-              winit::keyboard::Key::Named(
-                key @ (NamedKey::Super | NamedKey::Control | NamedKey::Alt | NamedKey::Shift),
-              ),
-            location,
-            state,
-            ..
-          },
-        ..
-      } => {
+      // The release of a modifier can go to another window (such as when switching workspaces), so
+      // drop all modifiers when focus is lost.
+      WindowEvent::Focused(false) => {
         if let Some(init) = &mut self.init {
-          let key = match (key, location) {
-            (NamedKey::Super, winit::keyboard::KeyLocation::Left) => &mut init.keys.left_super,
-            (NamedKey::Super, winit::keyboard::KeyLocation::Right) => &mut init.keys.right_super,
-            (NamedKey::Control, winit::keyboard::KeyLocation::Left) => &mut init.keys.left_control,
-            (NamedKey::Control, winit::keyboard::KeyLocation::Right) => {
-              &mut init.keys.right_control
-            }
-            (NamedKey::Alt, winit::keyboard::KeyLocation::Left) => &mut init.keys.left_alt,
-            (NamedKey::Alt, winit::keyboard::KeyLocation::Right) => &mut init.keys.right_alt,
-            (NamedKey::Shift, winit::keyboard::KeyLocation::Left) => &mut init.keys.left_shift,
-            (NamedKey::Shift, winit::keyboard::KeyLocation::Right) => &mut init.keys.right_shift,
+          init.keys = KeyState::default();
+        }
+      }
 
-            _ => unreachable!(),
-          };
-
-          match state {
-            winit::event::ElementState::Pressed => *key = true,
-            winit::event::ElementState::Released => *key = false,
-          }
+      WindowEvent::ModifiersChanged(mods) => {
+        if let Some(init) = &mut self.init {
+          init.keys.mods = mods.state();
         }
       }
 
@@ -359,10 +329,10 @@ impl KeyState {
 
     key.map(|key| KeyStroke {
       key,
-      sup: self.left_super || self.right_super,
-      shift: self.left_shift || self.right_shift,
-      control: self.left_control || self.right_control,
-      alt: self.left_alt || self.right_alt,
+      sup: self.mods.super_key(),
+      shift: self.mods.shift_key(),
+      control: self.mods.control_key(),
+      alt: self.mods.alt_key(),
     })
   }
 }
