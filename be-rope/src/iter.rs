@@ -329,8 +329,7 @@ impl<'a> DoubleEndedIterator for RawLines<'a> {
     }
 
     // The last line starts after the last newline that is not its own.
-    let search_end =
-      if self.slice.byte_at(self.end - 1) == b'\n' { self.end - 1 } else { self.end };
+    let search_end = if self.slice.byte(self.end - 1) == b'\n' { self.end - 1 } else { self.end };
 
     let before = self.slice.sub(self.start, search_end);
     let mut end = search_end;
@@ -363,9 +362,9 @@ impl<'a> Lines<'a> {
 /// Removes a trailing `\n` or `\r\n`.
 fn strip_line_break(line: RopeSlice<'_>) -> RopeSlice<'_> {
   let mut end = line.byte_len();
-  if end > 0 && line.byte_at(end - 1) == b'\n' {
+  if end > 0 && line.byte(end - 1) == b'\n' {
     end -= 1;
-    if end > 0 && line.byte_at(end - 1) == b'\r' {
+    if end > 0 && line.byte(end - 1) == b'\r' {
       end -= 1;
     }
   }

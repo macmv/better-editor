@@ -37,13 +37,13 @@ impl<'a> RopeSlice<'a> {
       false
     } else {
       // Bytes in the middle of a character look like `10xxxxxx`.
-      self.byte_at(byte) & 0xc0 != 0x80
+      self.byte(byte) & 0xc0 != 0x80
     }
   }
 
   /// The byte at a position in the slice.
   #[track_caller]
-  pub(crate) fn byte_at(&self, byte: usize) -> u8 {
+  pub fn byte(&self, byte: usize) -> u8 {
     assert!(byte < self.byte_len(), "byte index {byte} is out of bounds");
     let abs = self.start + byte;
     let mut cursor = self.rope.tree.cursor::<Offsets>();
@@ -152,7 +152,7 @@ impl<'a> RopeSlice<'a> {
     let newlines = b.newlines - a.newlines;
     let lines = if self.is_empty() {
       0
-    } else if self.byte_at(self.byte_len() - 1) == b'\n' {
+    } else if self.byte(self.byte_len() - 1) == b'\n' {
       newlines
     } else {
       newlines + 1
@@ -209,9 +209,9 @@ impl<'a> RopeSlice<'a> {
 
     let start = self.byte_of_line(line);
     let mut end = self.byte_of_line(line + 1);
-    if end > start && self.byte_at(end - 1) == b'\n' {
+    if end > start && self.byte(end - 1) == b'\n' {
       end -= 1;
-      if end > start && self.byte_at(end - 1) == b'\r' {
+      if end > start && self.byte(end - 1) == b'\r' {
         end -= 1;
       }
     }
