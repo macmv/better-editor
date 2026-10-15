@@ -2,7 +2,7 @@
 //! plain `Vec`, and asserts they agree. Shared by the unit tests and the
 //! fuzzer.
 
-use crate::{Bias, Dimension, Item, SumTree, Summary};
+use crate::{Bias, Cursor, Dimension, Item, SumTree, Summary};
 
 /// Items are small numbers (mod 5, so zero-width items are common). The
 /// summary tracks the item count and the sum, giving two dimensions.
@@ -69,6 +69,18 @@ pub enum Op {
     at:   u16,
     left: bool,
   },
+  /// Seek, then seek forward through a chain of non-decreasing targets. Each
+  /// step must agree with a fresh seek from the root.
+  SeekForward {
+    target: u16,
+    left:   bool,
+    steps:  Vec<(u8, bool)>,
+  },
+  /// Advance `start` items from the first, then step forward and back.
+  Walk {
+    start: u16,
+    steps: Vec<bool>,
+  },
   /// Remember the current tree; at the end it must be unchanged.
   Snapshot,
   UpdateLast(u8),
@@ -110,6 +122,18 @@ fn check_seek<D: Dimension<Sum> + Ord>(
 ) {
   let mut c = t.cursor::<D>();
   c.seek(&make(target), bias(left));
+  assert_cursor(&c, model, target, left, make, width);
+}
+
+/// Asserts the cursor is where a seek to `target` should have left it.
+fn assert_cursor<D: Dimension<Sum> + Ord>(
+  c: &Cursor<Num, D>,
+  model: &[usize],
+  target: usize,
+  left: bool,
+  make: impl Fn(usize) -> D,
+  width: impl Fn(usize) -> usize + Copy,
+) {
   let i = first_reaching(model, target, left, width);
   let before: usize = model[..i].iter().map(|&x| width(x)).sum();
   assert!(c.start() == &make(before), "seek start mismatch");
@@ -183,6 +207,40 @@ pub fn run(ops: &[Op]) {
         let total: usize = model.iter().sum();
         let at = *at as usize % (total + 2);
         check_split(&t, &model, at, *left, Total, |x| x);
+      }
+      Op::SeekForward { target, left, steps } => {
+        let total: usize = model.iter().sum();
+        let mut target = *target as usize % (total + 2);
+        let mut left = *left;
+        let mut c = t.cursor::<Total>();
+        c.seek(&Total(target), bias(left));
+        for (delta, l) in steps {
+          let delta = *delta as usize % 4;
+          target += delta;
+          // The same target with a Right bias cannot be followed by Left.
+          left = if delta == 0 && !left { false } else { *l };
+          c.seek_forward(&Total(target), bias(left));
+          assert_cursor(&c, &model, target, left, Total, |x| x);
+        }
+      }
+      Op::Walk { start, steps } => {
+        let mut c = t.cursor::<Total>();
+        let mut i = *start as usize % (model.len() + 1);
+        for _ in 0..i {
+          c.advance();
+        }
+        for forward in steps {
+          if *forward {
+            c.advance();
+            i = (i + 1).min(model.len());
+          } else {
+            let moved = c.prev();
+            assert_eq!(moved, i > 0);
+            i = i.saturating_sub(1);
+          }
+          assert_eq!(c.start().0, model[..i].iter().sum::<usize>());
+          assert_eq!(c.item().map(|n| n.0), model.get(i).copied());
+        }
       }
       Op::Snapshot => {
         if snapshots.len() < 8 {

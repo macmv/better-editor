@@ -22,6 +22,11 @@ const MAX: usize = 12;
 #[cfg(any(test, feature = "small-nodes"))]
 const MAX: usize = 4;
 
+/// Every node except the root holds at least this many entries. Joins keep
+/// this true (see `join_pair`), so the tree is always at least half full: its
+/// depth is O(log n) and its memory is within 2x of a packed tree.
+const MIN: usize = MAX / 2;
+
 #[cfg(any(test, feature = "fuzz"))]
 pub mod model;
 
@@ -210,39 +215,38 @@ impl<T: Item> Node<T> {
       unreachable!("insert_edge on a leaf")
     };
 
+    let i = if front { 0 } else { children.len() - 1 };
     if *height == other.height() + 1 {
-      if front {
-        children.insert(0, other);
-      } else {
-        children.push(other);
-      }
-    } else {
-      let i = if front { 0 } else { children.len() - 1 };
-      if let Some(sibling) = Arc::make_mut(&mut children[i]).insert_edge(other, front) {
-        children.insert(i + 1, Arc::new(sibling));
-      }
+      // Join with the neighbouring child, which has the same height.
+      let edge = children.remove(i);
+      let (x, y) = if front { join_pair(other, edge) } else { join_pair(edge, other) };
+      children.splice(i..i, std::iter::once(x).chain(y));
+    } else if let Some(sibling) = Arc::make_mut(&mut children[i]).insert_edge(other, front) {
+      children.insert(i + 1, Arc::new(sibling));
     }
     self.finish()
   }
 
   #[cfg(any(test, feature = "fuzz"))]
-  fn check(&self) -> (u8, T::Summary)
+  fn check(&self, is_root: bool) -> (u8, T::Summary)
   where
     T::Summary: PartialEq + std::fmt::Debug,
   {
     match self {
       Node::Leaf { summary, items, summaries } => {
-        assert!(!items.is_empty() && items.len() <= MAX);
+        assert!(items.len() <= MAX);
+        assert!(items.len() >= if is_root { 1 } else { MIN }, "underfull leaf");
         assert_eq!(items.len(), summaries.len());
         let expected = sum_of(items.iter().map(T::summary).collect::<Vec<_>>().iter());
         assert_eq!(*summary, expected);
         (0, expected)
       }
       Node::Internal { height, summary, children } => {
-        assert!(!children.is_empty() && children.len() <= MAX);
+        assert!(children.len() <= MAX);
+        assert!(children.len() >= if is_root { 2 } else { MIN }, "underfull node");
         let mut total = T::Summary::default();
         for c in children {
-          let (h, s) = c.check();
+          let (h, s) = c.check(false);
           assert_eq!(h + 1, *height);
           Summary::add_summary(&mut total, &s);
         }
@@ -346,14 +350,15 @@ impl<T: Item> SumTree<T> {
   }
 
   /// Asserts the structural invariants: uniform leaf depth, node sizes, and
-  /// cached summaries matching their recomputed values.
+  /// cached summaries matching their recomputed values, and every non-root node
+  /// at least half full.
   #[cfg(any(test, feature = "fuzz"))]
   pub fn check(&self)
   where
     T::Summary: PartialEq + std::fmt::Debug,
   {
     if let Some(root) = &self.root {
-      root.check();
+      root.check(true);
     }
   }
 }
@@ -371,62 +376,71 @@ fn concat<T: Item>(a: SumTree<T>, b: SumTree<T>) -> SumTree<T> {
   };
 
   match a.height().cmp(&b.height()) {
-    Ordering::Equal => join_equal(a, b),
+    Ordering::Equal => {
+      let (a, extra) = join_pair(a, b);
+      with_extra(a, extra)
+    }
     Ordering::Greater => {
       let mut a = a;
       let extra = Arc::make_mut(&mut a).insert_edge(b, false);
-      with_extra(a, extra)
+      with_extra(a, extra.map(Arc::new))
     }
     Ordering::Less => {
       let mut b = b;
       let extra = Arc::make_mut(&mut b).insert_edge(a, true);
-      with_extra(b, extra)
+      with_extra(b, extra.map(Arc::new))
     }
   }
 }
 
 /// Wraps `root` and its overflow sibling (if any) in a new root.
-fn with_extra<T: Item>(root: Arc<Node<T>>, extra: Option<Node<T>>) -> SumTree<T> {
+fn with_extra<T: Item>(root: Arc<Node<T>>, extra: Option<Arc<Node<T>>>) -> SumTree<T> {
   match extra {
     None => tree_of(root),
     Some(extra) => {
       let height = root.height() + 1;
-      tree_of(Arc::new(Node::internal(height, vec![root, Arc::new(extra)])))
+      tree_of(Arc::new(Node::internal(height, vec![root, extra])))
     }
   }
 }
 
-fn join_equal<T: Item>(mut a: Arc<Node<T>>, b: Arc<Node<T>>) -> SumTree<T> {
-  let fits = match (&*a, &*b) {
-    (Node::Leaf { items: x, .. }, Node::Leaf { items: y, .. }) => x.len() + y.len() <= MAX,
-    (Node::Internal { children: x, .. }, Node::Internal { children: y, .. }) => {
-      x.len() + y.len() <= MAX
-    }
-    _ => unreachable!("join_equal with different heights"),
+/// Joins two nodes of the same height, `a` before `b`, into one node or two.
+/// If two nodes are returned, both have at least `MIN` entries, as long as
+/// `a` and `b` together have more than `MAX`.
+fn join_pair<T: Item>(
+  mut a: Arc<Node<T>>,
+  b: Arc<Node<T>>,
+) -> (Arc<Node<T>>, Option<Arc<Node<T>>>) {
+  let (la, lb) = match (&*a, &*b) {
+    (Node::Leaf { items: x, .. }, Node::Leaf { items: y, .. }) => (x.len(), y.len()),
+    (Node::Internal { children: x, .. }, Node::Internal { children: y, .. }) => (x.len(), y.len()),
+    _ => unreachable!("join_pair with different heights"),
   };
 
-  if !fits {
-    let height = a.height() + 1;
-    return tree_of(Arc::new(Node::internal(height, vec![a, b])));
+  if la + lb > MAX && la >= MIN && lb >= MIN {
+    return (a, Some(b));
   }
 
-  let b = Arc::unwrap_or_clone(b);
+  // Move everything into `a`, then (if it does not fit) split it evenly.
+  let mut b = Arc::unwrap_or_clone(b);
   let node = Arc::make_mut(&mut a);
-  match (&mut *node, b) {
+  match (&mut *node, &mut b) {
     (
       Node::Leaf { items, summaries, .. },
       Node::Leaf { items: items2, summaries: summaries2, .. },
     ) => {
-      items.extend(items2);
-      summaries.extend(summaries2);
+      items.append(items2);
+      summaries.append(summaries2);
     }
     (Node::Internal { children, .. }, Node::Internal { children: children2, .. }) => {
-      children.extend(children2)
+      children.append(children2)
     }
     _ => unreachable!(),
   }
-  node.update_summary();
-  tree_of(a)
+
+  // `finish` splits an overfull node in half, and recomputes the summary.
+  let right = node.finish();
+  (a, right.map(Arc::new))
 }
 
 fn split_node<T, D, Tg>(
@@ -482,21 +496,31 @@ where
   }
 }
 
+/// Splits `v` into the fewest groups that fit in a node, with sizes as equal as
+/// possible (so every group has at least `MIN` entries, unless there is only
+/// one group).
+fn even_chunks<V>(v: Vec<V>) -> Vec<Vec<V>> {
+  let groups = v.len().div_ceil(MAX).max(1);
+  let (base, extra) = (v.len() / groups, v.len() % groups);
+  let mut iter = v.into_iter();
+  (0..groups).map(|i| iter.by_ref().take(base + (i < extra) as usize).collect()).collect()
+}
+
 impl<T: Item> FromIterator<T> for SumTree<T> {
   /// Builds the tree bottom-up with full nodes.
   fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-    let mut items = iter.into_iter().peekable();
-    let mut level: Vec<Arc<Node<T>>> = Vec::new();
-    while items.peek().is_some() {
-      let chunk: Vec<T> = items.by_ref().take(MAX).collect();
-      level.push(Arc::new(Node::leaf(chunk)));
+    let items: Vec<T> = iter.into_iter().collect();
+    if items.is_empty() {
+      return SumTree::new();
     }
+
+    let mut level: Vec<Arc<Node<T>>> =
+      even_chunks(items).into_iter().map(|c| Arc::new(Node::leaf(c))).collect();
 
     let mut height = 0;
     while level.len() > 1 {
       height += 1;
-      level =
-        level.chunks(MAX).map(|chunk| Arc::new(Node::internal(height, chunk.to_vec()))).collect();
+      level = even_chunks(level).into_iter().map(|c| Arc::new(Node::internal(height, c))).collect();
     }
     SumTree { root: level.pop() }
   }
@@ -523,11 +547,19 @@ impl<'a, T: Item> IntoIterator for &'a SumTree<T> {
 /// `None` and [`Cursor::start`] is the total).
 pub struct Cursor<'a, T: Item, D: Dimension<T::Summary>> {
   tree:  &'a SumTree<T>,
-  /// Path from the root to the current leaf; the last entry is the leaf and
-  /// the index of the current item. Empty when past the end.
-  stack: Vec<(&'a Node<T>, usize)>,
+  /// Path from the root to the current leaf; the last frame is the leaf and the
+  /// index of the current item. Empty when past the end.
+  stack: Vec<Frame<'a, T, D>>,
   /// The dimension summed over everything before the current item.
   start: D,
+}
+
+struct Frame<'a, T: Item, D> {
+  node:  &'a Node<T>,
+  /// The child (or item) the cursor is inside.
+  index: usize,
+  /// The dimension at the start of `node`.
+  base:  D,
 }
 
 impl<'a, T: Item, D: Dimension<T::Summary>> Cursor<'a, T, D> {
@@ -535,13 +567,15 @@ impl<'a, T: Item, D: Dimension<T::Summary>> Cursor<'a, T, D> {
     self.stack.clear();
     self.start = D::default();
     if let Some(root) = &self.tree.root {
-      self.descend_leftmost(root);
+      self.descend_leftmost(root, D::default());
     }
   }
 
-  fn descend_leftmost(&mut self, mut node: &'a Node<T>) {
+  /// Pushes frames down to the first item of `node`, which starts at `base`.
+  /// The cursor's `start` is already `base`.
+  fn descend_leftmost(&mut self, mut node: &'a Node<T>, base: D) {
     loop {
-      self.stack.push((node, 0));
+      self.stack.push(Frame { node, index: 0, base: base.clone() });
       match node {
         Node::Internal { children, .. } => node = &children[0],
         Node::Leaf { .. } => return,
@@ -549,10 +583,36 @@ impl<'a, T: Item, D: Dimension<T::Summary>> Cursor<'a, T, D> {
     }
   }
 
+  /// Pushes frames down to the last item of `node`, which starts at `base`, and
+  /// sets `start` to the start of that item.
+  fn descend_rightmost(&mut self, mut node: &'a Node<T>, mut base: D) {
+    loop {
+      match node {
+        Node::Internal { children, .. } => {
+          let last = children.len() - 1;
+          self.stack.push(Frame { node, index: last, base: base.clone() });
+          for c in &children[..last] {
+            base.add_summary(c.summary());
+          }
+          node = &children[last];
+        }
+        Node::Leaf { summaries, .. } => {
+          let last = summaries.len() - 1;
+          self.stack.push(Frame { node, index: last, base: base.clone() });
+          for s in &summaries[..last] {
+            base.add_summary(s);
+          }
+          self.start = base;
+          return;
+        }
+      }
+    }
+  }
+
   pub fn item(&self) -> Option<&'a T> {
-    let (node, idx) = self.stack.last()?;
-    match node {
-      Node::Leaf { items, .. } => Some(&items[*idx]),
+    let frame = self.stack.last()?;
+    match frame.node {
+      Node::Leaf { items, .. } => Some(&items[frame.index]),
       Node::Internal { .. } => unreachable!(),
     }
   }
@@ -563,32 +623,75 @@ impl<'a, T: Item, D: Dimension<T::Summary>> Cursor<'a, T, D> {
   /// The dimension at the end of the current item.
   pub fn end(&self) -> D {
     let mut end = self.start.clone();
-    if let Some((Node::Leaf { summaries, .. }, idx)) = self.stack.last() {
-      end.add_summary(&summaries[*idx]);
+    if let Some(Frame { node: Node::Leaf { summaries, .. }, index, .. }) = self.stack.last() {
+      end.add_summary(&summaries[*index]);
     }
     end
   }
 
-  /// Moves to the next item.
+  /// Moves to the next item. Does nothing when already past the end.
   pub fn advance(&mut self) {
-    let Some(&mut (leaf, ref mut idx)) = self.stack.last_mut() else { return };
-    let Node::Leaf { summaries, .. } = leaf else { unreachable!() };
-    self.start.add_summary(&summaries[*idx]);
-    *idx += 1;
-    if *idx < summaries.len() {
+    let Some(frame) = self.stack.last_mut() else { return };
+    let Node::Leaf { summaries, .. } = frame.node else { unreachable!() };
+    self.start.add_summary(&summaries[frame.index]);
+    frame.index += 1;
+    if frame.index < summaries.len() {
       return;
     }
 
     self.stack.pop();
-    while let Some(&mut (node, ref mut i)) = self.stack.last_mut() {
-      *i += 1;
+    while let Some(frame) = self.stack.last_mut() {
+      frame.index += 1;
+      let node = frame.node;
+      let index = frame.index;
       let Node::Internal { children, .. } = node else { unreachable!() };
-      if *i < children.len() {
-        let next: &'a Node<T> = &children[*i];
-        self.descend_leftmost(next);
+      if index < children.len() {
+        let base = self.start.clone();
+        self.descend_leftmost(&children[index], base);
         return;
       }
       self.stack.pop();
+    }
+  }
+
+  /// Moves to the previous item. From past the end, moves to the last item.
+  /// Returns false (and does not move) if there is no previous item.
+  pub fn prev(&mut self) -> bool {
+    if self.stack.is_empty() {
+      let Some(root) = &self.tree.root else { return false };
+      self.descend_rightmost(root, D::default());
+      return true;
+    }
+    if self.stack.iter().all(|f| f.index == 0) {
+      return false;
+    }
+
+    // Pop frames until one can step back; then go to the last item below it.
+    loop {
+      let frame = self.stack.last_mut().unwrap();
+      if frame.index == 0 {
+        self.stack.pop();
+        continue;
+      }
+
+      frame.index -= 1;
+      let index = frame.index;
+      let mut base = frame.base.clone();
+      match frame.node {
+        Node::Leaf { summaries, .. } => {
+          for s in &summaries[..index] {
+            base.add_summary(s);
+          }
+          self.start = base;
+        }
+        Node::Internal { children, .. } => {
+          for c in &children[..index] {
+            base.add_summary(c.summary());
+          }
+          self.descend_rightmost(&children[index], base);
+        }
+      }
+      return true;
     }
   }
 
@@ -602,6 +705,7 @@ impl<'a, T: Item, D: Dimension<T::Summary>> Cursor<'a, T, D> {
 
     let mut node: &'a Node<T> = root;
     loop {
+      let base = self.start.clone();
       let mut found = None;
       match node {
         Node::Internal { children, .. } => {
@@ -628,15 +732,98 @@ impl<'a, T: Item, D: Dimension<T::Summary>> Cursor<'a, T, D> {
         }
       }
 
-      let Some(i) = found else {
+      let Some(index) = found else {
         // Past the end; `start` is now the total.
         self.stack.clear();
         return;
       };
-      self.stack.push((node, i));
+      self.stack.push(Frame { node, index, base });
       match node {
-        Node::Internal { children, .. } => node = &children[i],
+        Node::Internal { children, .. } => node = &children[index],
         Node::Leaf { .. } => return,
+      }
+    }
+  }
+
+  /// Like [`Cursor::seek`], but starts from the current position instead of
+  /// the root, so it costs O(log d) for a target `d` items ahead. The target
+  /// must not be before the current item (with the same or a later bias than
+  /// the last seek); otherwise the resulting position is unspecified, though
+  /// still safe. From past the end, stays there.
+  pub fn seek_forward<Tg: SeekTarget<D>>(&mut self, target: &Tg, bias: Bias) {
+    if self.stack.is_empty() {
+      return;
+    }
+
+    // Climb until the top node contains the target. `pos` is the start of the
+    // first child of the top node that could still contain it.
+    let mut pos = self.start.clone();
+    loop {
+      let frame = self.stack.last().unwrap();
+      let mut end = frame.base.clone();
+      end.add_summary(frame.node.summary());
+      if reaches(target, &end, bias) {
+        break;
+      }
+
+      self.stack.pop();
+      match self.stack.last_mut() {
+        None => {
+          // Past the end; `end` is the total.
+          self.start = end;
+          return;
+        }
+        Some(parent) => {
+          parent.index += 1;
+          pos = end;
+        }
+      }
+    }
+
+    // Descend, scanning forward from the current index at each level.
+    loop {
+      let frame = self.stack.last_mut().unwrap();
+      let node = frame.node;
+      let mut found = None;
+      match node {
+        Node::Internal { children, .. } => {
+          for i in frame.index..children.len() {
+            let mut end = pos.clone();
+            end.add_summary(children[i].summary());
+            if reaches(target, &end, bias) {
+              found = Some(i);
+              break;
+            }
+            pos = end;
+          }
+        }
+        Node::Leaf { summaries, .. } => {
+          for i in frame.index..summaries.len() {
+            let mut end = pos.clone();
+            end.add_summary(&summaries[i]);
+            if reaches(target, &end, bias) {
+              found = Some(i);
+              break;
+            }
+            pos = end;
+          }
+        }
+      }
+
+      let Some(index) = found else {
+        self.stack.clear();
+        self.start = pos;
+        return;
+      };
+      frame.index = index;
+      match node {
+        Node::Internal { children, .. } => {
+          self.stack.push(Frame { node: &children[index], index: 0, base: pos.clone() })
+        }
+        Node::Leaf { .. } => {
+          self.start = pos;
+          return;
+        }
       }
     }
   }
@@ -679,7 +866,7 @@ mod tests {
     }
 
     fn op(&mut self) -> Op {
-      match self.next(9) {
+      match self.next(11) {
         0 => Op::Push(self.next(256) as u8),
         1 => Op::Append(self.vec(40)),
         2 => Op::Splice {
@@ -692,6 +879,15 @@ mod tests {
         5 => Op::Split { at: self.next(65536) as u16, left: self.next(2) == 0 },
         6 => Op::SplitTotal { at: self.next(65536) as u16, left: self.next(2) == 0 },
         7 => Op::Snapshot,
+        8 => Op::SeekForward {
+          target: self.next(65536) as u16,
+          left:   self.next(2) == 0,
+          steps:  (0..self.next(8)).map(|_| (self.next(256) as u8, self.next(2) == 0)).collect(),
+        },
+        9 => Op::Walk {
+          start: self.next(65536) as u16,
+          steps: (0..self.next(20)).map(|_| self.next(2) == 0).collect(),
+        },
         _ => Op::UpdateLast(self.next(256) as u8),
       }
     }

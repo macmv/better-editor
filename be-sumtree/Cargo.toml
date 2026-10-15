@@ -11,3 +11,10 @@ arbitrary = { version = "1", features = ["derive"], optional = true }
 fuzz = ["dep:arbitrary"]
 # Use a tiny node fan-out so small inputs build deep trees.
 small-nodes = []
+
+[dev-dependencies]
+criterion = { version = "0.5", default-features = false }
+
+[[bench]]
+name = "sumtree"
+harness = false
