@@ -226,7 +226,7 @@ impl Terminal {
   }
 
   pub fn perform_input(&mut self, c: char) { self.pty.write(format_args!("{c}")); }
-  pub fn perform_backspace(&mut self) { self.pty.write_bytes(&[control::C0::BS]); }
+  pub fn perform_backspace(&mut self) { self.pty.write_bytes(&[control::C0::DEL]); }
   pub fn perform_delete(&mut self) { self.pty.write_bytes(&[control::C0::DEL]); }
   pub fn perform_control(&mut self, b: u8) { self.pty.write_bytes(&[b]); }
   pub fn perform_escape(&mut self) { self.pty.write_bytes(&[control::C0::ESC]); }
