@@ -140,8 +140,9 @@ impl ChangedFile {
     if let Some(original) = &self.original {
       diff::line_diff_similarity(original, &self.current)
     } else {
-      // NB: This kinda sucks. However, diffing is slow, so this probably doesn't
-      // incur much cost. This should be cached at a higher level honestly.
+      // NB: This kinda sucks. However, diffing is slow, so this probably
+      // doesn't incur much cost. This should be cached at a higher level
+      // honestly.
       diff::line_diff_similarity(&be_doc::Document::new().snapshot(), &self.current)
     }
   }

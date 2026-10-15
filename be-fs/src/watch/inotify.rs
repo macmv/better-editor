@@ -94,8 +94,8 @@ impl INotifyWatcher {
         if let Ok(rel) = entry.path().strip_prefix(self.root.as_path())
           && let Some(rel) = rel.to_str()
         {
-          // TODO: Paths that are watched should be triggered by handles. We should not
-          // greedily watch paths.
+          // TODO: Paths that are watched should be triggered by handles. We
+          // should not greedily watch paths.
           if !rel.starts_with("target") {
             stack.push(WorkspacePathBuf::from(&rel));
           }

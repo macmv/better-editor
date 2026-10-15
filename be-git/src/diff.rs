@@ -118,8 +118,9 @@ struct RopeSliceHash<'a>(be_doc::crop::RopeSlice<'a>);
 
 impl Hash for RopeSliceHash<'_> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    // The hasher used by `imara_diff` is sequence dependent (it's foldhash). So, we
-    // use siphasher, which handles different chunk boundaries correctly.
+    // The hasher used by `imara_diff` is sequence dependent (it's foldhash).
+    // So, we use siphasher, which handles different chunk boundaries
+    // correctly.
     let mut hasher = SipHasher::new();
     for chunk in self.0.chunks() {
       hasher.write(chunk.as_bytes());
@@ -333,7 +334,8 @@ fn similarity_diff<'a>(
 
   // Fill DP with deterministic tie-breaks:
   // 1) lower cost
-  // 2) prefer Sub over Del over Ins (but Sub is only allowed if sim >= threshold)
+  // 2) prefer Sub over Del over Ins (but Sub is only allowed if sim >=
+  //    threshold)
   // 3) if Sub ties, prefer higher sim
   for i in 1..=before.len() {
     for j in 1..=after.len() {

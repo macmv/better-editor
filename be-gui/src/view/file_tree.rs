@@ -209,8 +209,9 @@ impl FileTree {
               curr.populate(&self.root);
             }
             Some(Item::File(_)) => {
-              // If we're done with the path, then break and update `active`. Otherwise, we
-              // found a file early, and the path is invalid.
+              // If we're done with the path, then break and update `active`.
+              // Otherwise, we found a file early, and the path is
+              // invalid.
               if components.peek().is_none() {
                 break;
               } else {
@@ -493,8 +494,8 @@ impl ItemMut<'_> {
         //   println!("CHAGNED!!");
         // }
 
-        // TODO: Move the caching to repo? It's somewhat nice to have it here. We just
-        // need some sense of 'staleness'.
+        // TODO: Move the caching to repo? It's somewhat nice to have it here.
+        // We just need some sense of 'staleness'.
         if dir.status.is_none() {
           if repo.is_ignored(&root.resolve_path(&dir.path)) {
             dir.status = Some(FileStatus::Ignored);

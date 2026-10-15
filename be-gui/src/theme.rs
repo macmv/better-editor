@@ -198,8 +198,8 @@ impl SyntaxTheme {
     let mut highlight = Highlight::empty();
 
     for key in keys {
-      // Deduplicates things like `comment` and `comment.documentation`, so that we
-      // only apply `comment.documentation`.
+      // Deduplicates things like `comment` and `comment.documentation`, so that
+      // we only apply `comment.documentation`.
       if keys.iter().any(|k| match (k, key) {
         (HighlightKey::TreeSitter(k), HighlightKey::TreeSitter(key)) => {
           k.len() > key.len() && k.starts_with(key)

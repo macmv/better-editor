@@ -77,7 +77,8 @@ impl WorkspacePath {
   where
     S: AsRef<str> + ?Sized,
   {
-    // SAFETY: `WorkspacePath` is #[repr(transparent)], and so is `RelativePath`.
+    // SAFETY: `WorkspacePath` is #[repr(transparent)], and so is
+    // `RelativePath`.
     unsafe { &*(s.as_ref() as *const str as *const WorkspacePath) }
   }
 

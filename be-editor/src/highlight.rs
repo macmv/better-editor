@@ -220,8 +220,8 @@ impl<'a> MergeIterator<'a> {
   }
 
   fn apply_all_starts_at(&mut self, pos: usize) {
-    // Pop all starts with start == pos, and for each, pull the next span from that
-    // source.
+    // Pop all starts with start == pos, and for each, pull the next span from
+    // that source.
     while let Some(Reverse(n)) = self.starts.peek() {
       if n.highlight.start != pos {
         break;
@@ -241,7 +241,8 @@ impl<'a> Iterator for MergeIterator<'a> {
   fn next(&mut self) -> Option<Self::Item> {
     if !self.started {
       self.started = true;
-      // Spans that start exactly at base should be active for [base, next_change).
+      // Spans that start exactly at base should be active for [base,
+      // next_change).
       self.apply_all_starts_at(self.base);
     }
 

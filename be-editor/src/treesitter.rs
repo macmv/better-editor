@@ -335,8 +335,9 @@ impl LoadedLanguage {
         panic!("Failed to load grammar");
       }
 
-      // `transmute` because I don't want to depend on `tree-sitter-language`, which
-      // exports a single transparent wrapper for a language function.
+      // `transmute` because I don't want to depend on `tree-sitter-language`,
+      // which exports a single transparent wrapper for a language
+      // function.
       let language = Language::new(std::mem::transmute(language));
 
       LoadedLanguage { object, language: ManuallyDrop::new(language) }

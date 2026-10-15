@@ -296,8 +296,8 @@ impl winit::application::ApplicationHandler<Event> for App {
           init.window.pre_present_notify();
           texture.present();
 
-          // We'd like to stay up to date with events, so lets avoid buffering a bunch of
-          // frames.
+          // We'd like to stay up to date with events, so lets avoid buffering a
+          // bunch of frames.
           init.device.poll(wgpu::PollType::wait()).unwrap();
 
           if init.app.state.should_exit() {

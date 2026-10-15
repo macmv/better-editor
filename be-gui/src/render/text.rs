@@ -235,11 +235,11 @@ impl Render<'_> {
             Some(size) => size.round(),
             None => run_metrics.underline_size.round(),
           };
-          // The `offset` is the distance from the baseline to the top of the underline
-          // so we move the line down by half the width
+          // The `offset` is the distance from the baseline to the top of the
+          // underline so we move the line down by half the width
           // Remember that we are using a y-down coordinate system
-          // If there's a custom width, because this is an underline, we want the custom
-          // width to go down from the default expectation
+          // If there's a custom width, because this is an underline, we want
+          // the custom width to go down from the default expectation
           let y = (glyph_run.baseline() - offset).round() + width / 2.0;
 
           let line = Line::new(
@@ -536,8 +536,8 @@ impl TextLayout {
         let width = match mode {
           CursorMode::Line => CURSOR_WIDTH,
           CursorMode::Block | CursorMode::Underline => {
-            // The advance is zero when the cursor is on a newline (ie, it's on the last
-            // character of the line).
+            // The advance is zero when the cursor is on a newline (ie, it's on
+            // the last character of the line).
             if cluster.advance() == 0.0 {
               self.metrics.character_width * self.scale
             } else {

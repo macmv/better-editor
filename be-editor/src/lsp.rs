@@ -88,15 +88,15 @@ impl EditorState {
 
     drop(config);
 
-    // TODO: Call this when a server sends it's init response. Right now, we block
-    // in `spawn` and wait for caps, so this works temporarily.
+    // TODO: Call this when a server sends it's init response. Right now, we
+    // block in `spawn` and wait for caps, so this works temporarily.
     self.lsp_on_change_server_caps();
 
-    // NB: This spits out an error for all the servers that haven't seen this file
-    // yet. But, it ensures DidOpen behaves.
+    // NB: This spits out an error for all the servers that haven't seen this
+    // file yet. But, it ensures DidOpen behaves.
     //
-    // I think this should just all get merged into a single command? Not entirely
-    // sure.
+    // I think this should just all get merged into a single command? Not
+    // entirely sure.
     self.lsp.client.send(&command::DidCloseTextDocument {
       path: self.file.as_ref().unwrap().path().to_path_buf(),
     });

@@ -357,22 +357,24 @@ impl Terminal {
 
       // Write filtered escape sequences.
       //
-      // We remove `\x1b` to ensure it's impossible for the pasted text to write the
-      // bracketed paste end escape `\x1b[201~` and `\x03` since some shells
-      // incorrectly terminate bracketed paste when they receive it.
+      // We remove `\x1b` to ensure it's impossible for the pasted text to write
+      // the bracketed paste end escape `\x1b[201~` and `\x03` since some
+      // shells incorrectly terminate bracketed paste when they receive
+      // it.
       let filtered = s.replace(['\x1b', '\x03'], "");
       self.pty.write_bytes(filtered.as_bytes());
 
       self.pty.write_bytes(b"\x1b[201~");
     } else {
-      // In non-bracketed (ie: normal) mode, terminal applications cannot distinguish
-      // pasted data from keystrokes.
+      // In non-bracketed (ie: normal) mode, terminal applications cannot
+      // distinguish pasted data from keystrokes.
       //
-      // In theory, we should construct the keystrokes needed to produce the data we
-      // are pasting... since that's neither practical nor sensible (and
-      // probably an impossible task to solve in a general way), we'll just
-      // replace line breaks (windows and unix style) with a single carriage
-      // return (\r, which is what the Enter key produces).
+      // In theory, we should construct the keystrokes needed to produce the
+      // data we are pasting... since that's neither practical nor
+      // sensible (and probably an impossible task to solve in a general
+      // way), we'll just replace line breaks (windows and unix style)
+      // with a single carriage return (\r, which is what the Enter key
+      // produces).
       self.pty.write_bytes(s.replace("\r\n", "\r").replace('\n', "\r").as_bytes());
     }
   }

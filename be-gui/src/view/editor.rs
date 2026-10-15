@@ -278,12 +278,13 @@ impl EditorView {
         } else {
           let size = Size::new(size.width, size.height - line_height);
 
-          // TODO: Horizontal scrolling? The current behavior of keeping the cursor
-          // onscreen leads to shifting the view all the way to the left anytime
-          // scrolling vertically moves the cursor to a blank line.
+          // TODO: Horizontal scrolling? The current behavior of keeping the
+          // cursor onscreen leads to shifting the view all the way to
+          // the left anytime scrolling vertically moves the cursor to
+          // a blank line.
           //
-          // Other editors solve this by not requiring the cursor to be in view, but I
-          // like keeping the cursor nice and obvious.
+          // Other editors solve this by not requiring the cursor to be in view,
+          // but I like keeping the cursor nice and obvious.
           self.vertical_scroll.offset = (self.vertical_scroll.offset - delta.y).max(0.0);
 
           if self.focused() {
@@ -362,8 +363,8 @@ impl EditorView {
     let mut i = self.min_line.as_usize();
 
     self.line_numbers.clear();
-    // Layout the length line number by default. If `character_width` is wrong, then
-    // we'll still take the `max()` below.
+    // Layout the length line number by default. If `character_width` is wrong,
+    // then we'll still take the `max()` below.
     self.line_number_width = layout.store.text.font_metrics().character_width
       * ((self.doc().len_lines() as f64).log10().floor() + 1.0);
 
@@ -751,9 +752,9 @@ impl EditorView {
         continue;
       }
 
-      // Round up to char boundaries. Avoids panics when laying out text. It's still
-      // wrong, but highlights come from places like LSP, where we can't trust
-      // their positions.
+      // Round up to char boundaries. Avoids panics when laying out text. It's
+      // still wrong, but highlights come from places like LSP, where we
+      // can't trust their positions.
       while !line_string.is_char_boundary(pos - index) && pos < max_index {
         pos += 1;
       }

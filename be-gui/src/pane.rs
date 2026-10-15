@@ -423,7 +423,8 @@ impl Split {
     let num_dividers = (self.items.len().saturating_sub(1)) as f64;
     let usable = total - num_dividers * DIVIDER_WIDTH;
 
-    // Compute the start and end of each item region, accounting for divider gaps.
+    // Compute the start and end of each item region, accounting for divider
+    // gaps.
     let mut offset = 0.0;
     let mut regions: Vec<(f64, f64)> = Vec::new();
     for (i, (p, _)) in self.items.iter().enumerate() {
@@ -437,7 +438,8 @@ impl Split {
       }
     }
 
-    // Check dividers first (the gaps between regions), with an extended hit zone.
+    // Check dividers first (the gaps between regions), with an extended hit
+    // zone.
     let hit_margin = (HIT_WIDTH - DIVIDER_WIDTH) / 2.0;
     for (i, _) in regions[..regions.len() - 1].iter().enumerate() {
       let divider_start = regions[i].1 - hit_margin;

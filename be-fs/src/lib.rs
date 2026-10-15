@@ -60,8 +60,8 @@ impl WatcherHandle {
   }
 
   pub fn take_changes(&mut self) -> DirectoryChanges {
-    // Copy of `WatcherHandle::changes` and `WatcherHandle::clear_changes` with a
-    // single lock
+    // Copy of `WatcherHandle::changes` and `WatcherHandle::clear_changes` with
+    // a single lock
     let mut state = self.state.lock();
     let mut changes = DirectoryChanges::default();
     for version in

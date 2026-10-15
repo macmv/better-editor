@@ -100,7 +100,8 @@ impl OpenedFile {
     let stat = self.path.metadata()?;
     if stat.mtime() > self.mtime {
       // TODO: Confirm popup
-      // return Err(io::Error::new(io::ErrorKind::Other, "file has been modified"));
+      // return Err(io::Error::new(io::ErrorKind::Other, "file has been
+      // modified"));
       warn!("file has been modified");
     }
 

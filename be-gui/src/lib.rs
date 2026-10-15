@@ -825,7 +825,8 @@ impl WorkspaceLayout {
             let tab = &mut self.tabs[self.active];
             let active_view = tab.content.active();
             tab.content.close(active_view, &mut self.views.views);
-            // FIXME: Deduplicate layouts closing themselves (ie, terminal exit).
+            // FIXME: Deduplicate layouts closing themselves (ie, terminal
+            // exit).
             self.views.views.remove(&active_view);
           }
           "e" => {
