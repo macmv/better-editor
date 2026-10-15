@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 be-doc = { path = "../be-doc" }
 
-git2 = { version = "0.20.3", default-features = false }
+git2 = { version = "0.20.4", default-features = false }
 imara-diff = "0.2.0"
-log = "0.4.29"
-siphasher = "1.0.1"
+log = "0.4.34"
+siphasher = "1.0.4"

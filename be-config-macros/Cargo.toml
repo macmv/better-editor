@@ -8,6 +8,6 @@ proc-macro = true
 
 [dependencies]
 proc-macro-error = "1.0.4"
-proc-macro2 = "1.0.106"
-quote = "1.0.44"
-syn = "2.0.116"
+proc-macro2 = "1.0.107"
+quote = "1.0.47"
+syn = "2.0.119"

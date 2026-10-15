@@ -8,9 +8,9 @@ be-config-macros = { path = "../be-config-macros" }
 be-input = { version = "0.1.0", path = "../be-input" }
 line-index = "0.1.2"
 
-serde = { version = "1.0.228", features = ["derive"] }
-smallvec = "1.15.1"
-toml = "1.0.3"
+serde = { version = "1.0.229", features = ["derive"] }
+smallvec = "1.16.3"
+toml = "1.1.8"
 
 [dev-dependencies]
 expect-test.workspace = true

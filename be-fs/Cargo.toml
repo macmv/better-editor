@@ -22,10 +22,10 @@ features = ["CFArray", "CFString"]
 
 [dependencies]
 btree-slab = "0.6.1"
-crossbeam-channel = "0.5.15"
-log = "0.4.29"
+crossbeam-channel = "0.5.17"
+log = "0.4.34"
 parking_lot = "0.12.5"
-relative-path = "2.0.1"
+relative-path = "2.0.2"
 
 [dev-dependencies]
 expect-test.workspace = true

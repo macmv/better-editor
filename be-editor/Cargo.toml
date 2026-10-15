@@ -11,12 +11,12 @@ be-task = { path = "../be-task" }
 be-lsp = { path = "../be-lsp" }
 be-git = { path = "../be-git" }
 
-libc = "0.2.178"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.145"
-tree-sitter = "0.26.3"
-unicode-segmentation = "1.12.0"
-log = "0.4.29"
+libc = "0.2.190"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tree-sitter = "0.26.13"
+unicode-segmentation = "1.13.3"
+log = "0.4.34"
 be-macros = { version = "0.1.0", path = "../be-macros" }
 be-shared = { version = "0.1.0", path = "../be-shared" }
 
