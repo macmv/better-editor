@@ -9,6 +9,7 @@ use crate::{grammar, parse::ParseValue};
 #[derive(Default, Config, Clone)]
 pub struct Keybinds {
   pub(crate) settings:   KeybindSettings,
+  pub(crate) global:     KeyMap<grammar::Action>,
   pub(crate) navigation: KeyMap<grammar::Action>,
   pub(crate) normal:     KeyMap<grammar::Action>,
   pub(crate) visual:     VisualKeybinds,
@@ -57,7 +58,7 @@ impl Key {
 
 // Parses keys like:
 //
-// 'a' 'M-a' 'C-a' 'C-A-a'
+// 'a' 'M-a' 'C-a' 'C-A-a' 'C-SP'
 fn parse_key_stroke(key: &str) -> Result<KeyStroke, String> {
   use be_input::Key;
 
@@ -69,51 +70,46 @@ fn parse_key_stroke(key: &str) -> Result<KeyStroke, String> {
     alt:     false,
   };
 
-  let mut iter = key.chars().peekable();
-  let first = iter.next().ok_or_else(|| format!("invalid key: {}", key))?;
+  let invalid = || format!("invalid key: {}", key);
 
-  if iter.peek().is_none() {
-    out.key = Key::Char(first);
-    return Ok(out);
-  }
-
-  match key {
-    "ESC" => out.key = Key::Escape,
-    "SP" => out.key = Key::Char(' '),
-    "DEL" => out.key = Key::Delete,
-    "BS" => out.key = Key::Backspace,
-    "TAB" => out.key = Key::Tab,
-    "UP" => out.key = Key::ArrowUp,
-    "DOWN" => out.key = Key::ArrowDown,
-    "LEFT" => out.key = Key::ArrowLeft,
-    "RIGHT" => out.key = Key::ArrowRight,
-
-    _ if iter.peek() == Some(&'-') => {
-      let mut c = first;
-      loop {
-        assert_eq!(iter.next(), Some('-'));
-
-        match c {
-          'M' => out.sup = true,
-          'C' => out.control = true,
-          'A' => out.alt = true,
-          'S' => out.shift = true,
-          _ => return Err(format!("invalid key: {}", key)),
-        }
-
-        c = iter.next().ok_or_else(|| format!("invalid key: {}", key))?;
-
-        if iter.peek().is_none() {
-          out.key = Key::Char(c);
-          break;
-        } else if iter.peek() != Some(&'-') {
-          return Err(format!("invalid key: {}", key));
-        }
-      }
+  // Strip leading `X-` modifiers, as long as something follows them.
+  let mut rest = key;
+  loop {
+    let mut chars = rest.chars();
+    let (Some(m), Some('-')) = (chars.next(), chars.next()) else { break };
+    if chars.as_str().is_empty() {
+      break;
     }
 
-    _ => return Err(format!("invalid key: {}", key)),
+    match m {
+      'M' => out.sup = true,
+      'C' => out.control = true,
+      'A' => out.alt = true,
+      'S' => out.shift = true,
+      _ => return Err(invalid()),
+    }
+    rest = chars.as_str();
   }
+
+  out.key = match rest {
+    "ESC" => Key::Escape,
+    "SP" => Key::Char(' '),
+    "DEL" => Key::Delete,
+    "BS" => Key::Backspace,
+    "TAB" => Key::Tab,
+    "MENU" => Key::Menu,
+    "UP" => Key::ArrowUp,
+    "DOWN" => Key::ArrowDown,
+    "LEFT" => Key::ArrowLeft,
+    "RIGHT" => Key::ArrowRight,
+    _ => {
+      let mut chars = rest.chars();
+      match (chars.next(), chars.next()) {
+        (Some(c), None) => Key::Char(c),
+        _ => return Err(invalid()),
+      }
+    }
+  };
 
   Ok(out)
 }

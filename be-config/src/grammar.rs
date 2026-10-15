@@ -82,6 +82,12 @@ impl Keybinds {
       return Err(ActionError::Incomplete);
     }
 
+    match parser.parse_action(&self.global) {
+      Ok(action) => return Ok(action),
+      Err(ActionError::Incomplete) => return Err(ActionError::Incomplete),
+      Err(ActionError::Unrecognized) => {}
+    }
+
     if let Some(nav_key) = self.settings.navigate.0.get(0)
       && parser.remaining[0] == *nav_key
     {

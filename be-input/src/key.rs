@@ -5,6 +5,7 @@ pub enum Key {
   Delete,
   Escape,
   Tab,
+  Menu,
 
   ArrowUp,
   ArrowDown,

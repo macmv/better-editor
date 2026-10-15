@@ -37,6 +37,7 @@ pane = "terminal"
 # - "DEL" - Delete
 # - "BS" - Backspace (delete on MacOS)
 # - "TAB" - Tab
+# - "MENU" - Menu/application key
 # - "UP" - Up arrow
 # - "DOWN" - Down arrow
 # - "LEFT" - Left arrow
@@ -56,7 +57,28 @@ pane = "terminal"
 
 [keybinds.settings]
 # To enter any navigation bind, first press this key. Applies in any mode.
-navigate = "C-w"
+# Caps Lock can send this key with `kb_options = caps:menu` (Hyprland/xkb).
+navigate = "MENU"
+
+[keybinds.global]
+# Checked first, in every mode.
+"C-h" = { action = "navigate", nav = "left" }
+"C-j" = { action = "navigate", nav = "down" }
+"C-k" = { action = "navigate", nav = "up" }
+"C-l" = { action = "navigate", nav = "right" }
+"C-0" = { action = "navigate", nav = { nav = "tab", tab = 0 } }
+"C-1" = { action = "navigate", nav = { nav = "tab", tab = 1 } }
+"C-2" = { action = "navigate", nav = { nav = "tab", tab = 2 } }
+"C-3" = { action = "navigate", nav = { nav = "tab", tab = 3 } }
+"C-4" = { action = "navigate", nav = { nav = "tab", tab = 4 } }
+"C-5" = { action = "navigate", nav = { nav = "tab", tab = 5 } }
+"C-6" = { action = "navigate", nav = { nav = "tab", tab = 6 } }
+"C-7" = { action = "navigate", nav = { nav = "tab", tab = 7 } }
+"C-8" = { action = "navigate", nav = { nav = "tab", tab = 8 } }
+"C-9" = { action = "navigate", nav = { nav = "tab", tab = 9 } }
+"C-s" = { action = "navigate", nav = { nav = "create_split", axis = "vertical" } }
+"C-f" = { action = "navigate", nav = { nav = "create_split", axis = "horizontal" } }
+"C-\\" = { action = "navigate", nav = "open_workspace" }
 
 [keybinds.navigation]
 "h" = { action = "navigate", nav = "left" }
