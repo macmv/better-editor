@@ -170,14 +170,18 @@ impl KeyParser<'_> {
 
   fn parse_count(&mut self) {
     if matches!(self.mode, Mode::Normal | Mode::Visual(_)) {
-      while let Some(Key::Char(c @ '0'..='9')) = self.remaining.get(0).map(|k| k.key) {
+      while let Some(stroke) = self.remaining.get(0)
+        && !stroke.control
+        && !stroke.alt
+        && !stroke.sup
+        && let Key::Char(c @ '0'..='9') = stroke.key
+      {
         // Counts cannot start with 0 (as 0 is start-of-line).
         if c == '0' && self.count == 0 {
           break;
         }
 
-        self.count *= 10;
-        self.count += u32::from(c) - u32::from('0');
+        self.count = self.count.saturating_mul(10).saturating_add(u32::from(c) - u32::from('0'));
         self.skip();
       }
     }
