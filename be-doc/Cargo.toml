@@ -7,3 +7,5 @@ edition = "2024"
 be-macros = { version = "0.1.0", path = "../be-macros" }
 be-rope = { version = "0.1.0", path = "../be-rope" }
 unicode-width = { version = "0.2.2", default-features = false }
+getrandom = "0.3.4"
+serde = { version = "1.0.229", features = ["derive"] }

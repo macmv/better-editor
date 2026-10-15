@@ -5,7 +5,7 @@ use std::{
 
 use be_rope::RopeBuilder;
 
-use crate::{Document, DocumentSnapshot};
+use crate::{DocId, Document, DocumentSnapshot};
 
 impl Document {
   pub fn read_lossy(reader: &mut impl std::io::Read) -> io::Result<Document> {
@@ -49,7 +49,7 @@ impl Document {
       }
     }
 
-    Ok(Document { snap: DocumentSnapshot { rope: builder.build() } })
+    Ok(Document { id: DocId::random(), snap: DocumentSnapshot { rope: builder.build() } })
   }
 
   pub fn write(&self, writer: &mut impl std::io::Write) -> io::Result<()> {

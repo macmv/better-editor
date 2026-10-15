@@ -7,19 +7,26 @@ use be_rope::Rope;
 
 mod edit;
 mod fs;
+mod id;
 mod search;
 mod snap;
 
 pub use edit::{Change, Edit};
+pub use id::DocId;
 pub use search::FindIter;
 pub use snap::DocumentSnapshot;
 
 #[macro_use]
 extern crate be_macros;
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct Document {
+  id:   DocId,
   snap: DocumentSnapshot,
+}
+
+impl Default for Document {
+  fn default() -> Self { Document { id: DocId::random(), snap: DocumentSnapshot::default() } }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -63,11 +70,13 @@ pub struct Column(pub usize);
 pub struct VisualColumn(pub usize);
 
 impl From<&str> for Document {
-  fn from(s: &str) -> Document { Document { snap: DocumentSnapshot { rope: Rope::from(s) } } }
+  fn from(s: &str) -> Document {
+    Document { id: DocId::random(), snap: DocumentSnapshot { rope: Rope::from(s) } }
+  }
 }
 impl From<std::borrow::Cow<'_, str>> for Document {
   fn from(s: std::borrow::Cow<'_, str>) -> Document {
-    Document { snap: DocumentSnapshot { rope: Rope::from(s) } }
+    Document { id: DocId::random(), snap: DocumentSnapshot { rope: Rope::from(s) } }
   }
 }
 
@@ -106,7 +115,19 @@ impl Deref for Document {
 }
 
 impl Document {
-  pub fn new() -> Document { Document { snap: DocumentSnapshot { rope: Rope::new() } } }
+  pub fn new() -> Document {
+    Document { id: DocId::random(), snap: DocumentSnapshot { rope: Rope::new() } }
+  }
+
+  /// Which document this is. Clones keep the id, as they are the same document
+  /// at the same point in time.
+  pub fn id(&self) -> DocId { self.id }
+
+  /// Replaces the id, eg, when a server assigns the real id to a replica.
+  pub fn with_id(mut self, id: DocId) -> Document {
+    self.id = id;
+    self
+  }
 }
 
 impl Column {
