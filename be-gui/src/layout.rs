@@ -110,7 +110,7 @@ impl<'a> Layout<'a> {
     backgrounds: Vec<(usize, Option<peniko::Brush>)>,
   ) -> TextLayout {
     layout.break_all_lines(None);
-    layout.align(None, parley::Alignment::Start, parley::AlignmentOptions::default());
+    layout.align(parley::Alignment::Start, parley::AlignmentOptions::default());
 
     TextLayout {
       metrics: self.store.text.font_metrics().clone(),

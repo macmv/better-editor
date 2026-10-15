@@ -59,10 +59,11 @@ impl winit::application::ApplicationHandler<Event> for App {
       .create_window(winit::window::WindowAttributes::default().with_title("Better Editor"))
       .unwrap();
 
-    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-      flags: wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL, // disable validation.
-      ..Default::default()
-    });
+    let mut descriptor = wgpu::InstanceDescriptor::new_with_display_handle(Box::new(
+      event_loop.owned_display_handle(),
+    ));
+    descriptor.flags = wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL; // disable validation.
+    let instance = wgpu::Instance::new(descriptor);
     let surface = instance.create_surface(&window).unwrap();
 
     // SAFETY: `window` is kept alive for the duration of `surface`.
@@ -85,6 +86,7 @@ impl winit::application::ApplicationHandler<Event> for App {
     let config = wgpu::SurfaceConfiguration {
       usage:                         wgpu::TextureUsages::RENDER_ATTACHMENT,
       format:                        surface_format,
+      color_space:                   wgpu::SurfaceColorSpace::Auto,
       width:                         window.inner_size().width,
       height:                        window.inner_size().height,
       alpha_mode:                    wgpu::CompositeAlphaMode::Auto,
@@ -288,17 +290,27 @@ impl winit::application::ApplicationHandler<Event> for App {
 
       WindowEvent::RedrawRequested => {
         if let Some(init) = &mut self.init {
-          let texture = init.surface.get_current_texture().unwrap();
+          use wgpu::CurrentSurfaceTexture::*;
+          let texture = match init.surface.get_current_texture() {
+            Success(texture) | Suboptimal(texture) => texture,
+            Outdated | Lost => {
+              init.surface.configure(&init.device, &init.config);
+              init.window.request_redraw();
+              return;
+            }
+            Timeout | Occluded => return,
+            Validation => panic!("surface validation error"),
+          };
 
           puffin::GlobalProfiler::lock().new_frame();
           init.app.render(&texture, &init.device, &init.queue, init.scale);
 
           init.window.pre_present_notify();
-          texture.present();
+          init.queue.present(texture);
 
           // We'd like to stay up to date with events, so lets avoid buffering a
           // bunch of frames.
-          init.device.poll(wgpu::PollType::wait()).unwrap();
+          init.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
 
           if init.app.state.should_exit() {
             event_loop.exit();

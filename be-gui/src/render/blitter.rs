@@ -42,22 +42,22 @@ impl TextureBlitterConvert {
     });
 
     let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-      label:                Some("TextureBlitterConvert::pipeline_layout"),
-      bind_group_layouts:   &[&bind_group_layout],
-      push_constant_ranges: &[],
+      label:              Some("TextureBlitterConvert::pipeline_layout"),
+      bind_group_layouts: &[Some(&bind_group_layout)],
+      immediate_size:     0,
     });
 
     let shader = device.create_shader_module(include_wgsl!("blit.wgsl"));
     let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-      label:         Some("TextureBlitterConvert::pipeline"),
-      layout:        Some(&pipeline_layout),
-      vertex:        VertexState {
+      label:          Some("TextureBlitterConvert::pipeline"),
+      layout:         Some(&pipeline_layout),
+      vertex:         VertexState {
         module:              &shader,
         entry_point:         Some("vs_main"),
         compilation_options: PipelineCompilationOptions::default(),
         buffers:             &[],
       },
-      primitive:     PrimitiveState {
+      primitive:      PrimitiveState {
         topology:           PrimitiveTopology::TriangleList,
         strip_index_format: None,
         front_face:         FrontFace::Ccw,
@@ -66,9 +66,9 @@ impl TextureBlitterConvert {
         polygon_mode:       wgt::PolygonMode::Fill,
         conservative:       false,
       },
-      depth_stencil: None,
-      multisample:   MultisampleState::default(),
-      fragment:      Some(FragmentState {
+      depth_stencil:  None,
+      multisample:    MultisampleState::default(),
+      fragment:       Some(FragmentState {
         module:              &shader,
         entry_point:         Some("fs_main"),
         compilation_options: PipelineCompilationOptions::default(),
@@ -78,8 +78,8 @@ impl TextureBlitterConvert {
           write_mask: ColorWrites::ALL,
         })],
       }),
-      multiview:     None,
-      cache:         None,
+      multiview_mask: None,
+      cache:          None,
     });
 
     TextureBlitterConvert { pipeline, bind_group_layout, sampler }
@@ -112,6 +112,7 @@ impl TextureBlitterConvert {
       depth_stencil_attachment: None,
       timestamp_writes:         None,
       occlusion_query_set:      None,
+      multiview_mask:           None,
     });
     pass.set_pipeline(&self.pipeline);
     pass.set_bind_group(0, &bind_group, &[]);

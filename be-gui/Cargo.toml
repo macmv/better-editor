@@ -5,14 +5,14 @@ edition = "2024"
 default-run = "be-gui"
 
 [dependencies]
-kurbo = "0.12"
-parley = "0.7.0"
-peniko = "0.5"
+kurbo = "0.13"
+parley = "0.12.0"
+peniko = "0.6"
 pollster = "0.4.0"
-vello = "0.6.0"
-wgpu = "26.0.1"
+vello = "0.11.0"
+wgpu = "30.0.1"
 winit = { version = "0.30.13", default-features = false, features = ["wayland", "x11", "rwh_06"] }
-skrifa = { version = "0.37", default-features = false }
+skrifa = { version = "0.44", default-features = false }
 
 be-doc = { path = "../be-doc" }
 be-macros = { path = "../be-macros" }

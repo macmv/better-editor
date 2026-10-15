@@ -78,22 +78,22 @@ impl TextStore {
     builder.push_default(parley::StyleProperty::FontSize(
       self.config.borrow().settings.editor.font.size as f32,
     ));
-    builder.push_default(parley::StyleProperty::FontStack(parley::FontStack::Source(
+    builder.push_default(parley::StyleProperty::FontFamily(parley::FontFamily::Source(
       self.config.borrow().settings.editor.font.family.as_str().into(),
     )));
     let mut layout = builder.build(TEXT);
 
     layout.break_all_lines(None);
-    layout.align(None, parley::Alignment::Start, parley::AlignmentOptions::default());
+    layout.align(parley::Alignment::Start, parley::AlignmentOptions::default());
 
     let line = layout.lines().next().unwrap();
     let parley::PositionedLayoutItem::GlyphRun(glyph_run) = line.items().next().unwrap() else {
       unreachable!()
     };
 
-    let metrics = glyph_run.run().metrics();
+    let metrics = glyph_run.run().font_metrics();
 
-    self.font_metrics.line_height = f64::from(metrics.line_height);
+    self.font_metrics.line_height = f64::from(metrics.ascent + metrics.descent + metrics.leading);
     self.font_metrics.character_width = f64::from(glyph_run.run().advance());
   }
 
@@ -112,7 +112,7 @@ impl TextStore {
         builder.push_default(parley::StyleProperty::FontSize(
           (config.settings.editor.font.size * scale) as f32,
         ));
-        builder.push_default(parley::StyleProperty::FontStack(
+        builder.push_default(parley::StyleProperty::FontFamily(
           config.settings.editor.font.family.as_str().into(),
         ));
       }
@@ -120,7 +120,7 @@ impl TextStore {
         builder.push_default(parley::StyleProperty::FontSize(
           (config.settings.ui.font.size * scale) as f32,
         ));
-        builder.push_default(parley::StyleProperty::FontStack(
+        builder.push_default(parley::StyleProperty::FontFamily(
           config.settings.ui.font.family.as_str().into(),
         ));
       }
@@ -128,7 +128,7 @@ impl TextStore {
         builder.push_default(parley::StyleProperty::FontSize(
           (config.settings.terminal.font.size * scale) as f32,
         ));
-        builder.push_default(parley::StyleProperty::FontStack(
+        builder.push_default(parley::StyleProperty::FontFamily(
           config.settings.terminal.font.family.as_str().into(),
         ));
       }
@@ -157,7 +157,7 @@ impl Render<'_> {
     backgrounds: Vec<(usize, Option<peniko::Brush>)>,
   ) -> TextLayout {
     layout.break_all_lines(None);
-    layout.align(None, parley::Alignment::Start, parley::AlignmentOptions::default());
+    layout.align(parley::Alignment::Start, parley::AlignmentOptions::default());
 
     TextLayout {
       metrics: self.store.text.font_metrics.clone(),
@@ -212,9 +212,9 @@ impl Render<'_> {
 
               let rect = Rect::new(
                 *background_x,
-                metrics.min_coord as f64,
+                metrics.block_min_coord as f64,
                 next_x,
-                metrics.max_coord as f64,
+                metrics.block_max_coord as f64,
               )
               .expand();
               self.scene.fill(Fill::NonZero, transform, background_brush, None, &rect);
@@ -226,7 +226,7 @@ impl Render<'_> {
         }
 
         if let Some(underline) = &style.underline {
-          let run_metrics = glyph_run.run().metrics();
+          let run_metrics = glyph_run.run().font_metrics();
           let offset = match underline.offset {
             Some(offset) => offset,
             None => run_metrics.underline_offset,
@@ -267,6 +267,8 @@ impl Render<'_> {
           self.draw_emoji(&glyph_run, transform, glyph_transform, glyphs);
         } else {
           // Normal characters can be drawn with vello.
+          let normalized_coords =
+            run.normalized_coords().iter().map(|c| c.to_bits()).collect::<Vec<_>>();
           self
             .scene
             .draw_glyphs(run.font())
@@ -275,7 +277,7 @@ impl Render<'_> {
             .transform(transform)
             .glyph_transform(glyph_transform)
             .font_size(run.font_size())
-            .normalized_coords(run.normalized_coords())
+            .normalized_coords(&normalized_coords)
             .draw(Fill::NonZero, glyphs);
         }
       }
@@ -550,11 +552,11 @@ impl TextLayout {
         Rect::new(
           x,
           match mode {
-            CursorMode::Underline => metrics.max_coord as f64 - CURSOR_WIDTH,
-            _ => metrics.min_coord as f64,
+            CursorMode::Underline => metrics.block_max_coord as f64 - CURSOR_WIDTH,
+            _ => metrics.block_min_coord as f64,
           },
           x + width,
-          metrics.max_coord as f64,
+          metrics.block_max_coord as f64,
         )
       }
 
@@ -571,11 +573,11 @@ impl TextLayout {
         Rect::new(
           x,
           match mode {
-            CursorMode::Underline => metrics.max_coord as f64 - CURSOR_WIDTH,
-            _ => metrics.min_coord as f64,
+            CursorMode::Underline => metrics.block_max_coord as f64 - CURSOR_WIDTH,
+            _ => metrics.block_min_coord as f64,
           },
           x + CURSOR_WIDTH,
-          metrics.max_coord as f64,
+          metrics.block_max_coord as f64,
         )
       }
 
@@ -645,7 +647,7 @@ where
     UnderlineBrush(v) => UnderlineBrush(v.map(f)),
     StrikethroughBrush(v) => StrikethroughBrush(v.map(f)),
 
-    FontStack(v) => FontStack(v),
+    FontFamily(v) => FontFamily(v),
     FontSize(v) => FontSize(v),
     FontWidth(v) => FontWidth(v),
     FontStyle(v) => FontStyle(v),
@@ -662,7 +664,10 @@ where
     LineHeight(v) => LineHeight(v),
     WordSpacing(v) => WordSpacing(v),
     LetterSpacing(v) => LetterSpacing(v),
+    VerticalAlign(v) => VerticalAlign(v),
     WordBreak(v) => WordBreak(v),
+    LineBreak(v) => LineBreak(v),
+    WhiteSpaceCollapse(v) => WhiteSpaceCollapse(v),
     OverflowWrap(v) => OverflowWrap(v),
     TextWrapMode(v) => TextWrapMode(v),
   }

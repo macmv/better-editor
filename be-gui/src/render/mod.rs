@@ -325,7 +325,7 @@ impl<'a> Render<'a> {
 
     let scaled_rect = rect.scale_from_origin(self.scale).round();
     self.stack.push(scaled_rect.scale_from_origin(1.0 / self.scale));
-    self.scene.push_clip_layer(Affine::IDENTITY, &scaled_rect);
+    self.scene.push_clip_layer(peniko::Fill::NonZero, Affine::IDENTITY, &scaled_rect);
 
     f(self);
 
