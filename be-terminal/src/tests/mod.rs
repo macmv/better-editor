@@ -220,3 +220,22 @@ fn pending_wrap_cursor() {
     |X🮙   |
   "#]);
 }
+
+/// Repro for nvim's cursorline not clearing on scroll in a vertical split.
+///
+/// nvim redraws the old cursorline row by setting the normal background and
+/// emitting ECH (`CSI n X`) to blank the cells, relying on the terminal to
+/// fill them with the current background (bce). We only replace the chars, so
+/// the old cursorline background is left behind.
+#[test]
+fn erase_chars_uses_current_background() {
+  let mut vt = Vt::new(2, 16);
+  vt.feed(s().set_bg(BuiltinColor::Red).print("line 2          "));
+  vt.feed(s().move_to(0, 0).reset_style().set_bg(BuiltinColor::Blue).print("\x1b[8X"));
+
+  let line = vt.state.grid.line(0).unwrap();
+  let bgs: Vec<_> = line.specific_styles(|_, style| style.background).collect();
+  let color = |color| Some(crate::TerminalColor::Builtin { color, bright: false });
+  // Cells 0..8 were erased with a blue background; the rest are untouched.
+  assert_eq!(bgs, vec![(color(BuiltinColor::Blue), 8), (color(BuiltinColor::Red), 16)]);
+}
