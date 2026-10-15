@@ -385,6 +385,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "be-rope"
+version = "0.1.0"
+dependencies = [
+ "be-sumtree",
+ "icu_properties",
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "be-shared"
 version = "0.1.0"
 

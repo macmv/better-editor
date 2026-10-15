@@ -1,0 +1,16 @@
+[package]
+name = "be-rope"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+be-sumtree = { version = "0.1.0", path = "../be-sumtree" }
+icu_properties = "2.3.0"
+
+[dev-dependencies]
+be-sumtree = { version = "0.1.0", path = "../be-sumtree", features = ["fuzz", "small-nodes"] }
+unicode-segmentation = "1.13"
+
+[features]
+# Use tiny chunks (and tiny tree nodes) so small inputs build deep trees.
+small-chunks = ["be-sumtree/small-nodes"]
