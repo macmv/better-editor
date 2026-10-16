@@ -404,7 +404,7 @@ impl FileTree {
   pub fn draw(&mut self, render: &mut Render) {
     puffin::profile_function!();
 
-    self.scroll.line_height = render.store.text.font_metrics().line_height;
+    self.scroll.line_height = render.store.text.font_metrics(crate::Font::Ui).line_height;
     self.scroll.make_visible(render.size().height, self.active);
 
     render.fill(
@@ -416,7 +416,7 @@ impl FileTree {
       line:         0,
       indent:       0,
       indent_width: 12.0,
-      line_height:  render.store.text.font_metrics().line_height,
+      line_height:  render.store.text.font_metrics(crate::Font::Ui).line_height,
       offset:       self.scroll.offset,
       active:       self.active,
       focused:      self.focused,

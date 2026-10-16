@@ -52,14 +52,16 @@ impl Search {
       Stroke::new(stroke),
     );
 
-    let result_count_fract =
-      (render.size().height - 60.0) / render.store.text.font_metrics().line_height;
+    let result_count_fract = (render.size().height - 60.0)
+      / render.store.text.font_metrics(crate::Font::Editor).line_height;
     let result_count = result_count_fract.floor() as usize;
 
     for i in 0..snap.matched_item_count().clamp(0, result_count as u32) {
       let result = snap.get_matched_item(i).unwrap();
 
-      let y = render.size().height - 60.0 - i as f64 * render.store.text.font_metrics().line_height;
+      let y = render.size().height
+        - 60.0
+        - i as f64 * render.store.text.font_metrics(crate::Font::Editor).line_height;
       let matched_color = render.theme().search_matched;
       let mut builder = render.store.text.layout_builder(
         crate::Font::Editor,
@@ -85,7 +87,7 @@ impl Search {
       }
 
       let (built, backgrounds) = builder.build(result.data);
-      let layout = render.build_layout(built, backgrounds);
+      let layout = render.build_layout(crate::Font::Editor, built, backgrounds);
       render.draw_text(&layout, Point::new(20.0, y));
     }
 

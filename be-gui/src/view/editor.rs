@@ -149,7 +149,7 @@ impl EditorView {
       self.cached_layouts.remove(&line.as_usize());
     }
 
-    let line_height = layout.store.text.font_metrics().line_height;
+    let line_height = layout.store.text.font_metrics(Font::Editor).line_height;
 
     layout.split(
       self,
@@ -163,7 +163,7 @@ impl EditorView {
   pub fn draw(&mut self, render: &mut Render) {
     puffin::profile_function!();
 
-    let line_height = render.store.text.font_metrics().line_height;
+    let line_height = render.store.text.font_metrics(Font::Editor).line_height;
 
     render.split(
       self,
@@ -220,7 +220,7 @@ impl EditorView {
     size: Size,
     store: &RenderStore,
   ) -> crate::CursorKind {
-    let line_height = store.text.font_metrics().line_height;
+    let line_height = store.text.font_metrics(Font::Editor).line_height;
 
     match ev {
       MouseEvent::Move { pos } => {
@@ -310,7 +310,7 @@ impl EditorView {
   }
 
   fn line_for_mouse(&self, store: &RenderStore, y: f64) -> Option<be_doc::Line> {
-    let line_height = store.text.font_metrics().line_height;
+    let line_height = store.text.font_metrics(Font::Editor).line_height;
 
     let line_region_y = self.vertical_scroll.offset + y;
     let line = (line_region_y / line_height).floor() as usize;
@@ -318,7 +318,7 @@ impl EditorView {
   }
 
   fn layout_editor(&mut self, layout: &mut Layout) {
-    let line_height = layout.store.text.font_metrics().line_height;
+    let line_height = layout.store.text.font_metrics(Font::Editor).line_height;
     self.vertical_scroll.line_height = line_height;
     let scroll_offset = self.editor.config.borrow().settings.editor.scroll_offset as usize;
 
@@ -365,7 +365,7 @@ impl EditorView {
     self.line_numbers.clear();
     // Layout the length line number by default. If `character_width` is wrong,
     // then we'll still take the `max()` below.
-    self.line_number_width = layout.store.text.font_metrics().character_width
+    self.line_number_width = layout.store.text.font_metrics(Font::Editor).character_width
       * ((self.doc().len_lines() as f64).log10().floor() + 1.0);
 
     while index < end {
@@ -408,7 +408,7 @@ impl EditorView {
       render.theme().background,
     );
 
-    let line_height = render.store.text.font_metrics().line_height;
+    let line_height = render.store.text.font_metrics(Font::Editor).line_height;
     let start_y = self.vertical_scroll.first_line_offset();
 
     let ranges = self.editor.selection_ranges();
@@ -539,7 +539,7 @@ impl EditorView {
       render.theme().background_raised,
     );
 
-    let line_height = render.store.text.font_metrics().line_height;
+    let line_height = render.store.text.font_metrics(Font::Editor).line_height;
 
     if let Some(command) = self.editor.command() {
       let text_pos = Point::new(20.0, render.size().height - line_height);
@@ -600,12 +600,12 @@ impl EditorView {
     );
     layout.apply_default(parley::StyleProperty::FontWeight(parley::FontWeight::BOLD));
     let (layout, backgrounds) = layout.build(&mode_text);
-    let layout = render.build_layout(layout, backgrounds);
+    let layout = render.build_layout(Font::Editor, layout, backgrounds);
     render.draw_text(&layout, (render.size().width - 10.0 - layout.size().width / 2.0, 0.0));
   }
 
   fn draw_progress(&mut self, render: &mut Render) {
-    let line_height = render.store.text.font_metrics().line_height;
+    let line_height = render.store.text.font_metrics(Font::Editor).line_height;
 
     let progress = self.editor.progress();
     if progress.is_empty() {
@@ -645,12 +645,13 @@ impl EditorView {
   }
 
   fn draw_trailing_spaces(&self, i: usize, end_of_line: f64, y: f64, render: &mut Render) {
-    let mut shape = Circle::new((0.0, y + render.store.text.font_metrics().line_height / 2.0), 1.5);
+    let mut shape =
+      Circle::new((0.0, y + render.store.text.font_metrics(Font::Editor).line_height / 2.0), 1.5);
     for (i, c) in self.doc().line(be_doc::Line(i)).chars().rev().enumerate() {
       if c == ' ' {
         shape.center.x = end_of_line
-          - (i as f64 * render.store.text.font_metrics().character_width)
-          - render.store.text.font_metrics().character_width / 2.0;
+          - (i as f64 * render.store.text.font_metrics(Font::Editor).character_width)
+          - render.store.text.font_metrics(Font::Editor).character_width / 2.0;
         render.fill(&shape, render.theme().background_raised);
       } else {
         break;
@@ -659,7 +660,7 @@ impl EditorView {
   }
 
   fn draw_change_gutter(&self, start_y: f64, render: &mut Render) {
-    let line_height = render.store.text.font_metrics().line_height;
+    let line_height = render.store.text.font_metrics(Font::Editor).line_height;
 
     if let Some(changes) = &self.editor.changes {
       for hunk in changes.hunks() {
@@ -758,7 +759,7 @@ impl EditorView {
     );
 
     let (text_layout, backgrounds) = line_number_layout.build(&line_string);
-    let text_layout = layout.build_layout(text_layout, backgrounds);
+    let text_layout = layout.build_layout(Font::Editor, text_layout, backgrounds);
 
     Some(entry.insert(text_layout))
   }
@@ -852,7 +853,7 @@ impl EditorView {
     builder.color_range(range, render.store.theme.background);
 
     let (built, backgrounds) = builder.build(&line_string);
-    let text = render.build_layout(built, backgrounds);
+    let text = render.build_layout(Font::Editor, built, backgrounds);
 
     render.clipped(cursor.ceil(), |render| {
       render.draw_text(&text, (-layout_cursor.x0, -layout_cursor.y0));
@@ -916,14 +917,15 @@ impl IndentGuides {
     const INDENT_GUIDE_END_OFFSET: f64 = 1.0;
 
     let x = (self.starts.len() as f64
-      * render.store.text.font_metrics().character_width
+      * render.store.text.font_metrics(Font::Editor).character_width
       * self.indent_width as f64)
       .round()
       + INDENT_GUIDE_WIDTH / 2.0;
-    let min_y = start as f64 * render.store.text.font_metrics().line_height
+    let min_y = start as f64 * render.store.text.font_metrics(Font::Editor).line_height
       + self.scroll_offset.y
       + INDENT_GUIDE_START_OFFSET;
-    let max_y = end as f64 * render.store.text.font_metrics().line_height + self.scroll_offset.y
+    let max_y = end as f64 * render.store.text.font_metrics(Font::Editor).line_height
+      + self.scroll_offset.y
       - INDENT_GUIDE_END_OFFSET;
 
     render.stroke(
@@ -946,7 +948,7 @@ impl CompletionsPopup {
   }
 
   pub fn draw(&mut self, cursor: Rect, active: Option<usize>, render: &mut Render) {
-    let line_height = render.store.text.font_metrics().line_height;
+    let line_height = render.store.text.font_metrics(Font::Editor).line_height;
     self.scroll.line_height = line_height;
 
     let inner_width =

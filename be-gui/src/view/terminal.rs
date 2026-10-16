@@ -190,8 +190,9 @@ impl TerminalView {
       layout.close_view();
     }
 
-    self.character_size.height = layout.store.text.font_metrics().line_height;
-    self.character_size.width = layout.store.text.font_metrics().character_width;
+    self.character_size.height = layout.store.text.font_metrics(crate::Font::Terminal).line_height;
+    self.character_size.width =
+      layout.store.text.font_metrics(crate::Font::Terminal).character_width;
     self.size.rows = (layout.size().height / self.character_size.height).floor() as usize;
     self.size.cols = (layout.size().width / self.character_size.width).floor() as usize;
 
@@ -306,7 +307,7 @@ impl TerminalView {
               builder.apply(0..text.len(), parley::StyleProperty::Underline(true));
             }
             let (built, backgrounds) = builder.build(&text);
-            let layout = render.build_layout(built, backgrounds);
+            let layout = render.build_layout(crate::Font::Terminal, built, backgrounds);
             render.draw_text(&layout, (cursor.x0, cursor.y0));
           }
         }
@@ -365,7 +366,7 @@ impl TerminalView {
     }
 
     let (layout, backgrounds) = layout.build(&line_string);
-    let layout = render.build_layout(layout, backgrounds);
+    let layout = render.build_layout(crate::Font::Terminal, layout, backgrounds);
 
     let mut background = vec![];
     let mut prev = 0.0;

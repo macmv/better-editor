@@ -17,9 +17,11 @@ use skrifa::{
 use crate::{Brush, Color, CursorMode, Font, Render, encode_color};
 
 pub struct TextStore {
-  font:         parley::FontContext,
-  layout:       parley::LayoutContext<peniko::Brush>,
-  font_metrics: FontMetrics,
+  font:             parley::FontContext,
+  layout:           parley::LayoutContext<peniko::Brush>,
+  editor_metrics:   FontMetrics,
+  ui_metrics:       FontMetrics,
+  terminal_metrics: FontMetrics,
 
   emoji_cache_scale: f64,
   emoji_cache:       HashMap<GlyphId, Option<Emoji>>,
@@ -53,9 +55,11 @@ pub struct LayoutBuilder<'a> {
 impl TextStore {
   pub fn new(config: &Rc<RefCell<Config>>) -> Self {
     let mut store = TextStore {
-      font:         parley::FontContext::new(),
-      layout:       parley::LayoutContext::new(),
-      font_metrics: FontMetrics::default(),
+      font:             parley::FontContext::new(),
+      layout:           parley::LayoutContext::new(),
+      editor_metrics:   FontMetrics::default(),
+      ui_metrics:       FontMetrics::default(),
+      terminal_metrics: FontMetrics::default(),
 
       emoji_cache_scale: 1.0,
       emoji_cache:       HashMap::new(),
@@ -69,17 +73,37 @@ impl TextStore {
 }
 
 impl TextStore {
-  pub fn font_metrics(&self) -> &FontMetrics { &self.font_metrics }
+  pub fn font_metrics(&self, font: Font) -> &FontMetrics {
+    match font {
+      Font::Editor => &self.editor_metrics,
+      Font::Ui => &self.ui_metrics,
+      Font::Terminal => &self.terminal_metrics,
+    }
+  }
 
   fn update_metrics(&mut self) {
+    self.editor_metrics = self.measure_metrics(Font::Editor);
+    self.ui_metrics = self.measure_metrics(Font::Ui);
+    self.terminal_metrics = self.measure_metrics(Font::Terminal);
+  }
+
+  fn measure_metrics(&mut self, font: Font) -> FontMetrics {
     const TEXT: &str = " ";
-    // TODO: Key metrics off `crate::Font`.
+
+    let (size, family) = {
+      let config = self.config.borrow();
+      let font_settings = match font {
+        Font::Editor => &config.settings.editor.font,
+        Font::Ui => &config.settings.ui.font,
+        Font::Terminal => &config.settings.terminal.font,
+      };
+      (font_settings.size as f32, font_settings.family.clone())
+    };
+
     let mut builder = self.layout.ranged_builder(&mut self.font, TEXT, 1.0, false);
-    builder.push_default(parley::StyleProperty::FontSize(
-      self.config.borrow().settings.editor.font.size as f32,
-    ));
+    builder.push_default(parley::StyleProperty::FontSize(size));
     builder.push_default(parley::StyleProperty::FontFamily(parley::FontFamily::Source(
-      self.config.borrow().settings.editor.font.family.as_str().into(),
+      family.as_str().into(),
     )));
     let mut layout = builder.build(TEXT);
 
@@ -93,8 +117,10 @@ impl TextStore {
 
     let metrics = glyph_run.run().font_metrics();
 
-    self.font_metrics.line_height = f64::from(metrics.ascent + metrics.descent + metrics.leading);
-    self.font_metrics.character_width = f64::from(glyph_run.run().advance());
+    FontMetrics {
+      line_height:     f64::from(metrics.ascent + metrics.descent + metrics.leading),
+      character_width: f64::from(glyph_run.run().advance()),
+    }
   }
 
   pub fn layout_builder<'a>(
@@ -153,6 +179,7 @@ impl TextStore {
 impl Render<'_> {
   pub fn build_layout(
     &mut self,
+    font: Font,
     mut layout: parley::Layout<peniko::Brush>,
     backgrounds: Vec<(usize, Option<peniko::Brush>)>,
   ) -> TextLayout {
@@ -160,7 +187,7 @@ impl Render<'_> {
     layout.align(parley::Alignment::Start, parley::AlignmentOptions::default());
 
     TextLayout {
-      metrics: self.store.text.font_metrics.clone(),
+      metrics: self.store.text.font_metrics(font).clone(),
       layout,
       backgrounds,
       scale: self.scale,
@@ -173,7 +200,7 @@ impl Render<'_> {
     let builder = self.store.text.layout_builder(font, text, color, self.scale);
 
     let (built, backgrounds) = builder.build(text);
-    self.build_layout(built, backgrounds)
+    self.build_layout(font, built, backgrounds)
   }
 
   pub fn draw_text(&mut self, text: &TextLayout, pos: impl Into<Point>) {

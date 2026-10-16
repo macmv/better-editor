@@ -14,6 +14,7 @@ pub struct Layout<'a> {
   pub to_close: Vec<ViewId>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Font {
   /// The font used within the editor itself. This is typically a monospace
   /// font.
@@ -106,6 +107,7 @@ impl<'a> Layout<'a> {
 
   pub fn build_layout(
     &mut self,
+    font: Font,
     mut layout: parley::Layout<peniko::Brush>,
     backgrounds: Vec<(usize, Option<peniko::Brush>)>,
   ) -> TextLayout {
@@ -113,7 +115,7 @@ impl<'a> Layout<'a> {
     layout.align(parley::Alignment::Start, parley::AlignmentOptions::default());
 
     TextLayout {
-      metrics: self.store.text.font_metrics().clone(),
+      metrics: self.store.text.font_metrics(font).clone(),
       layout,
       backgrounds,
       scale: self.scale,
@@ -128,6 +130,6 @@ impl<'a> Layout<'a> {
     let builder = self.store.text.layout_builder(font, text, color, self.scale);
 
     let (built, backgrounds) = builder.build(text);
-    self.build_layout(built, backgrounds)
+    self.build_layout(font, built, backgrounds)
   }
 }
