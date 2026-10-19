@@ -12,7 +12,7 @@ use crate::{
 };
 
 pub struct TerminalView {
-  terminal:  Terminal,
+  terminal:  SharedHandle<Terminal>,
   set_waker: bool,
   focused:   bool,
 
@@ -42,8 +42,16 @@ struct LineLayout {
 
 impl TerminalView {
   pub fn new(clipboard: &SharedHandle<Clipboard>, path: &Path) -> Self {
+    let terminal = Terminal::new(be_terminal::Size { rows: 40, cols: 80 }, path);
+    TerminalView::from_handle(clipboard, SharedHandle::new(terminal))
+  }
+
+  pub fn from_handle(
+    clipboard: &SharedHandle<Clipboard>,
+    terminal: SharedHandle<Terminal>,
+  ) -> Self {
     TerminalView {
-      terminal:        Terminal::new(be_terminal::Size { rows: 40, cols: 80 }, path),
+      terminal,
       set_waker:       false,
       focused:         false,
       viewport_offset: 0.0,
@@ -199,17 +207,8 @@ impl TerminalView {
     if !self.set_waker {
       self.set_waker = true;
       let waker = layout.notifier();
-      // SAFETY: This isn't safe. Need to join the thread on drop.
-      let poller = unsafe { self.terminal.make_poller() };
-      std::thread::spawn(move || {
-        loop {
-          poller.poll();
-          waker.wake();
-
-          // We only need to wake it up once per frame, so don't spam wake ups.
-          std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-      });
+      // The host throttles how often this is called.
+      self.terminal.set_wake(Box::new(move || waker.wake()));
     }
 
     self.terminal.set_size(self.size);

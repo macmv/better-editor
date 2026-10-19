@@ -1,11 +1,10 @@
 use std::{
+  io,
   ops::{Deref, DerefMut},
-  os::fd::BorrowedFd,
   path::{Path, PathBuf},
 };
 
 use anstyle_parse::{Parser, Utf8Parser};
-use polling::Events;
 
 use crate::{
   grid::{Grid, Line, OwnedLine},
@@ -29,8 +28,30 @@ extern crate log;
 #[macro_use]
 extern crate be_macros;
 
+/// A source of terminal bytes, and a sink for input. This is the process (or
+/// remote process) on the other side of the terminal.
+pub trait PtyHost {
+  /// Reads available output without blocking. Returns `WouldBlock` when there
+  /// is nothing to read. A closed pty is reported as `Ok(0)` or an `EIO` error.
+  fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
+
+  /// Queues bytes to be sent to the pty. They are sent on `flush`.
+  fn write_bytes(&mut self, bytes: &[u8]);
+  fn has_pending_writes(&self) -> bool;
+  /// Sends as many queued bytes as possible, without blocking.
+  fn flush(&mut self);
+
+  fn resize(&mut self, size: Size);
+  fn current_dir(&self) -> PathBuf;
+
+  /// Sets a function to call (from any thread) when output may be available.
+  /// Implementations should not call it more often than needed, and must stop
+  /// calling it when dropped.
+  fn set_wake(&mut self, wake: Box<dyn Fn() + Send>);
+}
+
 pub struct Terminal {
-  pty:   Pty,
+  pty:   Box<dyn PtyHost>,
   state: TerminalState,
 
   parser: Parser,
@@ -188,18 +209,13 @@ pub struct Size {
   pub cols: usize,
 }
 
-pub struct Poller {
-  poller: polling::Poller,
-  fd:     BorrowedFd<'static>,
-}
-
 impl Terminal {
   pub fn new(size: Size, path: &Path) -> Self {
-    Terminal {
-      pty:    Pty::new(size, path),
-      state:  TerminalState::new(size),
-      parser: Parser::<Utf8Parser>::new(),
-    }
+    Terminal::with_host(size, Box::new(Pty::new(size, path)))
+  }
+
+  pub fn with_host(size: Size, pty: Box<dyn PtyHost>) -> Self {
+    Terminal { pty, state: TerminalState::new(size), parser: Parser::<Utf8Parser>::new() }
   }
 
   pub fn state(&self) -> &TerminalState { &self.state }
@@ -207,16 +223,8 @@ impl Terminal {
 
   pub fn current_dir(&self) -> PathBuf { self.pty.current_dir() }
 
-  /// # Safety
-  ///
-  /// The `Poller` must not outlive the `Terminal`.
-  pub unsafe fn make_poller(&self) -> Poller {
-    let poller = polling::Poller::new().unwrap();
-    unsafe {
-      poller.add(&self.pty.fd(), polling::Event::readable(0)).unwrap();
-    }
-    Poller { fd: unsafe { std::mem::transmute(self.pty.fd()) }, poller }
-  }
+  /// Sets a function to call when the terminal may have new output.
+  pub fn set_wake(&mut self, wake: Box<dyn Fn() + Send>) { self.pty.set_wake(wake); }
 
   pub fn set_size(&mut self, size: Size) {
     if size != self.state.size {
@@ -225,7 +233,9 @@ impl Terminal {
     }
   }
 
-  pub fn perform_input(&mut self, c: char) { self.pty.write(format_args!("{c}")); }
+  pub fn perform_input(&mut self, c: char) {
+    self.pty.write_bytes(c.encode_utf8(&mut [0u8; 4]).as_bytes());
+  }
   pub fn perform_backspace(&mut self) { self.pty.write_bytes(&[control::C0::DEL]); }
   pub fn perform_delete(&mut self) { self.pty.write_bytes(&[control::C0::DEL]); }
   pub fn perform_control(&mut self, b: u8) { self.pty.write_bytes(&[b]); }
@@ -421,7 +431,7 @@ impl Terminal {
         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
 
         Err(e) => {
-          println!("{}", e);
+          error!("failed to read from pty: {e}");
           break;
         }
       }
@@ -431,17 +441,6 @@ impl Terminal {
 
     false
   }
-}
-
-impl Poller {
-  pub fn poll(&self) {
-    self.poller.wait(&mut Events::new(), None).unwrap();
-    self.poller.modify(self.fd, polling::Event::readable(0)).unwrap();
-  }
-}
-
-impl Drop for Poller {
-  fn drop(&mut self) { self.poller.delete(self.fd).unwrap(); }
 }
 
 fn push_utf8_coord(buf: &mut Vec<u8>, codepoint: u32) {
