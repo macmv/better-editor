@@ -1,0 +1,12 @@
+[package]
+name = "be-host"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+be-terminal = { path = "../be-terminal" }
+be-remote = { path = "../be-remote" }
+lode = { path = "../../lode/lode", default-features = false }
+lode-local = { path = "../../lode/lode-local" }
+lode-poll = { path = "../../lode/lode-poll" }
+libc = "0.2"

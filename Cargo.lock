@@ -323,6 +323,7 @@ dependencies = [
  "be-input",
  "be-lsp",
  "be-macros",
+ "be-remote",
  "be-shared",
  "be-terminal",
  "be-workspace",
@@ -332,6 +333,8 @@ dependencies = [
  "fern",
  "ignore",
  "kurbo",
+ "lode-local",
+ "lode-poll",
  "log",
  "nucleo",
  "objc2 0.6.5",
@@ -350,6 +353,18 @@ dependencies = [
  "vello",
  "wgpu",
  "winit",
+]
+
+[[package]]
+name = "be-host"
+version = "0.1.0"
+dependencies = [
+ "be-remote",
+ "be-terminal",
+ "libc",
+ "lode",
+ "lode-local",
+ "lode-poll",
 ]
 
 [[package]]
@@ -385,6 +400,17 @@ dependencies = [
 name = "be-macros"
 version = "0.1.0"
 dependencies = [
+ "log",
+]
+
+[[package]]
+name = "be-remote"
+version = "0.1.0"
+dependencies = [
+ "be-terminal",
+ "lode",
+ "lode-local",
+ "lode-poll",
  "log",
 ]
 
@@ -1905,6 +1931,56 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "224399e74b87b5f3557511d98dff8b14089b3dadafcab6bb93eab67d3aace965"
 dependencies = [
  "scopeguard",
+]
+
+[[package]]
+name = "lode"
+version = "0.1.0"
+dependencies = [
+ "lode-core",
+ "lode-macros",
+ "lode-wire",
+]
+
+[[package]]
+name = "lode-core"
+version = "0.1.0"
+dependencies = [
+ "lode-wire",
+]
+
+[[package]]
+name = "lode-local"
+version = "0.1.0"
+dependencies = [
+ "lode-core",
+ "lode-wire",
+]
+
+[[package]]
+name = "lode-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "lode-poll"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "lode-core",
+ "lode-local",
+ "lode-wire",
+]
+
+[[package]]
+name = "lode-wire"
+version = "0.1.0"
+dependencies = [
+ "bytes",
 ]
 
 [[package]]

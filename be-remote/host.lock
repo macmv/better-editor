@@ -1,0 +1,28 @@
+[Host::info v1] id=61905c517704d176
+sig = ((), (be_remote::HostInfo, be_remote::HostError))
+type be_remote::HostError = enum { NotFound=0(), PermissionDenied=1(), NotUtf8=2(), Io=3(0: string) }
+type be_remote::HostInfo = struct { version: u32, cwd: string }
+
+[Host::list_dir v1] id=24c30485d130c12c
+sig = ((string), (vec<be_remote::DirEntry>, be_remote::HostError))
+type be_remote::DirEntry = struct { name: string, kind: be_remote::DirKind }
+type be_remote::DirKind = enum { File=0(), Dir=1(), Other=2() }
+type be_remote::HostError = enum { NotFound=0(), PermissionDenied=1(), NotUtf8=2(), Io=3(0: string) }
+
+[Host::read_file v1] id=5cb186b7d75448cc
+sig = ((string), (string, be_remote::HostError))
+type be_remote::HostError = enum { NotFound=0(), PermissionDenied=1(), NotUtf8=2(), Io=3(0: string) }
+
+[Host::spawn_terminal v1] id=73003c101c65dd9e
+sig = ((u64, be_remote::TermSize, string), (lode::Stream, be_remote::HostError))
+type be_remote::HostError = enum { NotFound=0(), PermissionDenied=1(), NotUtf8=2(), Io=3(0: string) }
+type be_remote::TermSize = struct { rows: u16, cols: u16 }
+type lode::Stream = struct { item: bytes }
+
+[Host::terminal_input v1] id=3f5937610735cba7
+sig = ((u64, bytes), ())
+
+[Host::terminal_resize v1] id=72fe3d8b2ed06080
+sig = ((u64, be_remote::TermSize), ())
+type be_remote::TermSize = struct { rows: u16, cols: u16 }
+
