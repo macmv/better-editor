@@ -24,6 +24,9 @@ be-editor = { path = "../be-editor" }
 be-terminal = { path = "../be-terminal" }
 be-animation = { path = "../be-animation" }
 be-workspace = { path = "../be-workspace" }
+be-remote = { path = "../be-remote" }
+lode-local = { path = "../../lode/lode-local" }
+lode-poll = { path = "../../lode/lode-poll" }
 
 bytemuck = "1.25.2"
 png = { version = "0.17", default-features = false }

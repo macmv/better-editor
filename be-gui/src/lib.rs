@@ -11,6 +11,7 @@ use std::{
 use be_editor::CursorOrLsp;
 use be_fs::{WorkspacePath, WorkspaceRoot};
 use be_input::{Action, KeyStroke, Mode, Navigation};
+use be_shared::SharedHandle;
 use be_workspace::{Workspace, WorkspaceEvent};
 use kurbo::{Axis, Point, Rect, Size};
 pub use render::*;
@@ -26,6 +27,7 @@ use crate::{
 mod icon;
 mod layout;
 mod pane;
+mod remote;
 mod theme;
 mod view;
 mod widget;
@@ -43,17 +45,31 @@ extern crate be_macros;
 pub struct Args {
   #[clap(long)]
   editor: Option<PathBuf>,
+
+  /// Connect to a `be-host` over ssh: `[user@]host` or
+  /// `ssh://[user@]host[/path]`.
+  #[clap(long)]
+  remote: Option<String>,
+
+  /// The command that runs `be-host` on the remote machine.
+  #[clap(long)]
+  remote_host_cmd: Option<String>,
 }
 
 struct State {
   keys: Vec<KeyStroke>,
 
   terminal:             crate::view::TerminalView,
+  /// The terminal's shell runs on a remote host, so its directory is not a
+  /// local path.
+  terminal_is_remote:   bool,
   terminal_should_exit: bool,
 
   workspaces: HashMap<WorkspaceRoot, WorkspaceLayout>,
 
   active: AppView,
+
+  remote: Option<remote::RemoteSession>,
 }
 
 enum AppView {
@@ -164,16 +180,43 @@ impl ViewId {
 
 impl State {
   pub fn new(store: &mut RenderStore, args: Args) -> Self {
-    let path = std::env::current_dir().unwrap();
-    let mut terminal = crate::view::TerminalView::new(&store.clipboard, &path);
+    // With `--remote`, the terminal we start in is a shell on the host.
+    let mut remote = None;
+    if let Some(target) = &args.remote {
+      let host_cmd = args.remote_host_cmd.as_deref().unwrap_or("be-host");
+      let notify = store.notifier();
+      match remote::RemoteSession::connect(
+        remote::RemoteTarget::parse(target),
+        host_cmd,
+        move |wake| notify.remote_wake(wake),
+      ) {
+        Ok(session) => remote = Some(session),
+        Err(e) => error!("failed to connect to {target}: {e}"),
+      }
+    }
+
+    let size = be_terminal::Size { rows: 40, cols: 80 };
+    let mut terminal = match &mut remote {
+      Some(session) => {
+        let cwd = session.path().unwrap_or_default().to_string();
+        let terminal = be_terminal::Terminal::with_host(size, Box::new(session.new_pty(size, cwd)));
+        crate::view::TerminalView::from_handle(&store.clipboard, SharedHandle::new(terminal))
+      }
+      None => {
+        let path = std::env::current_dir().unwrap();
+        crate::view::TerminalView::new(&store.clipboard, &path)
+      }
+    };
     terminal.on_focus(true);
 
     let mut state = State {
       keys: vec![],
       terminal,
+      terminal_is_remote: remote.is_some(),
       terminal_should_exit: false,
       workspaces: HashMap::new(),
       active: AppView::Terminal,
+      remote,
     };
 
     if let Some(root) = args.editor {
@@ -275,6 +318,13 @@ impl State {
   }
   /// Handles an event. Returns `true` if the app should close.
   pub fn on_event(&mut self, event: Event, store: &mut RenderStore) -> bool {
+    if let Event::Remote(wake) = event {
+      if let Some(remote) = &mut self.remote {
+        remote.on_wake(wake);
+      }
+      return false;
+    }
+
     match &mut self.active {
       AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().on_event(event, store),
       AppView::Terminal => false,
@@ -285,6 +335,11 @@ impl State {
     match action {
       Action::Navigate { nav: Navigation::OpenWorkspace } => {
         if matches!(self.active, AppView::Terminal) {
+          if self.terminal_is_remote {
+            warn!("opening a workspace from a remote terminal is not supported yet");
+            return;
+          }
+
           let path = WorkspaceRoot::from_path(self.terminal.current_dir());
 
           if !self.workspaces.contains_key(&path) {
@@ -885,6 +940,8 @@ impl WorkspaceLayout {
         self.workspace.fs.notify_saved(&path);
       }
       Event::Exit => return true,
+      // Handled by `State`.
+      Event::Remote(_) => {}
     }
 
     false

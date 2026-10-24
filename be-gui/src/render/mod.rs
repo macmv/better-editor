@@ -26,6 +26,8 @@ pub use text::{LayoutBuilder, TextLayout};
 pub enum Event {
   Exit,
   Workspace(WorkspaceEvent),
+  /// The remote connection's fds are ready.
+  Remote(crate::remote::RemoteWake),
 }
 
 pub struct RenderStore {
@@ -389,6 +391,10 @@ impl Notify {
 
   pub fn wake(&self) { self.workspace_event(WorkspaceEvent::Refresh); }
   pub fn editor_event(&self, ev: EditorEvent) { self.workspace_event(WorkspaceEvent::Editor(ev)); }
+
+  pub fn remote_wake(&self, wake: crate::remote::RemoteWake) {
+    let _ = self.proxy.send_event(Event::Remote(wake));
+  }
 
   pub fn exit(&self) { self.proxy.send_event(Event::Exit).unwrap(); }
 
