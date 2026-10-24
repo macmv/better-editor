@@ -1,7 +1,10 @@
 use std::{
   fs::File,
   io::{self, Read, Write},
-  os::{fd::AsRawFd, unix::process::CommandExt},
+  os::{
+    fd::{AsRawFd, RawFd},
+    unix::process::CommandExt,
+  },
   path::{Path, PathBuf},
   process::Command,
   sync::{
@@ -14,7 +17,7 @@ use std::{
 
 use crate::{PtyHost, Size};
 
-/// A PTY backed by a local `/bin/zsh` process.
+/// A PTY backed by a local shell process.
 pub struct Pty {
   _child:    std::process::Child,
   pty:       File,
@@ -29,8 +32,18 @@ struct Waker {
   thread: Option<JoinHandle<()>>,
 }
 
+impl AsRawFd for Pty {
+  /// The controller end, for callers that run their own poll loop.
+  fn as_raw_fd(&self) -> RawFd { self.pty.as_raw_fd() }
+}
+
 impl Pty {
   pub fn new(size: Size, path: &Path) -> Self {
+    Pty::try_new(size, path).expect("failed to start a shell")
+  }
+
+  /// Starts `$SHELL` (or `/bin/zsh`) in `path`.
+  pub fn try_new(size: Size, path: &Path) -> io::Result<Self> {
     let pty = rustix_openpty::openpty(
       None,
       Some(&rustix::termios::Winsize {
@@ -39,18 +52,19 @@ impl Pty {
         ..unsafe { std::mem::zeroed() }
       }),
     )
-    .unwrap();
+    .map_err(io::Error::from)?;
 
-    let mut cmd = Command::new("/bin/zsh");
+    let shell = std::env::var_os("SHELL").unwrap_or_else(|| "/bin/zsh".into());
+    let mut cmd = Command::new(shell);
 
     cmd.current_dir(path);
 
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
 
-    cmd.stdin(pty.user.try_clone().unwrap());
-    cmd.stdout(pty.user.try_clone().unwrap());
-    cmd.stderr(pty.user.try_clone().unwrap());
+    cmd.stdin(pty.user.try_clone()?);
+    cmd.stdout(pty.user.try_clone()?);
+    cmd.stderr(pty.user.try_clone()?);
 
     unsafe {
       let user = pty.user.as_raw_fd();
@@ -79,16 +93,16 @@ impl Pty {
         Ok(())
       });
     }
-    let child = cmd.spawn().unwrap();
+    let child = cmd.spawn()?;
 
-    be_async::set_nonblocking(&pty.controller).unwrap();
+    be_async::set_nonblocking(&pty.controller)?;
 
-    Pty {
+    Ok(Pty {
       _child:    child,
       pty:       File::from(pty.controller),
       write_buf: Vec::new(),
       waker:     None,
-    }
+    })
   }
 }
 
