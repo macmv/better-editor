@@ -413,6 +413,13 @@ impl State {
     self.active = view;
   }
 
+  /// Opens the workspace on row `i` of the list.
+  fn open_workspace_row(&mut self, i: usize) {
+    if let Some(root) = self.workspace_roots().into_iter().nth(i) {
+      self.show(AppView::Workspace(root));
+    }
+  }
+
   fn open_workspace_list(&mut self) {
     let roots = self.workspace_roots();
     self.list_selected = match &self.active {
@@ -440,10 +447,10 @@ impl State {
         self.list_selected = self.list_selected.saturating_sub(1);
       }
       be_input::Key::Char('\n') => {
-        let selected = self.workspace_roots().into_iter().nth(self.list_selected);
-        match selected {
-          Some(root) => self.show(AppView::Workspace(root)),
-          None => self.show(self.list_return.clone()),
+        if self.list_selected < count {
+          self.open_workspace_row(self.list_selected);
+        } else {
+          self.show(self.list_return.clone());
         }
       }
       be_input::Key::Escape => self.show(self.list_return.clone()),
@@ -567,7 +574,29 @@ impl State {
     match &mut self.active {
       AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().on_mouse(ev, size, store),
       AppView::Terminal => self.terminal.on_mouse(&ev, size, store),
-      AppView::Loading | AppView::Workspaces => CursorKind::Default,
+      AppView::Loading => CursorKind::Default,
+      AppView::Workspaces => {
+        let line_height = store.text.font_metrics(Font::Ui).line_height;
+        let count = self.workspaces.len();
+        let row = |pos| workspace_list::row_at(pos, line_height, count);
+
+        match ev {
+          MouseEvent::Move { pos } => match row(pos) {
+            Some(i) => {
+              self.list_selected = i;
+              CursorKind::Pointer
+            }
+            None => CursorKind::Default,
+          },
+          MouseEvent::Button { pos, pressed: true, button: MouseButton::Left } => {
+            if let Some(i) = row(pos) {
+              self.open_workspace_row(i);
+            }
+            CursorKind::Default
+          }
+          _ => CursorKind::Default,
+        }
+      }
     }
   }
   /// Handles an event. Returns `true` if the app should close.

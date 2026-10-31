@@ -20,18 +20,35 @@ pub fn sort(roots: &mut [WorkspaceRoot]) {
   roots.sort_by(|a, b| (a.host(), a.as_path()).cmp(&(b.host(), b.as_path())));
 }
 
+const X: f64 = 20.0;
+
+/// Where the rows start, and how tall each is.
+fn rows(line_height: f64) -> (f64, f64) {
+  let row = line_height + 8.0;
+  (16.0 + row + 8.0, row)
+}
+
+/// The row of `count` under `pos`, if any.
+pub fn row_at(pos: Point, line_height: f64, count: usize) -> Option<usize> {
+  let (top, row) = rows(line_height);
+  if pos.y < top || pos.x < X - 10.0 {
+    return None;
+  }
+  let i = ((pos.y - top) / row) as usize;
+  (i < count).then_some(i)
+}
+
 pub fn draw(render: &mut Render, roots: &[WorkspaceRoot], selected: usize) {
   let size = render.size();
   render.fill(&Rect::from_origin_size(Point::ZERO, size), render.theme().background);
 
   let line_height = render.store.text.font_metrics(Font::Ui).line_height;
-  let row = line_height + 8.0;
-  let x = 20.0;
+  let (top, row) = rows(line_height);
+  let x = X;
 
   let title = render.layout_text(Font::Ui, "Workspaces", render.theme().text_dim);
   render.draw_text(&title, Point::new(x, 16.0));
 
-  let top = 16.0 + row + 8.0;
   if roots.is_empty() {
     let none = render.layout_text(Font::Ui, "No workspaces are open", render.theme().text_dim);
     render.draw_text(&none, Point::new(x, top));
@@ -51,5 +68,21 @@ pub fn draw(render: &mut Render, roots: &[WorkspaceRoot], selected: usize) {
 
     let layout = render.layout_text(Font::Ui, &label(root), render.theme().text);
     render.draw_text(&layout, Point::new(x, y + 4.0));
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn rows_are_found_by_position() {
+    let (top, row) = rows(16.0);
+
+    assert_eq!(row_at(Point::new(30.0, top - 1.0), 16.0, 3), None);
+    assert_eq!(row_at(Point::new(30.0, top + 1.0), 16.0, 3), Some(0));
+    assert_eq!(row_at(Point::new(30.0, top + row + 1.0), 16.0, 3), Some(1));
+    assert_eq!(row_at(Point::new(30.0, top + 3.0 * row + 1.0), 16.0, 3), None);
+    assert_eq!(row_at(Point::new(2.0, top + 1.0), 16.0, 3), None);
   }
 }
