@@ -3,6 +3,7 @@ use std::{
   io,
   ops::{Deref, DerefMut},
   path::{Path, PathBuf},
+  time::{Duration, Instant},
 };
 
 use anstyle_parse::{Parser, Utf8Parser};
@@ -33,6 +34,14 @@ extern crate be_macros;
 /// The most lines kept in scrollback. Older lines are dropped.
 const SCROLLBACK_LIMIT: usize = 10_000;
 
+/// How many bytes to read from the pty at once.
+const READ_SIZE: usize = 64 * 1024;
+
+/// The longest `Terminal::update` spends parsing before it gives the caller a turn. Output that
+/// is still queued is picked up by the next call (see `has_pending_output`), so that a program
+/// that prints a lot can't freeze the ui.
+const UPDATE_BUDGET: Duration = Duration::from_millis(3);
+
 /// A source of terminal bytes, and a sink for input. This is the process (or
 /// remote process) on the other side of the terminal.
 pub trait PtyHost {
@@ -60,6 +69,10 @@ pub struct Terminal {
   state: TerminalState,
 
   parser: Parser,
+
+  read_buf: Box<[u8]>,
+  // Set when `update` stopped reading before the pty ran dry.
+  pending_output: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -226,7 +239,13 @@ impl Terminal {
   }
 
   pub fn with_host(size: Size, pty: Box<dyn PtyHost>) -> Self {
-    Terminal { pty, state: TerminalState::new(size), parser: Parser::<Utf8Parser>::new() }
+    Terminal {
+      pty,
+      state: TerminalState::new(size),
+      parser: Parser::<Utf8Parser>::new(),
+      read_buf: vec![0; READ_SIZE].into_boxed_slice(),
+      pending_output: false,
+    }
   }
 
   pub fn state(&self) -> &TerminalState { &self.state }
@@ -420,26 +439,38 @@ impl Terminal {
     }
   }
 
+  /// Whether the last `update` ran out of time before it read everything the pty had. The caller
+  /// should call `update` again soon, as there will be no wakeup for output that was already
+  /// there.
+  pub fn has_pending_output(&self) -> bool { self.pending_output }
+
+  /// Reads and parses output from the pty, for at most `UPDATE_BUDGET`. Returns true once the pty
+  /// has closed.
   pub fn update(&mut self) -> bool {
     self.state.begin_frame();
+    self.pending_output = false;
 
+    let start = Instant::now();
     loop {
-      let mut buf = [0u8; 1024];
-
-      match self.pty.read(&mut buf) {
+      match self.pty.read(&mut self.read_buf) {
         // Ok(0) -> pty closed on macos
         Ok(0) => return true,
         // EIO error -> pty closed on linux
         Err(e) if e.raw_os_error() == Some(rustix::io::Errno::IO.raw_os_error()) => return true,
 
         Ok(n) => {
-          for &b in &buf[..n] {
+          for &b in &self.read_buf[..n] {
             self.parser.advance(&mut self.state, b);
+          }
 
-            if !self.state.pending_writes.is_empty() {
-              self.pty.write_bytes(&self.state.pending_writes);
-              self.state.pending_writes.clear();
-            }
+          if !self.state.pending_writes.is_empty() {
+            self.pty.write_bytes(&self.state.pending_writes);
+            self.state.pending_writes.clear();
+          }
+
+          if start.elapsed() >= UPDATE_BUDGET {
+            self.pending_output = true;
+            break;
           }
         }
         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,

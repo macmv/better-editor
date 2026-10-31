@@ -233,9 +233,9 @@ impl TerminalView {
     }
 
     self.terminal.set_size(self.size);
-    self.terminal.update();
 
-    if self.terminal.has_pending_writes() {
+    // There is no wakeup for output we left in the pty to keep this frame short.
+    if self.terminal.has_pending_writes() || self.terminal.has_pending_output() {
       layout.notifier().wake();
     }
   }
