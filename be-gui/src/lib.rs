@@ -1,6 +1,7 @@
 mod render;
 
 use std::{
+  cell::Cell,
   collections::HashMap,
   fmt,
   hash::Hash,
@@ -9,7 +10,7 @@ use std::{
 };
 
 use be_editor::CursorOrLsp;
-use be_fs::{Fs, WorkspacePath, WorkspaceRoot};
+use be_fs::{WorkspacePath, WorkspaceRoot};
 use be_input::{Action, KeyStroke, Mode, Navigation};
 use be_shared::SharedHandle;
 use be_workspace::{Workspace, WorkspaceEvent};
@@ -28,6 +29,7 @@ mod icon;
 mod layout;
 mod pane;
 mod remote;
+mod spinner;
 mod theme;
 mod view;
 mod widget;
@@ -69,13 +71,33 @@ struct State {
 
   active: AppView,
 
+  /// The workspace `AppView::Loading` is waiting on.
+  loading: Option<Loading>,
+
   remote: Option<remote::RemoteSession>,
 }
 
 enum AppView {
   Terminal,
+  Loading,
   Workspace(WorkspaceRoot),
 }
+
+/// A remote workspace that is still being opened.
+struct Loading {
+  /// What was asked for, before the host made it canonical.
+  path:    PathBuf,
+  /// `None` once it has finished badly.
+  opening: Option<remote::OpeningWorkspace>,
+  error:   Option<String>,
+  spinner: spinner::Spinner,
+  /// Frames drawn so far. A load that finishes at once never shows the
+  /// spinner.
+  frames:  Cell<u32>,
+}
+
+/// Frames the loading screen stays blank before the spinner appears.
+const BLANK_FRAMES: u32 = 3;
 
 struct WorkspaceLayout {
   workspace: Workspace,
@@ -223,6 +245,7 @@ impl State {
       terminal_should_exit: false,
       workspaces: HashMap::new(),
       active: AppView::Terminal,
+      loading: None,
       remote,
     };
 
@@ -235,13 +258,8 @@ impl State {
             Some(base) if root.is_relative() => Path::new(base).join(&root),
             _ => root.clone(),
           };
-          match handle.fs().canonicalize(&path) {
-            Ok(path) => Some(state.open_remote_workspace(handle, path, store)),
-            Err(e) => {
-              error!("cannot open {} on the remote host: {e}", path.display());
-              std::process::exit(1);
-            }
-          }
+          state.start_remote_workspace(handle, path);
+          None
         }
         None => {
           if !root.exists() {
@@ -262,25 +280,51 @@ impl State {
     state
   }
 
-  /// Opens a workspace on the remote host at `path`, which must be canonical
-  /// there. Returns its key.
-  fn open_remote_workspace(
-    &mut self,
-    handle: remote::RemoteHandle,
-    path: PathBuf,
-    store: &mut RenderStore,
-  ) -> WorkspaceRoot {
-    let root = WorkspaceRoot::remote(handle.target().to_string(), path);
-    if !self.workspaces.contains_key(&root) {
-      self.workspaces.insert(root.clone(), WorkspaceLayout::new(root.clone(), store, Some(handle)));
+  /// Starts opening the workspace at `path` on the remote host, and shows a
+  /// loading screen until the host answers.
+  fn start_remote_workspace(&mut self, handle: remote::RemoteHandle, path: PathBuf) {
+    let opening = handle.open_workspace(&path);
+    self.loading = Some(Loading {
+      path,
+      opening: Some(opening),
+      error: None,
+      spinner: spinner::Spinner::new(),
+      frames: Cell::new(0),
+    });
+    self.terminal.on_focus(false);
+    self.active = AppView::Loading;
+  }
+
+  /// Finishes the workspace being loaded, if the host has answered.
+  fn poll_loading(&mut self, store: &mut RenderStore) {
+    let Some(loading) = &mut self.loading else { return };
+    let Some(opening) = &mut loading.opening else { return };
+    let Some(res) = opening.poll() else { return };
+
+    match res {
+      Ok((path, backend)) => {
+        let handle = opening.handle().clone();
+        let root = WorkspaceRoot::remote(handle.target().to_string(), path);
+        if !self.workspaces.contains_key(&root) {
+          self
+            .workspaces
+            .insert(root.clone(), WorkspaceLayout::new(root.clone(), store, Some((handle, backend))));
+        }
+        self.loading = None;
+        self.active = AppView::Workspace(root);
+      }
+      Err(e) => {
+        error!("cannot open {} on the remote host: {e}", loading.path.display());
+        loading.error = Some(e.to_string());
+        loading.opening = None;
+      }
     }
-    root
   }
 
   fn mode(&self) -> Mode {
     match &self.active {
       AppView::Workspace(w) => self.workspaces[w].mode(),
-      AppView::Terminal => Mode::Insert,
+      AppView::Terminal | AppView::Loading => Mode::Insert,
     }
   }
 
@@ -327,6 +371,7 @@ impl State {
   pub fn layout(&mut self, layout: &mut Layout) {
     match &mut self.active {
       AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().layout(layout),
+      AppView::Loading => {}
       AppView::Terminal => {
         layout.active = Some(ViewId(0));
         self.terminal.layout(layout);
@@ -340,17 +385,48 @@ impl State {
     match &mut self.active {
       AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().draw(render),
       AppView::Terminal => self.terminal.draw(render),
+      AppView::Loading => self.draw_loading(render),
     }
+  }
+  fn draw_loading(&self, render: &mut Render) {
+    let Some(loading) = &self.loading else { return };
+
+    let size = render.size();
+    render.fill(&Rect::from_origin_size(Point::ZERO, size), render.theme().background);
+
+    let frames = loading.frames.get();
+    loading.frames.set(frames.saturating_add(1));
+    if frames < BLANK_FRAMES && loading.error.is_none() {
+      return;
+    }
+
+    let center = Point::new(size.width / 2.0, size.height / 2.0);
+    let message = match &loading.error {
+      Some(e) => format!("Could not open {}: {e}", loading.path.display()),
+      None => {
+        loading.spinner.draw(render, center);
+        format!("Opening {}", loading.path.display())
+      }
+    };
+
+    let layout = render.layout_text(Font::Ui, &message, render.theme().text);
+    let pos = Point::new(
+      center.x - layout.size().width / 2.0,
+      if loading.error.is_some() { center.y } else { center.y + 70.0 },
+    );
+    render.draw_text(&layout, pos);
   }
   pub fn should_exit(&self) -> bool {
     match &self.active {
       AppView::Workspace(_) => false,
       AppView::Terminal => self.terminal_should_exit,
+      AppView::Loading => false,
     }
   }
   pub fn animated(&self) -> bool {
     match &self.active {
       AppView::Workspace(w) => self.workspaces[w].animated(),
+      AppView::Loading => self.loading.as_ref().is_some_and(|l| l.opening.is_some()),
       AppView::Terminal => false,
     }
   }
@@ -358,6 +434,7 @@ impl State {
     match &mut self.active {
       AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().on_mouse(ev, size, store),
       AppView::Terminal => self.terminal.on_mouse(&ev, size, store),
+      AppView::Loading => CursorKind::Default,
     }
   }
   /// Handles an event. Returns `true` if the app should close.
@@ -366,12 +443,13 @@ impl State {
       if let Some(remote) = &mut self.remote {
         remote.on_wake(wake);
       }
+      self.poll_loading(store);
       return false;
     }
 
     match &mut self.active {
       AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().on_event(event, store),
-      AppView::Terminal => false,
+      AppView::Terminal | AppView::Loading => false,
     }
   }
 
@@ -385,13 +463,8 @@ impl State {
             let Some(handle) = self.remote.as_ref().map(|r| r.handle()) else { return };
             let dir = self.terminal.current_dir();
             let dir = if dir.as_os_str().is_empty() { PathBuf::from(".") } else { dir };
-            match handle.fs().canonicalize(&dir) {
-              Ok(dir) => self.open_remote_workspace(handle, dir, store),
-              Err(e) => {
-                error!("cannot open {} on the remote host: {e}", dir.display());
-                return;
-              }
-            }
+            self.start_remote_workspace(handle, dir);
+            return;
           } else {
             let path = WorkspaceRoot::from_path(self.terminal.current_dir());
             if !self.workspaces.contains_key(&path) {
@@ -403,6 +476,8 @@ impl State {
           self.terminal.on_focus(false);
           self.active = AppView::Workspace(path);
         } else {
+          // Leaving a loading screen gives up on the workspace.
+          self.loading = None;
           self.terminal.on_focus(true);
           self.active = AppView::Terminal;
         }
@@ -411,6 +486,7 @@ impl State {
       _ => match &mut self.active {
         AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().perform_action(action, store),
         AppView::Terminal => self.terminal.perform_action(action),
+        AppView::Loading => {}
       },
     }
   }
@@ -434,14 +510,13 @@ impl WorkspaceLayout {
   pub fn new(
     root: WorkspaceRoot,
     store: &mut RenderStore,
-    remote: Option<remote::RemoteHandle>,
+    remote: Option<(remote::RemoteHandle, be_workspace::Backend)>,
   ) -> Self {
-    let mut workspace = match &remote {
-      Some(remote) => {
-        let backend = remote.backend(root.as_path());
-        Workspace::with_backend(root, store.config.clone(), backend)
+    let (remote, mut workspace) = match remote {
+      Some((handle, backend)) => {
+        (Some(handle), Workspace::with_backend(root, store.config.clone(), backend))
       }
-      None => Workspace::new(root, store.config.clone()),
+      None => (None, Workspace::new(root, store.config.clone())),
     };
     workspace.clipboard = store.clipboard.clone();
 

@@ -17,7 +17,7 @@ use std::{
     fd::{AsRawFd, RawFd},
     unix::net::UnixStream,
   },
-  path::Path,
+  path::{Path, PathBuf},
   process::Command,
   rc::Rc,
   sync::{Arc, Condvar, Mutex},
@@ -274,13 +274,20 @@ impl RemoteHandle {
     RemotePty::new(local, id, size, cwd, Rc::new(move || link.rearm()))
   }
 
+  /// Starts opening the workspace at `path` on the host. Nothing blocks:
+  /// `OpeningWorkspace::poll` finishes it as the host answers.
+  pub fn open_workspace(&self, path: &Path) -> OpeningWorkspace {
+    let call = self.link.host.borrow().canonicalize(&path.to_string_lossy());
+    self.link.rearm();
+    OpeningWorkspace { handle: self.clone(), stage: OpenStage::Canonicalize(call) }
+  }
+
   /// The pieces of a workspace rooted at `root` on the host. `root` must
-  /// already be canonical there.
-  pub fn backend(&self, root: &Path) -> Backend {
+  /// already be canonical there. Without a repository, the editor diffs
+  /// against what it opened instead.
+  fn backend(&self, root: &Path, has_git: bool) -> Backend {
     let t = self.transport();
-    let git = RemoteGit::new(t.clone(), root);
-    // Without a repository, the editor diffs against what it opened instead.
-    let git = be_git::GitBackend::head(&git).is_some().then(|| Box::new(git) as _);
+    let git = has_git.then(|| Box::new(RemoteGit::new(t.clone(), root)) as _);
     let target = self.link.target.clone();
     Backend {
       fs: Rc::new(RemoteFs::new(t.clone())),
@@ -292,6 +299,60 @@ impl RemoteHandle {
 
   /// Every file under `root` that git would not ignore, relative to `root`.
   pub fn list_files(&self, root: &Path) -> io::Result<Vec<String>> { self.fs().list_files(root) }
+}
+
+enum OpenStage {
+  Canonicalize(Pending<String, HostError>),
+  Head(PathBuf, Pending<Option<String>, HostError>),
+}
+
+/// A workspace being opened on the host: its path is made canonical, then its
+/// repository is looked for.
+pub struct OpeningWorkspace {
+  handle: RemoteHandle,
+  stage:  OpenStage,
+}
+
+impl OpeningWorkspace {
+  pub fn handle(&self) -> &RemoteHandle { &self.handle }
+
+  /// The canonical path and the workspace's pieces, once the host has
+  /// answered. Never blocks.
+  pub fn poll(&mut self) -> Option<io::Result<(PathBuf, Backend)>> {
+    loop {
+      match &mut self.stage {
+        OpenStage::Canonicalize(call) => {
+          let res = call.try_take()?;
+          let path = match res {
+            Ok(path) => PathBuf::from(path),
+            Err(e) => return Some(Err(call_error(e))),
+          };
+          let head = self.handle.link.host.borrow().git_head(&path.to_string_lossy());
+          self.handle.link.rearm();
+          self.stage = OpenStage::Head(path, head);
+        }
+        OpenStage::Head(path, call) => {
+          let res = call.try_take()?;
+          let path = path.clone();
+          return Some(match res {
+            Ok(head) => {
+              let backend = self.handle.backend(&path, head.is_some());
+              Ok((path, backend))
+            }
+            Err(e) => Err(call_error(e)),
+          });
+        }
+      }
+    }
+  }
+}
+
+fn call_error(e: CallError<HostError>) -> io::Error {
+  match e {
+    CallError::App(HostError::NotFound) => io::ErrorKind::NotFound.into(),
+    CallError::App(HostError::PermissionDenied) => io::ErrorKind::PermissionDenied.into(),
+    e => io::Error::other(format!("{e:?}")),
+  }
 }
 
 impl RemoteSession {
@@ -645,7 +706,7 @@ mod tests {
     let root = be_fs::WorkspaceRoot::remote("box".into(), dir.clone());
     let config = Rc::new(RefCell::new(be_config::Config::default()));
     let mut workspace =
-      be_workspace::Workspace::with_backend(root, config, handle.backend(&dir));
+      be_workspace::Workspace::with_backend(root, config, handle.backend(&dir, false));
 
     // The path only exists on the host, and the file arrives with a wake.
     let mut editor = workspace.open_file(&dir.join("sub/../a.txt")).unwrap();

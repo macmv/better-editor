@@ -101,6 +101,15 @@ impl RemoteHost {
     self.conn.local().proxy::<Host>().list_dir(path.to_string())
   }
 
+  pub fn canonicalize(&self, path: &str) -> Pending<String, HostError> {
+    self.conn.local().proxy::<Host>().canonicalize(path.to_string())
+  }
+
+  /// The commit `root` is at, or `None` if it isn't a git repository.
+  pub fn git_head(&self, root: &str) -> Pending<Option<String>, HostError> {
+    self.conn.local().proxy::<Host>().git_head(root.to_string())
+  }
+
   pub fn read_file(&self, path: &str) -> Pending<String, HostError> {
     self.conn.local().proxy::<Host>().read_file(path.to_string())
   }
