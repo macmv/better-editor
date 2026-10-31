@@ -772,8 +772,8 @@ impl WorkspaceLayout {
   fn perform_action(&mut self, action: Action, store: &mut RenderStore) {
     match action {
       Action::Navigate { nav: Navigation::Tab(i) } => {
-        let new_index = (i as usize).clamp(0, self.tabs.len() - 1);
-        if new_index == self.active {
+        let new_index = i as usize;
+        if new_index >= self.tabs.len() || new_index == self.active {
           return;
         }
 
