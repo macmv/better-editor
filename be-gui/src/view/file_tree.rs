@@ -357,6 +357,30 @@ impl Directory {
 
   fn expand(&mut self) { self.expanded = true; }
 
+  /// Forgets what git said about this directory, and about each item on the
+  /// way down `path`. They are looked up again on the next layout.
+  fn invalidate_status_along(&mut self, path: &WorkspacePath) {
+    self.status = None;
+
+    let mut curr = self;
+    for component in path.components() {
+      let be_fs::Component::Normal(name) = component else { return };
+      let Some(items) = curr.items.as_mut() else { return };
+
+      match items.iter_mut().find(|it| *it.name() == *name) {
+        Some(Item::Directory(dir)) => {
+          dir.status = None;
+          curr = dir;
+        }
+        Some(Item::File(file)) => {
+          file.status = None;
+          return;
+        }
+        None => return,
+      }
+    }
+  }
+
   /// Starts listing this directory. A local one is done by the time this
   /// returns; one on another machine is picked up by `poll`.
   fn populate(&mut self, root: &WorkspaceRoot, fs: &dyn Fs) {
@@ -480,6 +504,10 @@ impl FileTree {
     puffin::profile_function!();
 
     for change in self.watcher.take_changes().iter() {
+      // A change anywhere inside a directory, expanded or not, can change what
+      // git says about it.
+      self.tree.invalidate_status_along(change);
+
       if change.starts_with(WorkspacePath::new(".git")) {
         ItemMut::Directory(&mut self.tree).refresh(&self.root, &*self.fs);
         continue;
@@ -881,5 +909,37 @@ mod tests {
     assert!(!dir.is_loading());
     assert!(!dir.any_loading());
     assert_eq!(dir.len_visible(), 3);
+  }
+
+  #[test]
+  fn a_change_clears_the_status_of_every_directory_above_it() {
+    fn dir(path: &str, items: Option<Vec<Item>>) -> Directory {
+      let mut d = Directory::new(WorkspacePathBuf::from(path));
+      d.items = items;
+      d.status = Some(FileStatus::Unchanged);
+      d
+    }
+
+    // `a` is collapsed, with `a/b` below it. `c` is a sibling.
+    let inner = dir("a/b", Some(vec![]));
+    let mut root = dir(
+      "",
+      Some(vec![
+        Item::Directory(dir("a", Some(vec![Item::Directory(inner)]))),
+        Item::Directory(dir("c", None)),
+      ]),
+    );
+
+    root.invalidate_status_along(WorkspacePath::new("a/b/file.rs"));
+
+    let status = |root: &mut Directory, path: &str| match root.item(WorkspacePath::new(path)) {
+      Some(ItemMut::Directory(d)) => d.status,
+      _ => panic!("no directory {path}"),
+    };
+    assert_eq!(root.status, None);
+    assert_eq!(status(&mut root, "a"), None);
+    assert_eq!(status(&mut root, "a/b"), None);
+    // Other directories are left alone.
+    assert_eq!(status(&mut root, "c"), Some(FileStatus::Unchanged));
   }
 }
