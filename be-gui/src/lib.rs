@@ -316,7 +316,9 @@ impl State {
             error!("path does not exist: {}", root.display());
             std::process::exit(1);
           }
-          let root = WorkspaceRoot::from_path(root);
+          // Git (and the editors' paths) need an absolute root: a relative one
+          // like `.` makes libgit2 report every path as ignored.
+          let root = WorkspaceRoot::from_path(root.canonicalize().unwrap_or(root));
           state.workspaces.insert(root.clone(), WorkspaceLayout::new(root.clone(), store, None));
           Some(root)
         }
