@@ -1,19 +1,12 @@
-use std::{
-  collections::HashMap,
-  ops::Range,
-  path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use be_input::{Action, Clipboard, Direction, Edit, Mode, Move};
 use be_shared::SharedHandle;
-use be_terminal::{Position, StyleFlags, Terminal, TerminalColor};
-use kurbo::{Point, Rect, Size, Stroke};
-use parley::FontWeight;
-use peniko::color::AlphaColor;
+use be_terminal::{Position, Terminal};
+use kurbo::{Point, Rect, Size};
 
-use crate::{
-  Color, Layout, MouseButton, MouseEvent, Render, RenderStore, TextLayout, oklch, theme::Theme,
-};
+use super::terminal_paint::{CursorDraw, DrawOptions, TerminalPainter, character_size, grid_size};
+use crate::{Layout, MouseButton, MouseEvent, Render, RenderStore};
 
 pub struct TerminalView {
   terminal:  SharedHandle<Terminal>,
@@ -28,13 +21,7 @@ pub struct TerminalView {
   size:           be_terminal::Size,
   character_size: kurbo::Size,
 
-  // Layouts of lines we have already drawn, by `OwnedLine::id`. Terminal lines keep their id as
-  // they scroll, so scrolling and redraws of unchanged lines never rebuild a layout.
-  cached_layouts:   HashMap<u64, CachedLine>,
-  cached_scale:     f64,
-  cached_char_size: kurbo::Size,
-  // Counts calls to `draw`, to drop cache entries that weren't visible.
-  frame:            u64,
+  painter: TerminalPainter,
 
   clipboard: SharedHandle<Clipboard>,
 
@@ -42,21 +29,6 @@ pub struct TerminalView {
   selection:  Option<(Position, Position)>,
   mouse_held: Option<u8>,
   mouse_pos:  Option<Point>,
-}
-
-struct LineLayout {
-  layout:     TextLayout,
-  background: Vec<(f64, f64, Color)>,
-}
-
-struct CachedLine {
-  // `OwnedLine::stamp` when the layout was built.
-  stamp:     u64,
-  // The columns that were drawn selected when the layout was built.
-  selection: Option<Range<usize>>,
-  // The `frame` this was last drawn in.
-  used:      u64,
-  line:      LineLayout,
 }
 
 impl TerminalView {
@@ -76,10 +48,7 @@ impl TerminalView {
       viewport_offset: 0.0,
       size: be_terminal::Size { rows: 40, cols: 80 },
       character_size: kurbo::Size::ZERO,
-      cached_layouts: HashMap::new(),
-      cached_scale: 0.0,
-      cached_char_size: kurbo::Size::ZERO,
-      frame: 0,
+      painter: TerminalPainter::new(),
       clipboard: clipboard.clone(),
       drag_start: None,
       selection: None,
@@ -220,11 +189,8 @@ impl TerminalView {
       layout.close_view();
     }
 
-    self.character_size.height = layout.store.text.font_metrics(crate::Font::Terminal).line_height;
-    self.character_size.width =
-      layout.store.text.font_metrics(crate::Font::Terminal).character_width;
-    self.size.rows = (layout.size().height / self.character_size.height).floor() as usize;
-    self.size.cols = (layout.size().width / self.character_size.width).floor() as usize;
+    self.character_size = character_size(layout.store);
+    self.size = grid_size(layout.size(), self.character_size);
 
     if !self.set_waker {
       self.set_waker = true;
@@ -245,94 +211,18 @@ impl TerminalView {
   pub fn draw(&mut self, render: &mut Render) {
     puffin::profile_function!();
 
-    if self.cached_scale != render.scale() || self.cached_char_size != self.character_size {
-      self.cached_layouts.clear();
-      self.cached_scale = render.scale();
-      self.cached_char_size = self.character_size;
-    }
+    let size = render.size();
+    render.fill(&Rect::new(0.0, 0.0, size.width, size.height), render.theme().background);
 
-    self.frame += 1;
+    let state = self.terminal.state();
+    let mut options =
+      DrawOptions::screen(state, Rect::from_origin_size((0.0, 0.0), size), self.size.rows);
+    options.pixel_offset = self.viewport_offset;
+    options.selection = self.selection;
+    options.cursor =
+      state.cursor.visible.then(|| CursorDraw { pos: state.cursor.pos, focused: self.focused });
 
-    render.fill(
-      &Rect::new(0.0, 0.0, render.size().width, render.size().height),
-      render.theme().background,
-    );
-
-    let character_size = self.character_size;
-    let viewport_offset = self.viewport_offset;
-
-    let start = if viewport_offset > 0.0 { -1 } else { 0 };
-    for line in start..self.size.rows as isize {
-      let y = line as f64 * character_size.height + viewport_offset * 20.0;
-      let Some(layout) = self.layout_line(render, line) else { continue };
-
-      for range in &layout.background {
-        render.fill(
-          &Rect::from_origin_size(
-            (range.0.round(), y.round()),
-            ((range.1 - range.0).ceil(), character_size.height.ceil()),
-          ),
-          range.2,
-        );
-      }
-      render.draw_text(&layout.layout, (0.0, y));
-    }
-
-    // Forget lines that scrolled out of view, or were dropped from scrollback.
-    let frame = self.frame;
-    self.cached_layouts.retain(|_, cached| cached.used == frame);
-
-    if self.terminal.state().cursor.visible {
-      let cursor = self.terminal.state().cursor;
-      let cursor = Rect::from_origin_size(
-        (
-          (cursor.col as f64 * self.character_size.width).round(),
-          (cursor.row as f64 * self.character_size.height).round(),
-        ),
-        (self.character_size.width.ceil(), self.character_size.height.ceil()),
-      );
-      if self.focused {
-        render.fill(&cursor.ceil(), render.theme().text);
-
-        let state_cursor = self.terminal.state().cursor;
-        if let Some(line) = self.terminal.visible_line(state_cursor.row) {
-          let line_string = line.to_string();
-          let offset: usize = line_string.chars().take(state_cursor.col).map(char::len_utf8).sum();
-          if let Some(c) = line_string[offset..].chars().next()
-            && !c.is_whitespace()
-          {
-            let mut flags = StyleFlags::empty();
-            let mut prev = 0;
-            for (style, i) in line.specific_styles(|_, s| s) {
-              if offset >= prev && offset < i {
-                flags = style.flags;
-                break;
-              }
-              prev = i;
-            }
-
-            let text = c.to_string();
-            let mut builder = render.store.text.layout_builder(
-              crate::Font::Terminal,
-              &text,
-              render.theme().background,
-              render.scale(),
-            );
-            if flags.contains(StyleFlags::BOLD) {
-              builder.apply(0..text.len(), parley::StyleProperty::FontWeight(FontWeight::BLACK));
-            }
-            if flags.contains(StyleFlags::UNDERLINE) {
-              builder.apply(0..text.len(), parley::StyleProperty::Underline(true));
-            }
-            let (built, backgrounds) = builder.build(&text);
-            let layout = render.build_layout(crate::Font::Terminal, built, backgrounds);
-            render.draw_text(&layout, (cursor.x0, cursor.y0));
-          }
-        }
-      } else {
-        render.stroke(&cursor.inset(-0.5 * render.scale()), render.theme().text, Stroke::new(1.0));
-      }
-    }
+    self.painter.draw(render, state, &options);
   }
 
   pub fn on_focus(&mut self, focus: bool) {
@@ -340,130 +230,11 @@ impl TerminalView {
     self.terminal.perform_focus_event(focus);
   }
 
-  /// Returns the layout for screen row `i`, which is negative for the partially
-  /// visible line of scrollback above the screen. Layouts are only rebuilt
-  /// when the line's contents or selection changed since it was last drawn.
-  fn layout_line(&mut self, render: &mut Render, i: isize) -> Option<&LineLayout> {
-    let line = match usize::try_from(i) {
-      Ok(i) => self.terminal.visible_line(i)?,
-      Err(_) => self.terminal.scrollback_line(-i as usize + self.terminal.viewport_offset() - 1)?,
-    };
-
-    let (id, stamp) = (line.id(), line.stamp());
-    let selection = self.selection_cols(i);
-
-    let fresh = self
-      .cached_layouts
-      .get(&id)
-      .is_some_and(|cached| cached.stamp == stamp && cached.selection == selection);
-    if !fresh {
-      let layout = self.build_line(render, line, selection.as_ref());
-      self.cached_layouts.insert(id, CachedLine { stamp, selection, used: 0, line: layout });
-    }
-
-    let cached = self.cached_layouts.get_mut(&id).unwrap();
-    cached.used = self.frame;
-    Some(&cached.line)
-  }
-
-  fn build_line(
-    &self,
-    render: &mut Render,
-    line: &be_terminal::OwnedLine,
-    selection: Option<&Range<usize>>,
-  ) -> LineLayout {
-    puffin::profile_function!();
-
-    let inverted_at = |col: usize| selection.is_some_and(|range| range.contains(&col));
-
-    let line_string = line.to_string();
-
-    let theme = &render.store.theme;
-    let mut layout = render.store.text.layout_builder(
-      crate::Font::Terminal,
-      &line_string,
-      render.theme().text,
-      render.scale(),
-    );
-
-    let mut prev = 0;
-    for ((foreground, style), i) in line.specific_styles(|j, s| {
-      let invert = inverted_at(j) ^ s.flags.contains(StyleFlags::INVERSE);
-      let foreground = if invert {
-        Some(terminal_color(theme, s.background).unwrap_or(theme.background))
-      } else {
-        terminal_color(theme, s.foreground)
-      };
-      (foreground, s)
-    }) {
-      let foreground = if style.flags.contains(StyleFlags::DIM) {
-        Some(foreground.unwrap_or(theme.text).multiply_alpha(DIM_ALPHA))
-      } else {
-        foreground
-      };
-      if let Some(foreground) = foreground {
-        layout.color_range(prev..i, foreground);
-      }
-      if style.flags.contains(StyleFlags::BOLD) {
-        layout.apply(prev..i, parley::StyleProperty::FontWeight(FontWeight::BLACK));
-      }
-      if style.flags.contains(StyleFlags::UNDERLINE) {
-        layout.apply(prev..i, parley::StyleProperty::Underline(true));
-      }
-      prev = i;
-    }
-
-    let (layout, backgrounds) = layout.build(&line_string);
-    let layout = render.build_layout(crate::Font::Terminal, layout, backgrounds);
-
-    let mut background = vec![];
-    let mut prev = 0.0;
-    for (color, i) in line.specific_styles(|j, s| {
-      let invert = inverted_at(j) ^ s.flags.contains(StyleFlags::INVERSE);
-      if invert {
-        Some(terminal_color(&render.store.theme, s.foreground).unwrap_or(render.store.theme.text))
-      } else {
-        terminal_color(&render.store.theme, s.background)
-      }
-    }) {
-      let x = layout.cursor(i, crate::CursorMode::Line).x0;
-      if let Some(color) = color {
-        background.push((prev, x, color));
-      }
-      prev = x;
-    }
-
-    LineLayout { layout, background }
-  }
-
   fn mouse_to_pos(&self, mouse: Point) -> Position {
     Position {
       row: (mouse.y / self.character_size.height) as usize,
       col: (mouse.x / self.character_size.width).round() as usize,
     }
-  }
-
-  /// The columns of screen row `row` that are selected.
-  fn selection_cols(&self, row: isize) -> Option<Range<usize>> {
-    if row < 0 {
-      return None;
-    }
-    let row = row as usize;
-
-    let (start, end) = self.selection?;
-    let cols = if row < start.row || row > end.row {
-      return None;
-    } else if row == start.row && row == end.row {
-      start.col..end.col
-    } else if row == start.row {
-      start.col..usize::MAX
-    } else if row == end.row {
-      0..end.col
-    } else {
-      0..usize::MAX
-    };
-
-    (!cols.is_empty()).then_some(cols)
   }
 
   fn copy(&self) {
@@ -490,24 +261,4 @@ impl TerminalView {
 
     self.clipboard.copy(&buf);
   }
-}
-
-/// How opaque `SGR 2` (dim) text is drawn.
-const DIM_ALPHA: f32 = 0.55;
-
-fn terminal_color(_theme: &Theme, color: Option<TerminalColor>) -> Option<Color> {
-  use be_terminal::BuiltinColor::*;
-
-  Some(match color {
-    Some(TerminalColor::Builtin { color: Black, bright: _ }) => oklch(0.6, 0.0, 0.0),
-    Some(TerminalColor::Builtin { color: Red, bright: _ }) => oklch(0.75, 0.13, 25.0),
-    Some(TerminalColor::Builtin { color: Green, bright: _ }) => oklch(0.8, 0.14, 140.0),
-    Some(TerminalColor::Builtin { color: Yellow, bright: _ }) => oklch(0.95, 0.12, 85.0),
-    Some(TerminalColor::Builtin { color: Blue, bright: _ }) => oklch(0.8, 0.12, 240.0),
-    Some(TerminalColor::Builtin { color: Magenta, bright: _ }) => oklch(0.8, 0.13, 350.0),
-    Some(TerminalColor::Builtin { color: Cyan, bright: _ }) => oklch(0.85, 0.1, 200.0),
-    Some(TerminalColor::Builtin { color: White, bright: _ }) => oklch(1.0, 0.0, 0.0),
-    Some(TerminalColor::Rgb { r, g, b }) => AlphaColor::from_rgb8(r, g, b).convert(),
-    _ => return None,
-  })
 }

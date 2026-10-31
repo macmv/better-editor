@@ -9,6 +9,7 @@ mod file_tree;
 mod search;
 mod symbol_search;
 mod terminal;
+mod terminal_paint;
 
 pub use command::CommandView;
 pub use editor::EditorView;
