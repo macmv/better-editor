@@ -94,8 +94,9 @@ struct ViewCollection {
   views:        HashMap<ViewId, View>,
 }
 
-/// Extra space above the tab buttons, in pixels.
-const TAB_TOP_SPACING: f64 = 2.0;
+/// Height of the tab bar, in pixels. This is the tab button height (a 13px UI
+/// font line plus its border) plus 5px of margin above and below.
+const TAB_BAR_HEIGHT: f64 = 30.0;
 
 struct Tab {
   title:   String,
@@ -478,7 +479,12 @@ impl WorkspaceLayout {
     self.workspace.fs.update();
 
     layout.clipped(
-      Rect::new(0.0, layout.size().height - 25.0, layout.size().width, layout.size().height),
+      Rect::new(
+        0.0,
+        layout.size().height - TAB_BAR_HEIGHT,
+        layout.size().width,
+        layout.size().height,
+      ),
       |layout| {
         self.layout_tabs(layout);
       },
@@ -490,7 +496,7 @@ impl WorkspaceLayout {
     }
 
     layout.clipped(
-      Rect::new(0.0, 0.0, layout.size().width, layout.size().height - 25.0),
+      Rect::new(0.0, 0.0, layout.size().width, layout.size().height - TAB_BAR_HEIGHT),
       |layout| {
         let mut tab = &mut self.tabs[self.active];
         if let Some(popup) = &mut tab.popup {
@@ -529,11 +535,11 @@ impl WorkspaceLayout {
   }
 
   fn hit_pane(&self, pos: Point, size: kurbo::Size) -> Option<HitResult> {
-    if pos.y < size.height - 25.0 {
+    if pos.y < size.height - TAB_BAR_HEIGHT {
       let tab = &self.tabs[self.active];
       match tab.zoomed() {
         Some(z) => Some(HitResult::View(z)),
-        None => tab.content.hit_pane(pos, Size::new(size.width, size.height - 25.0)),
+        None => tab.content.hit_pane(pos, Size::new(size.width, size.height - TAB_BAR_HEIGHT)),
       }
     } else {
       Some(HitResult::View(ViewId::TABS))
@@ -549,7 +555,7 @@ impl WorkspaceLayout {
           let coord = if path.axis == Axis::Vertical { pos.x } else { pos.y };
           let delta = coord - *last;
           *last = coord;
-          let content_size = Size::new(size.width, size.height - 25.0);
+          let content_size = Size::new(size.width, size.height - TAB_BAR_HEIGHT);
           let path = path.clone();
           self.tabs[self.active].content.resize(&path, delta, content_size);
         }
@@ -632,7 +638,9 @@ impl WorkspaceLayout {
   ) -> Option<CursorKind> {
     match id {
       ViewId::TABS => {
-        if let Some(ev) = ev.within(&Rect::new(0.0, size.height - 25.0, size.width, size.height)) {
+        if let Some(ev) =
+          ev.within(&Rect::new(0.0, size.height - TAB_BAR_HEIGHT, size.width, size.height))
+        {
           return Some(self.tab_layout.on_mouse(&ev, size, store));
         }
       }
@@ -653,7 +661,7 @@ impl WorkspaceLayout {
     render.split(
       self,
       Axis::Horizontal,
-      Distance::Pixels(-25.0),
+      Distance::Pixels(-TAB_BAR_HEIGHT),
       |state, render| {
         let tab = &mut state.tabs[state.active];
         match tab.zoomed() {
@@ -891,7 +899,17 @@ impl WorkspaceLayout {
     let tab_height = layout.size().height;
     let mut tab_layout = self.tab_layout.begin(layout);
 
-    let mut left = vec![];
+    // An empty leading child: the stack's gap then provides the left margin.
+    let mut left = vec![
+      tab_layout
+        .add_widget(crate::widget::Stack::new(
+          Axis::Horizontal,
+          Align::Start,
+          Justify::Start,
+          vec![],
+        ))
+        .id,
+    ];
 
     for (i, tab) in self.tabs.iter().enumerate() {
       let button =
@@ -917,9 +935,7 @@ impl WorkspaceLayout {
 
     let left = tab_layout
       .add_widget(
-        crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, left)
-          .gap(5.0)
-          .cross_size(tab_height - TAB_TOP_SPACING * 2.0),
+        crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Center, left).gap(5.0),
       )
       .id;
     let right = tab_layout
@@ -933,7 +949,7 @@ impl WorkspaceLayout {
       .add_widget(crate::widget::Stack::new(
         Axis::Horizontal,
         Align::SpaceBetween,
-        Justify::End,
+        Justify::Center,
         vec![left, right],
       ))
       .id;
