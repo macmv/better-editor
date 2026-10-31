@@ -6,6 +6,6 @@ edition = "2024"
 [dependencies]
 be-terminal = { path = "../be-terminal" }
 log = "0.4.34"
-lode = { path = "../../lode/lode", default-features = false }
-lode-local = { path = "../../lode/lode-local" }
-lode-poll = { path = "../../lode/lode-poll" }
+lode = { version = "*", default-features = false }
+lode-local = { version = "*" }
+lode-poll = { version = "*" }
