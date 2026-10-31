@@ -12,6 +12,7 @@ use crate::{Color, Render};
 // - lucide::chevron-down
 // - lucide::chevron-right
 // - lucide::folder
+// - lucide::menu
 // - lucide::minus
 // - lucide::square-dot
 // - lucide::square-plus

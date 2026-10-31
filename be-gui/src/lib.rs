@@ -14,7 +14,7 @@ use be_fs::{WorkspacePath, WorkspaceRoot};
 use be_input::{Action, KeyStroke, Mode, Navigation};
 use be_shared::SharedHandle;
 use be_workspace::{Workspace, WorkspaceEvent};
-use kurbo::{Axis, Point, Rect, Size};
+use kurbo::{Affine, Axis, Point, Rect, Size, Stroke};
 pub use render::*;
 
 use pane::{HitResult, Pane, SplitPath};
@@ -85,6 +85,9 @@ struct State {
   list_selected: usize,
   /// What the workspace list returns to when it is left without a choice.
   list_return:   AppView,
+
+  /// The mouse is over the menu button in the bottom right.
+  menu_hover: bool,
 }
 
 #[derive(Clone)]
@@ -137,6 +140,12 @@ struct ViewCollection {
 /// Height of the tab bar, in pixels. This is the tab button height (a 13px UI
 /// font line plus its border) plus 5px of margin above and below.
 const TAB_BAR_HEIGHT: f64 = 30.0;
+
+/// The menu button's size, which matches a tab button: the tab bar less its
+/// margin.
+const MENU_BUTTON_SIZE: f64 = TAB_BAR_HEIGHT - 10.0;
+/// The gap between the menu button and the window edges.
+const MENU_BUTTON_MARGIN: f64 = 5.0;
 
 struct Tab {
   title:   String,
@@ -270,6 +279,7 @@ impl State {
       next_session: 1,
       list_selected: 0,
       list_return: AppView::Terminal,
+      menu_hover: false,
     };
 
     if let Some(root) = args.editor {
@@ -420,6 +430,61 @@ impl State {
     }
   }
 
+  /// Opens the workspace list, or leaves it for what was showing before.
+  fn toggle_workspace_list(&mut self) {
+    if matches!(self.active, AppView::Workspaces) {
+      self.show(self.list_return.clone());
+    } else {
+      self.open_workspace_list();
+    }
+  }
+
+  /// Where the menu button sits in a window of `size`.
+  fn menu_bounds(size: Size) -> Rect {
+    Rect::from_origin_size(
+      Point::new(
+        size.width - MENU_BUTTON_MARGIN - MENU_BUTTON_SIZE,
+        size.height - MENU_BUTTON_MARGIN - MENU_BUTTON_SIZE,
+      ),
+      Size::new(MENU_BUTTON_SIZE, MENU_BUTTON_SIZE),
+    )
+  }
+
+  /// The menu button is on every screen but the full screen terminal.
+  fn menu_visible(&self) -> bool { !matches!(self.active, AppView::Terminal) }
+
+  fn draw_menu_button(&self, render: &mut Render) {
+    if !self.menu_visible() {
+      return;
+    }
+
+    let active = matches!(self.active, AppView::Workspaces);
+    let bounds = Self::menu_bounds(render.size());
+
+    render.clipped(bounds, |render| {
+      let shape = Rect::from_origin_size(Point::ZERO, bounds.size());
+      let outline = render.theme().background_raised_outline;
+
+      render.fill(
+        &shape.to_rounded_rect(4.0),
+        if active { outline } else { render.theme().background_raised },
+      );
+      if active || self.menu_hover {
+        render.stroke_transform(
+          &shape.inset(-0.5).to_rounded_rect(3.5),
+          Affine::IDENTITY,
+          outline,
+          Stroke::new(1.0),
+        );
+      }
+
+      let icon_size = 14.0;
+      let offset = (MENU_BUTTON_SIZE - icon_size) / 2.0;
+      let color = render.theme().text;
+      icon::MENU.stroke(Point::new(offset, offset), icon_size, color, render);
+    });
+  }
+
   fn open_workspace_list(&mut self) {
     let roots = self.workspace_roots();
     self.list_selected = match &self.active {
@@ -527,6 +592,8 @@ impl State {
         workspace_list::draw(render, &self.workspace_roots(), self.list_selected)
       }
     }
+
+    self.draw_menu_button(render);
   }
   fn draw_loading(&self, render: &mut Render) {
     let Some(loading) = &self.loading else { return };
@@ -571,6 +638,24 @@ impl State {
     }
   }
   pub fn on_mouse(&mut self, ev: MouseEvent, size: kurbo::Size, store: &RenderStore) -> CursorKind {
+    let menu = Self::menu_bounds(size);
+    match ev {
+      MouseEvent::Move { pos } => self.menu_hover = self.menu_visible() && menu.contains(pos),
+      MouseEvent::Leave => self.menu_hover = false,
+      _ => {}
+    }
+    if self.menu_hover {
+      match ev {
+        MouseEvent::Button { pos, pressed: true, button: MouseButton::Left }
+          if menu.contains(pos) =>
+        {
+          self.toggle_workspace_list();
+        }
+        _ => {}
+      }
+      return CursorKind::Pointer;
+    }
+
     match &mut self.active {
       AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().on_mouse(ev, size, store),
       AppView::Terminal => self.terminal.on_mouse(&ev, size, store),
@@ -618,11 +703,7 @@ impl State {
   fn perform_action(&mut self, action: Action, store: &mut RenderStore) {
     match action {
       Action::Navigate { nav: Navigation::Workspaces } => {
-        if matches!(self.active, AppView::Workspaces) {
-          self.show(self.list_return.clone());
-        } else {
-          self.open_workspace_list();
-        }
+        self.toggle_workspace_list();
       }
 
       Action::Navigate { nav: Navigation::OpenWorkspace } => {
@@ -1267,6 +1348,7 @@ impl WorkspaceLayout {
       left.push(button.id);
     }
 
+    // Leaves room for the menu button, which is drawn over the tab bar.
     let mut right = vec![];
     match self.views.get(self.tabs[self.active].content.active()).unwrap().content {
       ViewContent::Editor(ref e) => {
@@ -1277,6 +1359,14 @@ impl WorkspaceLayout {
       }
       _ => {}
     }
+    right.push(
+      tab_layout
+        .add_widget(
+          crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Start, vec![])
+            .main_size(MENU_BUTTON_SIZE + MENU_BUTTON_MARGIN),
+        )
+        .id,
+    );
 
     let left = tab_layout
       .add_widget(
