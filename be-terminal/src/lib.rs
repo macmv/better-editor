@@ -6,16 +6,20 @@ use std::{
   time::{Duration, Instant},
 };
 
-use anstyle_parse::{Parser, Utf8Parser};
+use anstyle_parse::Parser;
 
 use crate::grid::Grid;
 pub use crate::{
+  emulator::{Emulator, MouseMode},
   grid::{Line, OwnedLine},
-  pty::Pty,
+  keys::{Arrow, InputModes},
+  pty::{Pty, SpawnSpec},
 };
 
 mod control;
+mod emulator;
 mod grid;
+pub mod keys;
 mod pty;
 
 #[cfg(test)]
@@ -46,14 +50,14 @@ const UPDATE_BUDGET: Duration = Duration::from_millis(3);
 /// How long output is held back after a program starts a synchronized update
 /// (mode 2026) without finishing it. Programs that crash mid-update shouldn't
 /// freeze the screen.
-const SYNC_TIMEOUT: Duration = Duration::from_millis(150);
+pub(crate) const SYNC_TIMEOUT: Duration = Duration::from_millis(150);
 
 /// The most output held back for a synchronized update, before it is shown
 /// anyway.
-const SYNC_MAX_HELD: usize = 4 * 1024 * 1024;
+pub(crate) const SYNC_MAX_HELD: usize = 4 * 1024 * 1024;
 
 /// The sequence that ends a synchronized update.
-const SYNC_END: &[u8] = b"\x1b[?2026l";
+pub(crate) const SYNC_END: &[u8] = b"\x1b[?2026l";
 
 /// A source of terminal bytes, and a sink for input. This is the process (or
 /// remote process) on the other side of the terminal.
@@ -75,23 +79,22 @@ pub trait PtyHost {
   /// Implementations should not call it more often than needed, and must stop
   /// calling it when dropped.
   fn set_wake(&mut self, wake: Box<dyn Fn() + Send>);
+
+  /// The exit status of the process, if it has exited. Does not block. Signals
+  /// are reported as `128 + signal`. Hosts without a process report `None`.
+  fn exit_status(&mut self) -> Option<i32> { None }
+
+  /// Sends a signal to the process (group). Does nothing by default.
+  fn signal(&mut self, _sig: i32) {}
 }
 
 pub struct Terminal {
-  pty:   Box<dyn PtyHost>,
-  state: TerminalState,
-
-  parser: Parser,
+  pty: Box<dyn PtyHost>,
+  emu: Emulator,
 
   read_buf:       Box<[u8]>,
   // Set when `update` stopped reading before the pty ran dry.
   pending_output: bool,
-
-  // Output received during a synchronized update, which isn't parsed until the update ends, so
-  // that the screen never shows half of a frame. Held until `hold_deadline`, if it is set.
-  held:          Vec<u8>,
-  held_scanned:  usize,
-  hold_deadline: Option<Instant>,
 }
 
 #[derive(Clone, Copy)]
@@ -156,7 +159,7 @@ pub struct TerminalState {
 }
 
 bitflags::bitflags! {
-  struct TerminalFlags: u8 {
+  pub(crate) struct TerminalFlags: u8 {
     const REPORT_MOUSE            = 1 << 0;
     const MOUSE_MOTION            = 1 << 1;
     const MOUSE_ALL_MOTION        = 1 << 2;
@@ -170,7 +173,7 @@ bitflags::bitflags! {
 
 /// Kitty keyboard protocol flag: report keys like Ctrl+Enter with `CSI u`
 /// escape codes.
-const KITTY_DISAMBIGUATE: u8 = 1;
+pub(crate) const KITTY_DISAMBIGUATE: u8 = 1;
 /// The most keyboard mode pushes we remember, so a misbehaving program can't
 /// grow the stack forever.
 const KITTY_STACK_LIMIT: usize = 16;
@@ -269,7 +272,7 @@ pub struct Position {
   pub col: usize,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Size {
   pub rows: usize,
   pub cols: usize,
@@ -283,17 +286,13 @@ impl Terminal {
   pub fn with_host(size: Size, pty: Box<dyn PtyHost>) -> Self {
     Terminal {
       pty,
-      state: TerminalState::new(size),
-      parser: Parser::<Utf8Parser>::new(),
+      emu: Emulator::new(size),
       read_buf: vec![0; READ_SIZE].into_boxed_slice(),
       pending_output: false,
-      held: Vec::new(),
-      held_scanned: 0,
-      hold_deadline: None,
     }
   }
 
-  pub fn state(&self) -> &TerminalState { &self.state }
+  pub fn state(&self) -> &TerminalState { &self.emu.state }
   pub fn has_pending_writes(&self) -> bool { self.pty.has_pending_writes() }
 
   pub fn current_dir(&self) -> PathBuf { self.pty.current_dir() }
@@ -302,65 +301,43 @@ impl Terminal {
   pub fn set_wake(&mut self, wake: Box<dyn Fn() + Send>) { self.pty.set_wake(wake); }
 
   pub fn set_size(&mut self, size: Size) {
-    if size != self.state.size {
-      self.state.begin_frame();
-      self.state.resize(size);
+    if size != self.emu.state.size {
+      self.emu.state.begin_frame();
+      self.emu.state.resize(size);
       self.pty.resize(size);
     }
   }
 
-  pub fn perform_input(&mut self, c: char) {
-    self.pty.write_bytes(c.encode_utf8(&mut [0u8; 4]).as_bytes());
-  }
-  pub fn perform_backspace(&mut self) { self.pty.write_bytes(&[control::C0::DEL]); }
-  pub fn perform_delete(&mut self) { self.pty.write_bytes(&[control::C0::DEL]); }
-  pub fn perform_control(&mut self, b: u8) { self.pty.write_bytes(&[b]); }
+  fn write_keys(&mut self, bytes: Vec<u8>) { self.pty.write_bytes(&bytes); }
+
+  pub fn perform_input(&mut self, c: char) { self.write_keys(keys::input(c)); }
+  pub fn perform_backspace(&mut self) { self.write_keys(keys::backspace()); }
+  pub fn perform_delete(&mut self) { self.write_keys(keys::delete()); }
+  pub fn perform_control(&mut self, b: u8) { self.write_keys(keys::control(b)); }
   /// Sends Ctrl+Enter. Plain terminals can't tell this apart from Enter, so it
   /// only gets a distinct encoding if the program asked for it with the kitty
   /// keyboard protocol.
   pub fn perform_ctrl_enter(&mut self) {
-    if self.state.kitty_flags & KITTY_DISAMBIGUATE != 0 {
-      self.pty.write_bytes(b"\x1b[13;5u");
-    } else {
-      self.pty.write_bytes(b"\r");
-    }
+    self.write_keys(keys::ctrl_enter(self.emu.input_modes()));
   }
-  pub fn perform_escape(&mut self) { self.pty.write_bytes(&[control::C0::ESC]); }
-  pub fn perform_tab(&mut self) { self.pty.write_bytes(&[control::C0::HT]); }
-  pub fn perform_shift_tab(&mut self) { self.pty.write_bytes(b"\x1b[Z"); }
-  pub fn perform_up(&mut self) {
-    if self.state.flags.contains(TerminalFlags::CURSOR_KEYS) {
-      self.pty.write_bytes(b"\x1bOA");
-    } else {
-      self.pty.write_bytes(b"\x1b[A");
-    }
-  }
+  pub fn perform_escape(&mut self) { self.write_keys(keys::escape()); }
+  pub fn perform_tab(&mut self) { self.write_keys(keys::tab()); }
+  pub fn perform_shift_tab(&mut self) { self.write_keys(keys::shift_tab()); }
+  pub fn perform_up(&mut self) { self.write_keys(keys::arrow(Arrow::Up, self.emu.input_modes())); }
   pub fn perform_down(&mut self) {
-    if self.state.flags.contains(TerminalFlags::CURSOR_KEYS) {
-      self.pty.write_bytes(b"\x1bOB");
-    } else {
-      self.pty.write_bytes(b"\x1b[B");
-    }
+    self.write_keys(keys::arrow(Arrow::Down, self.emu.input_modes()));
   }
   pub fn perform_left(&mut self) {
-    if self.state.flags.contains(TerminalFlags::CURSOR_KEYS) {
-      self.pty.write_bytes(b"\x1bOD");
-    } else {
-      self.pty.write_bytes(b"\x1b[D");
-    }
+    self.write_keys(keys::arrow(Arrow::Left, self.emu.input_modes()));
   }
   pub fn perform_right(&mut self) {
-    if self.state.flags.contains(TerminalFlags::CURSOR_KEYS) {
-      self.pty.write_bytes(b"\x1bOC");
-    } else {
-      self.pty.write_bytes(b"\x1b[C");
-    }
+    self.write_keys(keys::arrow(Arrow::Right, self.emu.input_modes()));
   }
   /// Report a mouse button press or release to the PTY.
   ///
   /// `button` is 0=left, 1=middle, 2=right. Only sent when mode 1000 is active.
   pub fn perform_mouse_button(&mut self, col: usize, row: usize, button: u8, pressed: bool) {
-    if self.state.flags.contains(TerminalFlags::REPORT_MOUSE) {
+    if self.emu.state.flags.contains(TerminalFlags::REPORT_MOUSE) {
       let code = if pressed { button } else { 3 };
       self.send_mouse_report(col, row, code);
     }
@@ -370,23 +347,25 @@ impl Terminal {
   ///
   /// Only sent when mode 1000 is active.
   pub fn perform_mouse_scroll(&mut self, col: usize, row: usize, dy: i32) {
-    if self.state.flags.contains(TerminalFlags::REPORT_MOUSE) {
+    if self.emu.state.flags.contains(TerminalFlags::REPORT_MOUSE) {
       // Scroll buttons: 64=wheel-up, 65=wheel-down (before the +32 offset in
       // send_mouse_report).
       let code = if dy > 0 { 64 } else { 65 };
       self.send_mouse_report(col, row, code);
-    } else if !self.state.alt_screen {
-      self.state.viewport_offset = self.state.viewport_offset.saturating_add_signed(dy as isize);
+    } else if !self.emu.state.alt_screen {
+      self.emu.state.viewport_offset =
+        self.emu.state.viewport_offset.saturating_add_signed(dy as isize);
 
-      self.state.viewport_offset = self.state.viewport_offset.clamp(0, self.state.scrollback.len());
+      self.emu.state.viewport_offset =
+        self.emu.state.viewport_offset.clamp(0, self.emu.state.scrollback.len());
     }
   }
 
-  pub fn maximum_offset(&self) -> usize { self.state.scrollback.len() }
-  pub fn viewport_offset(&self) -> usize { self.state.viewport_offset }
+  pub fn maximum_offset(&self) -> usize { self.emu.state.scrollback.len() }
+  pub fn viewport_offset(&self) -> usize { self.emu.state.viewport_offset }
 
   pub fn is_fractional_scrolling(&self) -> bool {
-    !self.state.flags.contains(TerminalFlags::REPORT_MOUSE) && !self.state.alt_screen
+    !self.emu.state.flags.contains(TerminalFlags::REPORT_MOUSE) && !self.emu.state.alt_screen
   }
 
   /// Report mouse motion to the PTY.
@@ -394,9 +373,9 @@ impl Terminal {
   /// `held` is the button currently held (0=left, 1=middle, 2=right), or None.
   /// Sent when mode 1002 (held button) or 1003 (all motion) is active.
   pub fn perform_mouse_move(&mut self, col: usize, row: usize, held: Option<u8>) {
-    let report = if self.state.flags.contains(TerminalFlags::MOUSE_ALL_MOTION) {
+    let report = if self.emu.state.flags.contains(TerminalFlags::MOUSE_ALL_MOTION) {
       true
-    } else if self.state.flags.contains(TerminalFlags::MOUSE_MOTION) {
+    } else if self.emu.state.flags.contains(TerminalFlags::MOUSE_MOTION) {
       held.is_some()
     } else {
       false
@@ -413,7 +392,7 @@ impl Terminal {
   ///
   /// Only sent when mode 1004 is active.
   pub fn perform_focus_event(&mut self, focus: bool) {
-    if self.state.flags.contains(TerminalFlags::REPORT_FOCUS) {
+    if self.emu.state.flags.contains(TerminalFlags::REPORT_FOCUS) {
       if focus {
         self.pty.write_bytes(b"\x1b[I");
       } else {
@@ -423,7 +402,7 @@ impl Terminal {
   }
 
   fn send_mouse_report(&mut self, col: usize, row: usize, button_code: u8) {
-    if self.state.flags.contains(TerminalFlags::MOUSE_UTF8) {
+    if self.emu.state.flags.contains(TerminalFlags::MOUSE_UTF8) {
       // Mode 1005: encode each of the three values as a UTF-8 codepoint.
       let mut buf = vec![0x1b, b'[', b'M'];
       push_utf8_coord(&mut buf, 32 + u32::from(button_code));
@@ -447,50 +426,32 @@ impl Terminal {
   }
 
   pub fn perform_paste(&mut self, s: &str) {
-    // Source: alacritty
-    if self.state.flags.contains(TerminalFlags::BRACKETED_PASTE) {
-      self.pty.write_bytes(b"\x1b[200~");
-
-      // Write filtered escape sequences.
-      //
-      // We remove `\x1b` to ensure it's impossible for the pasted text to write
-      // the bracketed paste end escape `\x1b[201~` and `\x03` since some
-      // shells incorrectly terminate bracketed paste when they receive
-      // it.
-      let filtered = s.replace(['\x1b', '\x03'], "");
-      self.pty.write_bytes(filtered.as_bytes());
-
-      self.pty.write_bytes(b"\x1b[201~");
-    } else {
-      // In non-bracketed (ie: normal) mode, terminal applications cannot
-      // distinguish pasted data from keystrokes.
-      //
-      // In theory, we should construct the keystrokes needed to produce the
-      // data we are pasting... since that's neither practical nor
-      // sensible (and probably an impossible task to solve in a general
-      // way), we'll just replace line breaks (windows and unix style)
-      // with a single carriage return (\r, which is what the Enter key
-      // produces).
-      self.pty.write_bytes(s.replace("\r\n", "\r").replace('\n', "\r").as_bytes());
-    }
+    self.write_keys(keys::paste(s, self.emu.input_modes()));
   }
 
   pub fn visible_line(&self, index: usize) -> Option<&OwnedLine> {
-    let abs_line = self.state.scrollback.len() + index - self.state.viewport_offset;
-    if abs_line < self.state.scrollback.len() {
-      Some(&self.state.scrollback[abs_line])
+    let abs_line = self.emu.state.scrollback.len() + index - self.emu.state.viewport_offset;
+    if abs_line < self.emu.state.scrollback.len() {
+      Some(&self.emu.state.scrollback[abs_line])
     } else {
-      self.state.grid.line(abs_line - self.state.scrollback.len())
+      self.emu.state.grid.line(abs_line - self.emu.state.scrollback.len())
     }
   }
 
   /// Returns a line from the scrollback. The most recent line is index 0. Used
   /// to render partial lines.
   pub fn scrollback_line(&self, index: usize) -> Option<&OwnedLine> {
-    if index < self.state.scrollback.len() {
-      Some(&self.state.scrollback[self.state.scrollback.len() - index - 1])
+    if index < self.emu.state.scrollback.len() {
+      Some(&self.emu.state.scrollback[self.emu.state.scrollback.len() - index - 1])
     } else {
       None
+    }
+  }
+
+  fn send_replies(&mut self) {
+    if self.emu.state.has_replies() {
+      let replies = self.emu.take_replies();
+      self.pty.write_bytes(&replies);
     }
   }
 
@@ -502,7 +463,7 @@ impl Terminal {
   /// Reads and parses output from the pty, for at most `UPDATE_BUDGET`. Returns
   /// true once the pty has closed.
   pub fn update(&mut self) -> bool {
-    self.state.begin_frame();
+    self.emu.state.begin_frame();
     self.pending_output = false;
 
     let start = Instant::now();
@@ -510,24 +471,21 @@ impl Terminal {
       match self.pty.read(&mut self.read_buf) {
         // Ok(0) -> pty closed on macos
         Ok(0) => {
-          self.finish_hold();
+          self.emu.finish_hold();
           return true;
         }
         // EIO error -> pty closed on linux
         Err(e) if e.raw_os_error() == Some(rustix::io::Errno::IO.raw_os_error()) => {
-          self.finish_hold();
+          self.emu.finish_hold();
           return true;
         }
 
         Ok(n) => {
           let buf = std::mem::take(&mut self.read_buf);
-          self.consume(&buf[..n]);
+          self.emu.consume(&buf[..n]);
           self.read_buf = buf;
 
-          if !self.state.pending_writes.is_empty() {
-            self.pty.write_bytes(&self.state.pending_writes);
-            self.state.pending_writes.clear();
-          }
+          self.send_replies();
 
           if start.elapsed() >= UPDATE_BUDGET {
             self.pending_output = true;
@@ -543,80 +501,17 @@ impl Terminal {
       }
     }
 
-    self.release_held();
-    if !self.state.pending_writes.is_empty() {
-      self.pty.write_bytes(&self.state.pending_writes);
-      self.state.pending_writes.clear();
-    }
+    self.emu.release_held();
+    self.send_replies();
 
     // Held output is released by a timeout, which nothing will wake us for.
-    if self.hold_deadline.is_some() {
+    if self.emu.is_holding() {
       self.pending_output = true;
     }
 
     self.pty.flush();
 
     false
-  }
-
-  /// Parses `bytes`, unless a synchronized update is in progress, in which case
-  /// they are held until it ends.
-  fn consume(&mut self, mut bytes: &[u8]) {
-    if self.hold_deadline.is_some() {
-      self.held.extend_from_slice(bytes);
-      return;
-    }
-
-    while !bytes.is_empty() {
-      let used = advance(&mut self.parser, &mut self.state, bytes);
-      bytes = &bytes[used..];
-
-      if std::mem::take(&mut self.state.sync_started) {
-        self.held.clear();
-        self.held.extend_from_slice(bytes);
-        self.held_scanned = 0;
-        self.hold_deadline = Some(Instant::now() + SYNC_TIMEOUT);
-        return;
-      }
-    }
-  }
-
-  /// Whether a synchronized update has ended, or has gone on for too long.
-  fn should_release(&mut self) -> bool {
-    let Some(deadline) = self.hold_deadline else { return false };
-
-    // Only look at the new bytes, but the sequence might be split across reads.
-    let from = self.held_scanned.saturating_sub(SYNC_END.len() - 1);
-    self.held_scanned = self.held.len();
-
-    Instant::now() >= deadline
-      || self.held.len() > SYNC_MAX_HELD
-      || self.held[from..].windows(SYNC_END.len()).any(|w| w == SYNC_END)
-  }
-
-  /// Parses held output if its synchronized update is over. Output after the
-  /// end of the update can start another one, which holds the rest of it
-  /// again.
-  fn release_held(&mut self) {
-    while self.should_release() {
-      self.hold_deadline = None;
-
-      let held = std::mem::take(&mut self.held);
-      self.consume(&held);
-
-      // This is already off if the update ended, but not if it timed out.
-      if self.hold_deadline.is_none() {
-        self.state.synchronized = false;
-      }
-    }
-  }
-
-  /// Parses held output no matter what, for when the pty is closing.
-  fn finish_hold(&mut self) {
-    if self.hold_deadline.is_some() {
-      self.hold_deadline = Some(Instant::now());
-      self.release_held();
-    }
   }
 }
 
@@ -625,7 +520,7 @@ impl Terminal {
 ///
 /// Stops early after a byte that starts a synchronized update (`sync_started`),
 /// and returns how many bytes were used.
-fn advance(parser: &mut Parser, state: &mut TerminalState, bytes: &[u8]) -> usize {
+pub(crate) fn advance(parser: &mut Parser, state: &mut TerminalState, bytes: &[u8]) -> usize {
   let mut i = 0;
   while i < bytes.len() {
     if state.ground {
@@ -663,7 +558,23 @@ fn push_utf8_coord(buf: &mut Vec<u8>, codepoint: u32) {
 }
 
 impl TerminalState {
-  fn new(size: Size) -> Self {
+  /// Returns the line at `index` of scrollback followed by the screen, or
+  /// `None` if out of range. Index 0 is the oldest line of scrollback.
+  pub fn absolute_line(&self, index: usize) -> Option<&OwnedLine> {
+    if index < self.scrollback.len() {
+      Some(&self.scrollback[index])
+    } else {
+      self.grid.line(index - self.scrollback.len())
+    }
+  }
+
+  /// The number of lines of scrollback.
+  pub fn scrollback_len(&self) -> usize { self.scrollback.len() }
+
+  /// How far the viewport is scrolled back. 0 is live.
+  pub fn viewport_offset(&self) -> usize { self.viewport_offset }
+
+  pub(crate) fn new(size: Size) -> Self {
     TerminalState {
       grid: Grid::new(size),
       cursor: Cursor::default(),
@@ -698,14 +609,16 @@ impl TerminalState {
     }
   }
 
+  pub(crate) fn has_replies(&self) -> bool { !self.pending_writes.is_empty() }
+
   /// Starts a new batch of changes. Lines written after this get a new stamp.
-  fn begin_frame(&mut self) {
+  pub(crate) fn begin_frame(&mut self) {
     self.epoch += 1;
     self.grid.set_epoch(self.epoch);
     self.alt_grid.set_epoch(self.epoch);
   }
 
-  fn resize(&mut self, size: Size) {
+  pub(crate) fn resize(&mut self, size: Size) {
     if self.scroll_end == self.size.rows {
       self.scroll_end = size.rows;
     }

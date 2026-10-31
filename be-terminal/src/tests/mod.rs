@@ -523,7 +523,7 @@ fn terminal() -> (Terminal, Script) {
 }
 
 fn row(term: &Terminal, row: usize) -> String {
-  term.state.grid.line(row).unwrap().to_string().trim_end().to_string()
+  term.emu.state.grid.line(row).unwrap().to_string().trim_end().to_string()
 }
 
 const BSU: &str = "\x1b[?2026h";
@@ -588,11 +588,11 @@ fn unfinished_synchronized_update_times_out() {
   term.update();
   assert_eq!(row(&term, 0), "");
 
-  term.hold_deadline = Some(Instant::now() - Duration::from_millis(1));
+  term.emu.hold_deadline = Some(Instant::now() - Duration::from_millis(1));
   term.update();
   assert_eq!(row(&term, 0), "stuck");
   assert!(!term.has_pending_output());
-  assert!(!term.state.synchronized);
+  assert!(!term.emu.state.synchronized);
 }
 
 #[test]
@@ -612,4 +612,175 @@ fn synchronized_update_mode_can_be_queried() {
   script.send(ESU);
   term.update();
   assert_eq!(script.written.borrow().as_slice(), b"\x1b[?2026;1$y");
+}
+
+// --- Emulator ---
+
+#[test]
+fn emulator_feed_and_replies() {
+  let mut emu = crate::Emulator::new(Size { rows: 3, cols: 8 });
+  emu.feed(b"hi\x1b[6n");
+  assert_eq!(emu.state().grid.line(0).unwrap().to_string().trim_end(), "hi");
+  assert_eq!(emu.take_replies(), b"\x1b[1;3R");
+  assert!(emu.take_replies().is_empty());
+
+  // Queries are answered after a split read too.
+  emu.feed(b"\x1b[?20");
+  emu.feed(b"26$p");
+  assert_eq!(emu.take_replies(), b"\x1b[?2026;2$y");
+}
+
+#[test]
+fn emulator_synchronized_update_held() {
+  let mut emu = crate::Emulator::new(Size { rows: 3, cols: 8 });
+  emu.feed(format!("{BSU}abc").as_bytes());
+  assert!(emu.is_holding());
+  assert_eq!(emu.state().grid.line(0).unwrap().to_string().trim_end(), "");
+  emu.feed(ESU.as_bytes());
+  assert!(!emu.is_holding());
+  assert_eq!(emu.state().grid.line(0).unwrap().to_string().trim_end(), "abc");
+}
+
+#[test]
+fn emulator_used_rows() {
+  let mut emu = crate::Emulator::new(Size { rows: 4, cols: 8 });
+  assert_eq!(emu.used_rows(), 1);
+  emu.feed(b"a\r\nb");
+  assert_eq!(emu.used_rows(), 2);
+  // Content below the cursor counts.
+  emu.feed(b"\x1b[4;1Hx\x1b[1;1H");
+  assert_eq!(emu.used_rows(), 4);
+  emu.feed(b"\x1b[2J\x1b[H");
+  assert_eq!(emu.used_rows(), 1);
+
+  // Scrollback counts in full.
+  emu.feed(b"1\r\n2\r\n3\r\n4\r\n5\r\n6");
+  assert_eq!(emu.state().scrollback.len(), 2);
+  assert_eq!(emu.used_rows(), 6);
+}
+
+#[test]
+fn emulator_alt_screen_and_modes() {
+  let mut emu = crate::Emulator::new(Size { rows: 4, cols: 8 });
+  assert!(!emu.alt_screen());
+  emu.feed(b"\x1b[?1049h");
+  assert!(emu.alt_screen());
+  assert_eq!(emu.used_rows(), 4);
+  emu.feed(b"\x1b[?1049l");
+  assert!(!emu.alt_screen());
+
+  assert_eq!(emu.mouse_mode(), crate::MouseMode::None);
+  emu.feed(b"\x1b[?1000h");
+  assert_eq!(emu.mouse_mode(), crate::MouseMode::Press);
+  assert!(emu.mouse_reporting());
+  emu.feed(b"\x1b[?1002h");
+  assert_eq!(emu.mouse_mode(), crate::MouseMode::Drag);
+  emu.feed(b"\x1b[?1003h");
+  assert_eq!(emu.mouse_mode(), crate::MouseMode::Motion);
+
+  assert!(!emu.bracketed_paste());
+  emu.feed(b"\x1b[?2004h\x1b[?1h");
+  assert!(emu.bracketed_paste());
+  assert!(emu.application_cursor_keys());
+  emu.feed(b"\x1b[>1u");
+  assert!(emu.kitty_disambiguate());
+}
+
+// --- Pty ---
+
+mod pty {
+  use std::{
+    io::ErrorKind,
+    path::{Path, PathBuf},
+    time::{Duration, Instant},
+  };
+
+  use crate::{Pty, PtyHost, Size, SpawnSpec};
+
+  fn sh(script: &str) -> Option<Pty> {
+    if !Path::new("/bin/sh").exists() {
+      return None;
+    }
+    Some(
+      Pty::spawn(SpawnSpec {
+        program:   "/bin/sh".into(),
+        args:      vec!["-c".into(), script.into()],
+        env:       vec![("FOO".into(), "bar".into())],
+        clear_env: false,
+        cwd:       PathBuf::from("/"),
+        size:      Size { rows: 4, cols: 40 },
+      })
+      .unwrap(),
+    )
+  }
+
+  /// Reads until EOF, returning the output and how long EOF took.
+  fn read_to_eof(pty: &mut Pty) -> (Vec<u8>, Duration) {
+    let start = Instant::now();
+    let mut out = vec![];
+    let mut buf = [0u8; 1024];
+    loop {
+      assert!(start.elapsed() < Duration::from_secs(10), "timed out waiting for EOF");
+      match pty.read(&mut buf) {
+        Ok(0) => break,
+        Ok(n) => out.extend_from_slice(&buf[..n]),
+        Err(e) if e.kind() == ErrorKind::WouldBlock => {
+          std::thread::sleep(Duration::from_millis(5));
+        }
+        Err(e) if e.raw_os_error() == Some(rustix::io::Errno::IO.raw_os_error()) => break,
+        Err(e) => panic!("{e}"),
+      }
+    }
+    (out, start.elapsed())
+  }
+
+  fn wait_status(pty: &mut Pty) -> Option<i32> {
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(10) {
+      if let Some(s) = pty.exit_status() {
+        return Some(s);
+      }
+      std::thread::sleep(Duration::from_millis(5));
+    }
+    None
+  }
+
+  #[test]
+  fn exit_status_and_env() {
+    let Some(mut pty) = sh("echo $FOO; pwd; exit 3") else { return };
+    let (out, _) = read_to_eof(&mut pty);
+    assert_eq!(String::from_utf8_lossy(&out).replace("\r\n", "\n"), "bar\n/\n");
+    assert_eq!(wait_status(&mut pty), Some(3));
+    assert_eq!(pty.exit_status(), Some(3));
+  }
+
+  // Linux hangs up the pty when the session leader (the direct child) exits, so
+  // EOF does not wait for background children, but output the leader wrote
+  // before exiting is still delivered.
+  #[test]
+  fn eof_when_session_leader_exits_with_background_child() {
+    let Some(mut pty) = sh("echo hi; sleep 1 &") else { return };
+    let (out, _) = read_to_eof(&mut pty);
+    assert_eq!(String::from_utf8_lossy(&out).replace("\r\n", "\n"), "hi\n");
+    assert_eq!(wait_status(&mut pty), Some(0));
+  }
+
+  #[test]
+  fn eof_after_plain_exit() {
+    let Some(mut pty) = sh("true") else { return };
+    let (_, took) = read_to_eof(&mut pty);
+    assert!(took < Duration::from_secs(5));
+    assert_eq!(wait_status(&mut pty), Some(0));
+  }
+
+  #[test]
+  fn signal_kills_process_group() {
+    let Some(mut pty) = sh("sleep 30") else { return };
+    assert_eq!(pty.exit_status(), None);
+    pty.signal(libc::SIGTERM);
+    assert_eq!(wait_status(&mut pty), Some(128 + libc::SIGTERM));
+    // The background sleep dies with the group, so EOF follows.
+    let (_, took) = read_to_eof(&mut pty);
+    assert!(took < Duration::from_secs(5));
+  }
 }

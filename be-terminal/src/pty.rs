@@ -1,9 +1,10 @@
 use std::{
+  ffi::OsString,
   fs::File,
   io::{self, Read, Write},
   os::{
     fd::{AsRawFd, RawFd},
-    unix::process::CommandExt,
+    unix::process::{CommandExt, ExitStatusExt},
   },
   path::{Path, PathBuf},
   process::Command,
@@ -17,9 +18,24 @@ use std::{
 
 use crate::{PtyHost, Size};
 
+/// How to start a process on a pty.
+pub struct SpawnSpec {
+  pub program:   OsString,
+  pub args:      Vec<OsString>,
+  /// Environment variables. Added on top of the inherited environment, unless
+  /// `clear_env` is set, in which case they are the whole environment.
+  pub env:       Vec<(OsString, OsString)>,
+  /// Don't inherit this process's environment. `TERM` and `COLORTERM` are
+  /// still set (unless `env` already sets them).
+  pub clear_env: bool,
+  pub cwd:       PathBuf,
+  pub size:      Size,
+}
+
 /// A PTY backed by a local shell process.
 pub struct Pty {
-  _child:    std::process::Child,
+  child:     std::process::Child,
+  status:    Option<i32>,
   pty:       File,
   write_buf: Vec<u8>,
   waker:     Option<Waker>,
@@ -44,6 +60,20 @@ impl Pty {
 
   /// Starts `$SHELL` (or `/bin/zsh`) in `path`.
   pub fn try_new(size: Size, path: &Path) -> io::Result<Self> {
+    let shell = std::env::var_os("SHELL").unwrap_or_else(|| "/bin/zsh".into());
+    Pty::spawn(SpawnSpec {
+      program: shell,
+      args: vec![],
+      env: vec![("TERM".into(), "xterm-256color".into()), ("COLORTERM".into(), "truecolor".into())],
+      clear_env: false,
+      cwd: path.to_path_buf(),
+      size,
+    })
+  }
+
+  /// Starts a process on a new pty.
+  pub fn spawn(spec: SpawnSpec) -> io::Result<Self> {
+    let size = spec.size;
     let pty = rustix_openpty::openpty(
       None,
       Some(&rustix::termios::Winsize {
@@ -54,13 +84,17 @@ impl Pty {
     )
     .map_err(io::Error::from)?;
 
-    let shell = std::env::var_os("SHELL").unwrap_or_else(|| "/bin/zsh".into());
-    let mut cmd = Command::new(shell);
-
-    cmd.current_dir(path);
-
+    let mut cmd = Command::new(&spec.program);
+    cmd.args(&spec.args);
+    cmd.current_dir(&spec.cwd);
+    if spec.clear_env {
+      cmd.env_clear();
+    }
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
+    for (k, v) in &spec.env {
+      cmd.env(k, v);
+    }
 
     cmd.stdin(pty.user.try_clone()?);
     cmd.stdout(pty.user.try_clone()?);
@@ -95,13 +129,20 @@ impl Pty {
     }
     let child = cmd.spawn()?;
 
+    // The child has its own copies of the slave. Drop ours (and the ones held
+    // by `cmd`), so that the controller reads EOF once every process using
+    // the pty has exited.
+    drop(cmd);
+    drop(pty.user);
+
     be_async::set_nonblocking(&pty.controller)?;
 
     Ok(Pty {
-      _child:    child,
-      pty:       File::from(pty.controller),
+      child,
+      status: None,
+      pty: File::from(pty.controller),
       write_buf: Vec::new(),
-      waker:     None,
+      waker: None,
     })
   }
 }
@@ -130,26 +171,54 @@ impl PtyHost for Pty {
   }
 
   fn resize(&mut self, size: Size) {
-    rustix::termios::tcsetwinsize(
+    let res = rustix::termios::tcsetwinsize(
       &self.pty,
       rustix::termios::Winsize {
         ws_row: size.rows as u16,
         ws_col: size.cols as u16,
         ..unsafe { std::mem::zeroed() }
       },
-    )
-    .unwrap();
+    );
+    if let Err(e) = res {
+      warn!("failed to resize pty: {e}");
+    }
   }
 
   fn current_dir(&self) -> PathBuf {
     #[cfg(target_os = "linux")]
     {
-      std::fs::read_link(format!("/proc/{}/cwd", self._child.id())).unwrap()
+      std::fs::read_link(format!("/proc/{}/cwd", self.child.id())).unwrap()
     }
     #[cfg(not(target_os = "linux"))]
     {
       warn!("current_dir not implemented on platform");
       std::env::current_dir().unwrap()
+    }
+  }
+
+  fn exit_status(&mut self) -> Option<i32> {
+    if self.status.is_none() {
+      match self.child.try_wait() {
+        Ok(Some(status)) => {
+          self.status = Some(status.code().or(status.signal().map(|s| 128 + s)).unwrap_or(-1));
+        }
+        Ok(None) => {}
+        Err(e) => {
+          error!("failed to wait for child: {e}");
+        }
+      }
+    }
+    self.status
+  }
+
+  fn signal(&mut self, sig: i32) {
+    // Don't signal a pid that may have been reused.
+    if self.exit_status().is_some() {
+      return;
+    }
+    // The child is a session leader, so its process group id is its pid.
+    unsafe {
+      libc::kill(-(self.child.id() as i32), sig);
     }
   }
 
