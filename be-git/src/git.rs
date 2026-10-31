@@ -5,7 +5,39 @@ use std::path::{Path, PathBuf};
 use be_doc::DocumentSnapshot;
 use git2::Repository;
 
-pub use git2::Oid;
+/// The questions the editor asks of a git repository. `GitRepo` answers them
+/// with libgit2 on the local disk; a repository on another machine answers
+/// them over the wire. Paths are absolute, in the namespace of whichever
+/// machine holds the repository.
+pub trait GitBackend {
+  /// An identifier for the current HEAD tree, which changes when HEAD does.
+  fn head(&self) -> Option<String>;
+  /// The contents of `path` at HEAD, if it is tracked there.
+  fn lookup_in_head(&self, path: &Path) -> Option<String>;
+  fn is_ignored(&self, path: &Path) -> bool;
+  fn is_added(&self, path: &Path) -> bool;
+  fn is_modified(&self, path: &Path) -> bool;
+}
+
+impl GitBackend for GitRepo {
+  fn head(&self) -> Option<String> {
+    Some(self.repo.head().ok()?.peel_to_tree().ok()?.as_object().id().to_string())
+  }
+
+  fn lookup_in_head(&self, path: &Path) -> Option<String> {
+    let rel = if path.is_absolute() { path.strip_prefix(&self.root).ok()? } else { path };
+
+    let head = self.repo.head().ok()?.peel_to_tree().ok()?;
+    let entry = head.get_path(rel).ok()?;
+    let blob = self.repo.find_blob(entry.id()).ok()?;
+
+    Some(String::from_utf8_lossy(blob.content()).into_owned())
+  }
+
+  fn is_ignored(&self, path: &Path) -> bool { GitRepo::is_ignored(self, path).unwrap_or(false) }
+  fn is_added(&self, path: &Path) -> bool { GitRepo::is_added(self, path).unwrap_or(false) }
+  fn is_modified(&self, path: &Path) -> bool { GitRepo::is_modified(self, path).unwrap_or(false) }
+}
 
 pub struct GitRepo {
   root: PathBuf,

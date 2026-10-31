@@ -1,9 +1,10 @@
 use std::{
   ops::{BitOr, BitOrAssign},
+  rc::Rc,
   sync::LazyLock,
 };
 
-use be_fs::{WatcherHandle, WorkspacePath, WorkspacePathBuf, WorkspaceRoot};
+use be_fs::{FileKind, Fs, WatcherHandle, WorkspacePath, WorkspacePathBuf, WorkspaceRoot};
 use be_git::Repo;
 use be_input::{Action, ChangeDirection, Direction, Mode, Move};
 use be_shared::SharedHandle;
@@ -26,6 +27,7 @@ pub struct FileTree {
   watcher: WatcherHandle,
   root:    WorkspaceRoot,
   repo:    SharedHandle<Option<be_git::Repo>>,
+  fs:      Rc<dyn Fs>,
 }
 
 #[derive(Debug, PartialOrd, PartialEq, Eq, Ord)]
@@ -145,6 +147,7 @@ impl FileTree {
       watcher: workspace.fs.add_handle(),
       root: workspace.root.clone(),
       repo: workspace.repo.clone(),
+      fs: workspace.fs_handle(),
     }
   }
 
@@ -206,7 +209,7 @@ impl FileTree {
             Some(Item::Directory(dir)) => {
               curr = dir;
               curr.expand();
-              curr.populate(&self.root);
+              curr.populate(&self.root, &*self.fs);
             }
             Some(Item::File(_)) => {
               // If we're done with the path, then break and update `active`.
@@ -321,14 +324,13 @@ impl Directory {
 
   fn expand(&mut self) { self.expanded = true; }
 
-  fn populate(&mut self, root: &WorkspaceRoot) {
+  fn populate(&mut self, root: &WorkspaceRoot, fs: &dyn Fs) {
     let mut items = vec![];
 
-    for entry in std::fs::read_dir(root.resolve_path(&self.path)).unwrap() {
-      let entry = entry.unwrap();
-      let meta = entry.metadata().unwrap();
-      let path = self.path.join(&entry.file_name().to_string_lossy());
-      if meta.is_dir() {
+    // TODO: Show an error in the tree if the directory can't be read.
+    for entry in fs.read_dir(&root.resolve_path(&self.path)).unwrap_or_default() {
+      let path = self.path.join(&entry.name);
+      if entry.kind == FileKind::Dir {
         items.push(Item::Directory(Directory::new(path)));
       } else {
         items.push(Item::File(File {
@@ -429,23 +431,23 @@ impl FileTree {
 
     for change in self.watcher.take_changes().iter() {
       if change.starts_with(WorkspacePath::new(".git")) {
-        ItemMut::Directory(&mut self.tree).refresh(&self.root);
+        ItemMut::Directory(&mut self.tree).refresh(&self.root, &*self.fs);
         continue;
       }
 
       if let Some(parent) = change.parent()
         && let Some(mut it) = self.tree.item(parent)
       {
-        it.refresh(&self.root);
+        it.refresh(&self.root, &*self.fs);
       }
       if let Some(mut it) = self.tree.item(change) {
-        it.refresh(&self.root);
+        it.refresh(&self.root, &*self.fs);
       }
     }
 
     let mut node = ItemMut::Directory(&mut self.tree);
     if let Some(repo) = &*self.repo {
-      node.layout(&mut self.watcher, &self.root, &repo);
+      node.layout(&mut self.watcher, &self.root, &*self.fs, &repo);
     }
   }
 
@@ -481,11 +483,17 @@ impl Item {
 }
 
 impl ItemMut<'_> {
-  fn layout(&mut self, watcher: &mut WatcherHandle, root: &WorkspaceRoot, repo: &Repo) {
+  fn layout(
+    &mut self,
+    watcher: &mut WatcherHandle,
+    root: &WorkspaceRoot,
+    fs: &dyn Fs,
+    repo: &Repo,
+  ) {
     match self {
       ItemMut::Directory(dir) => {
         if dir.expanded && dir.items.is_none() {
-          dir.populate(root);
+          dir.populate(root, fs);
         }
 
         // TODO: Add this api.
@@ -510,7 +518,7 @@ impl ItemMut<'_> {
 
         if let Some(items) = &mut dir.items {
           for it in items {
-            it.as_mut().layout(watcher, root, repo);
+            it.as_mut().layout(watcher, root, fs, repo);
             if let Some(stat) = &mut dir.status {
               *stat |= it.status();
             }
@@ -521,14 +529,14 @@ impl ItemMut<'_> {
     }
   }
 
-  fn refresh(&mut self, root: &WorkspaceRoot) {
+  fn refresh(&mut self, root: &WorkspaceRoot, fs: &dyn Fs) {
     match self {
       ItemMut::Directory(d) => {
         d.status = None;
         if d.expanded {
-          d.populate(root);
+          d.populate(root, fs);
           for it in d.items.iter_mut().flatten() {
-            it.as_mut().refresh(root);
+            it.as_mut().refresh(root, fs);
           }
         } else {
           d.items = None;

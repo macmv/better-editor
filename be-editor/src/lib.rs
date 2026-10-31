@@ -8,7 +8,10 @@ use be_rope::RopeSlice;
 use be_shared::SharedHandle;
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{fs::OpenedFile, status::Status};
+use crate::{
+  fs::OpenedFile,
+  status::Status,
+};
 
 mod edit;
 mod filetype;
@@ -22,6 +25,7 @@ mod treesitter;
 #[cfg(test)]
 mod tests;
 
+pub use fs::EditorFs;
 pub use highlight::HighlightKey;
 pub use lsp::{Completion, Diagnostic, DiagnosticLevel};
 
@@ -60,6 +64,7 @@ pub struct EditorState {
   copied:           String,
 
   pub config:    Rc<RefCell<Config>>,
+  pub fs:        EditorFs,
   pub repo:      SharedHandle<Option<Repo>>,
   pub lsp:       lsp::LspState,
   pub send:      Option<Box<dyn Fn(EditorEvent)>>,

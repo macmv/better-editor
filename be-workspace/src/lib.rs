@@ -8,8 +8,8 @@ use std::{
 };
 
 use be_config::Config;
-use be_editor::{EditorEvent, EditorState, SearchState};
-use be_fs::{WorkspaceRoot, WorkspaceWatcher};
+use be_editor::{EditorEvent, EditorFs, EditorState, SearchState};
+use be_fs::{Fs, WorkspaceRoot, WorkspaceWatcher};
 use be_git::Repo;
 use be_input::Clipboard;
 use be_lsp::LanguageServerStore;
@@ -20,6 +20,7 @@ pub struct Workspace {
   pub root: WorkspaceRoot,
 
   pub fs:        WorkspaceWatcher,
+  files:         EditorFs,
   pub repo:      SharedHandle<Option<Repo>>,
   pub lsp:       Rc<RefCell<LanguageServerStore>>,
   pub clipboard: SharedHandle<Clipboard>,
@@ -65,6 +66,7 @@ impl Workspace {
       root,
       config,
       fs,
+      files: EditorFs::default(),
       repo: SharedHandle::new(Some(repo)),
       lsp: Rc::new(RefCell::new(lsp)),
       clipboard: SharedHandle::new(Clipboard::dummy()),
@@ -81,6 +83,7 @@ impl Workspace {
   pub fn new_editor(&mut self) -> SharedHandle<EditorState> {
     let mut editor = EditorState::from("💖hello\n💖foobar\nsdjkhfl\nworld\n");
 
+    editor.fs = self.files.clone();
     editor.repo = self.repo.clone();
     editor.config = self.config.clone();
     editor.lsp.store = self.lsp.clone();
@@ -100,7 +103,7 @@ impl Workspace {
   }
 
   pub fn open_file(&mut self, path: &Path) -> io::Result<SharedHandle<EditorState>> {
-    let canon = path.canonicalize()?;
+    let canon = self.files.canonicalize(path)?;
 
     if let Some(handle) = self.editors_by_path.get(&canon)
       && let Some(handle) = handle.upgrade()
@@ -113,6 +116,9 @@ impl Workspace {
       Ok(editor)
     }
   }
+
+  /// The filesystem this workspace's files live on.
+  pub fn fs_handle(&self) -> Rc<dyn Fs> { self.files.0.clone() }
 
   pub fn set_waker(&self, wake: impl Fn(WorkspaceEvent) + Send + 'static) {
     *self.notifier.lock() = Box::new(wake);

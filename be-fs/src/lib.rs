@@ -5,10 +5,12 @@ use std::{
 };
 
 mod change;
+mod fs;
 mod path;
 mod watch;
 
 pub use change::DirectoryChanges;
+pub use fs::{DirEntry, FileKind, Fs, LocalFs, Metadata};
 pub use path::{Component, WorkspacePath, WorkspacePathBuf, WorkspaceRoot};
 pub use watch::*;
 

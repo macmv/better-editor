@@ -264,6 +264,7 @@ version = "0.1.0"
 dependencies = [
  "be-config",
  "be-doc",
+ "be-fs",
  "be-git",
  "be-input",
  "be-lsp",
@@ -302,6 +303,7 @@ name = "be-git"
 version = "0.1.0"
 dependencies = [
  "be-doc",
+ "be-fs",
  "be-rope",
  "git2",
  "imara-diff",

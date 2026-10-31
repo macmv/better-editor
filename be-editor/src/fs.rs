@@ -1,12 +1,29 @@
 use std::{
   io,
-  os::unix::fs::MetadataExt,
+  ops::Deref,
   path::{Path, PathBuf},
+  rc::Rc,
 };
 
 use be_doc::Document;
+use be_fs::{Fs, LocalFs};
 
 use crate::EditorState;
+
+/// The filesystem an editor reads and writes through. Defaults to the local
+/// disk; a workspace on another machine swaps in its own.
+#[derive(Clone)]
+pub struct EditorFs(pub Rc<dyn Fs>);
+
+impl Default for EditorFs {
+  fn default() -> Self { EditorFs(Rc::new(LocalFs)) }
+}
+
+impl Deref for EditorFs {
+  type Target = dyn Fs;
+
+  fn deref(&self) -> &Self::Target { &*self.0 }
+}
 
 pub struct OpenedFile {
   path:  PathBuf,
@@ -26,7 +43,7 @@ pub struct OpenedFile {
 
 impl EditorState {
   pub fn open(&mut self, path: &Path) -> io::Result<()> {
-    let canon = path.canonicalize()?;
+    let canon = self.fs.canonicalize(path)?;
 
     if let Some(current) = &self.file
       && current.path != canon
@@ -34,7 +51,7 @@ impl EditorState {
       // TODO: Confirm save
     }
 
-    let (file, doc) = OpenedFile::open(&canon)?;
+    let (file, doc) = OpenedFile::open(&*self.fs, &canon)?;
     self.file = Some(file);
     self.doc = doc;
     self.history.clear();
@@ -48,7 +65,7 @@ impl EditorState {
 
   pub fn save(&mut self) -> io::Result<()> {
     if let Some(file) = &mut self.file {
-      file.save(&self.doc)?;
+      file.save(&*self.fs, &self.doc)?;
       file.saved_history_position = self.history.len() - self.history_position;
     } else {
       return Err(io::Error::new(io::ErrorKind::NotFound, "no file open"));
@@ -86,31 +103,30 @@ impl EditorState {
 impl OpenedFile {
   pub fn path(&self) -> &Path { &self.path }
 
-  pub fn open(path: &Path) -> io::Result<(OpenedFile, Document)> {
-    let path = path.canonicalize()?;
-    let stat = path.metadata()?;
+  pub fn open(fs: &dyn Fs, path: &Path) -> io::Result<(OpenedFile, Document)> {
+    let path = fs.canonicalize(path)?;
+    let stat = fs.metadata(&path)?;
 
-    let doc = Document::read(&path)?;
-    let file = OpenedFile { path, mtime: stat.mtime(), saved_history_position: 0, modified: false };
+    let doc = Document::read_lossy(&mut io::Cursor::new(fs.read(&path)?))?;
+    let file = OpenedFile { path, mtime: stat.mtime, saved_history_position: 0, modified: false };
 
     Ok((file, doc))
   }
 
-  pub fn save(&mut self, doc: &Document) -> io::Result<()> {
-    let stat = self.path.metadata()?;
-    if stat.mtime() > self.mtime {
+  pub fn save(&mut self, fs: &dyn Fs, doc: &Document) -> io::Result<()> {
+    let stat = fs.metadata(&self.path)?;
+    if stat.mtime > self.mtime {
       // TODO: Confirm popup
       // return Err(io::Error::new(io::ErrorKind::Other, "file has been
       // modified"));
       warn!("file has been modified");
     }
 
-    let mut file = std::fs::OpenOptions::new().write(true).truncate(true).open(&self.path)?;
-    doc.write(&mut file)?;
-    drop(file);
+    let mut data = vec![];
+    doc.write(&mut data)?;
+    fs.write(&self.path, &data)?;
 
-    let stat = self.path.metadata()?;
-    self.mtime = stat.mtime();
+    self.mtime = fs.metadata(&self.path)?.mtime;
     Ok(())
   }
 }

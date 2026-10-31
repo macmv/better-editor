@@ -11,6 +11,7 @@ be-config = { path = "../be-config" }
 be-task = { path = "../be-task" }
 be-lsp = { path = "../be-lsp" }
 be-git = { path = "../be-git" }
+be-fs = { path = "../be-fs" }
 
 libc = "0.2.190"
 serde = { version = "1.0.229", features = ["derive"] }
