@@ -1,4 +1,5 @@
 use std::{
+  collections::VecDeque,
   io,
   ops::{Deref, DerefMut},
   path::{Path, PathBuf},
@@ -6,8 +7,11 @@ use std::{
 
 use anstyle_parse::{Parser, Utf8Parser};
 
-use crate::grid::{Grid, Line, OwnedLine};
-pub use crate::pty::Pty;
+use crate::grid::Grid;
+pub use crate::{
+  grid::{Line, OwnedLine},
+  pty::Pty,
+};
 
 mod control;
 mod grid;
@@ -25,6 +29,9 @@ extern crate log;
 
 #[macro_use]
 extern crate be_macros;
+
+/// The most lines kept in scrollback. Older lines are dropped.
+const SCROLLBACK_LIMIT: usize = 10_000;
 
 /// A source of terminal bytes, and a sink for input. This is the process (or
 /// remote process) on the other side of the terminal.
@@ -74,8 +81,14 @@ pub struct TerminalState {
   saved_cursor: Option<Cursor>,
   size:         Size,
 
-  scrollback:      Vec<OwnedLine>,
+  scrollback:      VecDeque<OwnedLine>,
   viewport_offset: usize, // 0 is live, >0 is scrolled back.
+
+  // A line to reuse the allocation of the next time the screen scrolls.
+  spare: Option<OwnedLine>,
+  // Bumped before each batch of changes, so that renderers can tell which lines changed. See
+  // `OwnedLine::stamp`.
+  epoch: u64,
 
   // VT100 "scroll region" concept. Used by htop.
   scroll_start: usize,
@@ -226,6 +239,7 @@ impl Terminal {
 
   pub fn set_size(&mut self, size: Size) {
     if size != self.state.size {
+      self.state.begin_frame();
       self.state.resize(size);
       self.pty.resize(size);
     }
@@ -387,10 +401,10 @@ impl Terminal {
     }
   }
 
-  pub fn visible_line(&self, index: usize) -> Option<&Line> {
+  pub fn visible_line(&self, index: usize) -> Option<&OwnedLine> {
     let abs_line = self.state.scrollback.len() + index - self.state.viewport_offset;
     if abs_line < self.state.scrollback.len() {
-      Some(&*self.state.scrollback[abs_line])
+      Some(&self.state.scrollback[abs_line])
     } else {
       self.state.grid.line(abs_line - self.state.scrollback.len())
     }
@@ -398,15 +412,17 @@ impl Terminal {
 
   /// Returns a line from the scrollback. The most recent line is index 0. Used
   /// to render partial lines.
-  pub fn scrollback_line(&self, index: usize) -> Option<&Line> {
+  pub fn scrollback_line(&self, index: usize) -> Option<&OwnedLine> {
     if index < self.state.scrollback.len() {
-      Some(&*self.state.scrollback[self.state.scrollback.len() - index - 1])
+      Some(&self.state.scrollback[self.state.scrollback.len() - index - 1])
     } else {
       None
     }
   }
 
   pub fn update(&mut self) -> bool {
+    self.state.begin_frame();
+
     loop {
       let mut buf = [0u8; 1024];
 
@@ -454,8 +470,10 @@ impl TerminalState {
       grid: Grid::new(size),
       cursor: Cursor::default(),
       saved_cursor: None,
-      scrollback: vec![],
+      scrollback: VecDeque::new(),
       viewport_offset: 0,
+      spare: None,
+      epoch: 0,
       scroll_start: 0,
       scroll_end: size.rows,
       size,
@@ -471,6 +489,13 @@ impl TerminalState {
       pending_writes: vec![],
       charsets: [Charset::Ascii; 4],
     }
+  }
+
+  /// Starts a new batch of changes. Lines written after this get a new stamp.
+  fn begin_frame(&mut self) {
+    self.epoch += 1;
+    self.grid.set_epoch(self.epoch);
+    self.alt_grid.set_epoch(self.epoch);
   }
 
   fn resize(&mut self, size: Size) {

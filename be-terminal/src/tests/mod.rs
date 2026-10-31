@@ -239,3 +239,56 @@ fn erase_chars_uses_current_background() {
   // Cells 0..8 were erased with a blue background; the rest are untouched.
   assert_eq!(bgs, vec![(color(BuiltinColor::Blue), 8), (color(BuiltinColor::Red), 16)]);
 }
+
+fn key(vt: &Vt, row: usize) -> (u64, u64) {
+  let line = vt.state.grid.line(row).unwrap();
+  (line.id(), line.stamp())
+}
+
+#[test]
+fn untouched_lines_keep_their_stamp() {
+  let mut vt = Vt::new(3, 8);
+  vt.state.begin_frame();
+  vt.feed(s().print("a").crlf().print("b"));
+  let (a, b, c) = (key(&vt, 0), key(&vt, 1), key(&vt, 2));
+
+  vt.state.begin_frame();
+  vt.feed(s().move_to(1, 1).print("x"));
+  assert_eq!(key(&vt, 0), a);
+  assert_eq!(key(&vt, 2), c);
+  // Same line, new contents.
+  assert_eq!(key(&vt, 1).0, b.0);
+  assert_ne!(key(&vt, 1).1, b.1);
+}
+
+#[test]
+fn scrolling_moves_ids_with_the_text() {
+  let mut vt = Vt::new(3, 8);
+  vt.state.begin_frame();
+  vt.feed(s().print("a").crlf().print("b").crlf().print("c"));
+  let (b, c) = (key(&vt, 1), key(&vt, 2));
+
+  vt.state.begin_frame();
+  vt.feed(s().crlf().print("d"));
+  // "b" and "c" moved up a row, and weren't touched.
+  assert_eq!(key(&vt, 0), b);
+  assert_eq!(key(&vt, 1), c);
+  // The new bottom line has a fresh id, and "a" is in scrollback.
+  assert!(![b.0, c.0].contains(&key(&vt, 2).0));
+  assert_eq!(vt.state.scrollback.len(), 1);
+  assert_eq!(vt.state.scrollback[0].to_string().trim_end(), "a");
+}
+
+#[test]
+fn scrollback_is_capped() {
+  let mut vt = Vt::new(2, 4);
+  for i in 0..crate::SCROLLBACK_LIMIT + 50 {
+    vt.feed(s().print(&format!("{}", i % 10)).crlf());
+  }
+  assert_eq!(vt.state.scrollback.len(), crate::SCROLLBACK_LIMIT);
+  // The first line only reaches scrollback on the second linefeed, so there are
+  // LIMIT + 49 lines in total. The oldest 49 were dropped, which makes line
+  // 49 (printed as "9") the oldest.
+  assert_eq!(vt.state.scrollback[0].to_string().trim_end(), "9");
+  assert_eq!(vt.state.scrollback[1].to_string().trim_end(), "0");
+}

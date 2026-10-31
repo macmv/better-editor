@@ -1,10 +1,18 @@
-use std::ops::{Deref, DerefMut, Range};
+use std::{
+  ops::{Deref, Range},
+  sync::atomic::{AtomicU64, Ordering},
+};
 
 use crate::{Position, Size, Style};
+
+static NEXT_LINE_ID: AtomicU64 = AtomicU64::new(1);
 
 pub struct Grid {
   lines: Vec<OwnedLine>,
   size:  Size,
+
+  /// Stamped onto every line that gets mutated. See `OwnedLine::stamp`.
+  epoch: u64,
 }
 
 #[derive(Clone, Copy)]
@@ -13,9 +21,16 @@ pub struct Cell {
   style: Style,
 }
 
-#[derive(Clone)]
+/// A line of cells, with enough identity for a renderer to cache what it drew.
+///
+/// `id` follows the line as it moves around (scrolling, insert/delete line,
+/// into scrollback), and `stamp` changes whenever the cells do. So `(id,
+/// stamp)` equal to a previous value means the line is byte for byte what was
+/// drawn last time.
 pub struct OwnedLine {
   cells: Vec<Cell>,
+  id:    u64,
+  stamp: u64,
 }
 
 #[repr(transparent)]
@@ -44,36 +59,79 @@ impl Default for Cell {
   fn default() -> Self { Cell { c: ' ', style: Style::default() } }
 }
 
+impl OwnedLine {
+  fn blank(cols: usize, stamp: u64) -> Self {
+    OwnedLine {
+      cells: vec![Cell::default(); cols],
+      id: NEXT_LINE_ID.fetch_add(1, Ordering::Relaxed),
+      stamp,
+    }
+  }
+
+  /// Identifies this line across scrolling. Never reused for a different
+  /// allocation of the same content.
+  pub fn id(&self) -> u64 { self.id }
+
+  /// Changes whenever the cells in this line change.
+  pub fn stamp(&self) -> u64 { self.stamp }
+
+  /// Turns this line into a new blank one, keeping the allocation.
+  fn recycle(&mut self, cols: usize, style: Style, stamp: u64) {
+    self.cells.clear();
+    self.cells.resize(cols, Cell { c: ' ', style });
+    self.id = NEXT_LINE_ID.fetch_add(1, Ordering::Relaxed);
+    self.stamp = stamp;
+  }
+}
+
 impl Grid {
   pub fn new(size: Size) -> Self {
-    Grid { lines: vec![OwnedLine { cells: vec![Cell::default(); size.cols] }; size.rows], size }
+    Grid { lines: (0..size.rows).map(|_| OwnedLine::blank(size.cols, 0)).collect(), size, epoch: 0 }
   }
+
+  /// Sets the stamp given to lines mutated from now on. Must change between a
+  /// renderer reading a line and the next time the line may be written.
+  pub fn set_epoch(&mut self, epoch: u64) { self.epoch = epoch; }
 
   pub fn put(&mut self, pos: Position, c: char, style: Style) {
     if pos.row >= self.lines.len() {
       return;
     }
-    if pos.col >= self.lines[pos.row].cells.len() {
+    let line = &mut self.lines[pos.row];
+    if pos.col >= line.cells.len() {
       return;
     }
 
-    self.lines[pos.row].cells[pos.col].c = c;
-    self.lines[pos.row].cells[pos.col].style = style;
+    line.stamp = self.epoch;
+    line.cells[pos.col].c = c;
+    line.cells[pos.col].style = style;
   }
 
-  pub fn line(&self, index: usize) -> Option<&Line> {
-    self.lines.get(index).map(|line| Line::from_slice(&line.cells))
+  /// Writes a run of printable ASCII, starting at `pos`. The run must fit in
+  /// the line.
+  pub fn put_ascii(&mut self, pos: Position, run: &[u8], style: Style) {
+    let line = &mut self.lines[pos.row];
+    line.stamp = self.epoch;
+    for (cell, &b) in line.cells[pos.col..pos.col + run.len()].iter_mut().zip(run) {
+      *cell = Cell { c: b as char, style };
+    }
   }
+
+  pub fn line(&self, index: usize) -> Option<&OwnedLine> { self.lines.get(index) }
 
   pub fn line_mut(&mut self, index: usize) -> &mut Line {
-    Line::from_mut(&mut self.lines.get_mut(index).expect("line out of bounds").cells)
+    let line = self.lines.get_mut(index).expect("line out of bounds");
+    line.stamp = self.epoch;
+    Line::from_mut(&mut line.cells)
   }
 
   pub fn resize(&mut self, size: Size) {
-    self.lines.resize(size.rows, OwnedLine { cells: vec![] });
+    let epoch = self.epoch;
+    self.lines.resize_with(size.rows, || OwnedLine::blank(0, epoch));
 
     for line in &mut self.lines {
       line.cells.resize(size.cols, Cell::default());
+      line.stamp = epoch;
     }
 
     self.size = size;
@@ -81,28 +139,34 @@ impl Grid {
 
   pub fn clear(&mut self, style: Style) {
     for line in &mut self.lines {
+      line.stamp = self.epoch;
       Line::from_mut(&mut line.cells).clear(style);
     }
   }
 
+  /// Swaps two lines. They keep their ids and stamps, as nothing in them
+  /// changed.
   pub fn swap(&mut self, a: usize, b: usize) { self.lines.swap(a, b); }
 
   pub fn scroll_down(&mut self, range: Range<usize>, style: Style) {
-    for line in (range.start + 1..range.end).rev() {
-      self.lines.swap(line, line - 1);
-    }
+    self.lines[range.clone()].rotate_right(1);
     self.line_mut(range.start).clear(style);
   }
 
-  pub fn scroll_up(&mut self, range: Range<usize>, style: Style) -> OwnedLine {
-    let line = self.lines[range.start].clone();
+  /// Scrolls `range` up one line, and returns the line that fell off the top.
+  /// `spare` is a line to reuse the allocation of for the new blank line at the
+  /// bottom.
+  pub fn scroll_up(
+    &mut self,
+    range: Range<usize>,
+    style: Style,
+    spare: Option<OwnedLine>,
+  ) -> OwnedLine {
+    let mut fresh = spare.unwrap_or_else(|| OwnedLine::blank(0, self.epoch));
+    fresh.recycle(self.size.cols, style, self.epoch);
 
-    for line in range.start..range.end - 1 {
-      self.lines.swap(line, line + 1);
-    }
-    self.line_mut(range.end - 1).clear(style);
-
-    line
+    self.lines[range.clone()].rotate_left(1);
+    std::mem::replace(&mut self.lines[range.end - 1], fresh)
   }
 }
 
@@ -185,10 +249,6 @@ impl Deref for OwnedLine {
   type Target = Line;
 
   fn deref(&self) -> &Line { Line::from_slice(&self.cells) }
-}
-
-impl DerefMut for OwnedLine {
-  fn deref_mut(&mut self) -> &mut Line { Line::from_mut(&mut self.cells) }
 }
 
 impl Iterator for StyleIter<'_> {

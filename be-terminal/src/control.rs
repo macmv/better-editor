@@ -341,7 +341,12 @@ impl Perform for TerminalState {
       }
       (b'S', []) => {
         for _ in 0..next_param_or(1) {
-          self.grid.scroll_up(self.scroll_start..self.scroll_end, self.cursor.style);
+          let old = self.grid.scroll_up(
+            self.scroll_start..self.scroll_end,
+            self.cursor.style,
+            self.spare.take(),
+          );
+          self.spare = Some(old);
         }
       }
       (b's', []) => {
@@ -433,9 +438,19 @@ impl TerminalState {
   fn linefeed(&mut self) {
     self.cursor.pending_wrap = false;
     if self.cursor.row == self.scroll_end - 1 {
-      let line = self.grid.scroll_up(self.scroll_start..self.scroll_end, self.cursor.style);
-      if !self.alt_screen {
-        self.scrollback.push(line);
+      let line = self.grid.scroll_up(
+        self.scroll_start..self.scroll_end,
+        self.cursor.style,
+        self.spare.take(),
+      );
+      if self.alt_screen {
+        self.spare = Some(line);
+      } else {
+        self.scrollback.push_back(line);
+        if self.scrollback.len() > crate::SCROLLBACK_LIMIT {
+          self.spare = self.scrollback.pop_front();
+          self.viewport_offset = self.viewport_offset.min(self.scrollback.len());
+        }
       }
     } else if self.cursor.row < self.size.rows - 1 {
       self.cursor.row += 1;
