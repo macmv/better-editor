@@ -220,6 +220,7 @@ impl ParseKey for be_input::Navigation {
 
     match p.string_or("nav") {
       Some("open_workspace") => Ok(OpenWorkspace),
+      Some("workspaces") => Ok(Workspaces),
       Some("open_search") => Ok(OpenSearch),
       Some("open_symbol_search") => Ok(OpenSymbolSearch),
       Some("up") => Ok(Direction(Direction::Up)),

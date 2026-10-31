@@ -33,6 +33,7 @@ mod spinner;
 mod theme;
 mod view;
 mod widget;
+mod workspace_list;
 
 pub use layout::{Font, Layout};
 pub use widget::{Widget, WidgetStore};
@@ -79,11 +80,19 @@ struct State {
   remote:       Option<remote::RemoteSession>,
   /// The id of the next remote session. The terminal's is 0.
   next_session: u64,
+
+  /// The row selected on the workspace list.
+  list_selected: usize,
+  /// What the workspace list returns to when it is left without a choice.
+  list_return:   AppView,
 }
 
+#[derive(Clone)]
 enum AppView {
   Terminal,
   Loading,
+  /// The list of every open workspace.
+  Workspaces,
   Workspace(WorkspaceRoot),
 }
 
@@ -259,6 +268,8 @@ impl State {
       loading: None,
       remote,
       next_session: 1,
+      list_selected: 0,
+      list_return: AppView::Terminal,
     };
 
     if let Some(root) = args.editor {
@@ -355,7 +366,11 @@ impl State {
           );
         }
         self.loading = None;
-        self.active = AppView::Workspace(root);
+        // Someone who has moved on to the workspace list keeps it, and finds
+        // this workspace there.
+        if matches!(self.active, AppView::Loading) {
+          self.active = AppView::Workspace(root);
+        }
       }
       Err(e) => {
         error!("cannot open {} on the remote host: {e}", loading.path.display());
@@ -376,11 +391,74 @@ impl State {
   fn mode(&self) -> Mode {
     match &self.active {
       AppView::Workspace(w) => self.workspaces[w].mode(),
-      AppView::Terminal | AppView::Loading => Mode::Insert,
+      AppView::Terminal | AppView::Loading | AppView::Workspaces => Mode::Insert,
     }
   }
 
+  /// Every open workspace, in the order the workspace list shows them.
+  fn workspace_roots(&self) -> Vec<WorkspaceRoot> {
+    let mut roots: Vec<_> = self.workspaces.keys().cloned().collect();
+    workspace_list::sort(&mut roots);
+    roots
+  }
+
+  /// Shows `view`, or the terminal if what it names has gone away.
+  fn show(&mut self, view: AppView) {
+    let view = match &view {
+      AppView::Workspace(root) if !self.workspaces.contains_key(root) => AppView::Terminal,
+      AppView::Loading if self.loading.is_none() => AppView::Terminal,
+      _ => view,
+    };
+    self.terminal.on_focus(matches!(view, AppView::Terminal));
+    self.active = view;
+  }
+
+  fn open_workspace_list(&mut self) {
+    let roots = self.workspace_roots();
+    self.list_selected = match &self.active {
+      AppView::Workspace(active) => roots.iter().position(|r| r == active).unwrap_or(0),
+      _ => 0,
+    };
+    self.list_return = self.active.clone();
+    self.terminal.on_focus(false);
+    self.active = AppView::Workspaces;
+  }
+
+  /// Handles a key typed on the workspace list. Returns `false` if the key
+  /// is not one of the list's, such as the start of a navigation bind.
+  fn on_workspace_list_key(&mut self, key: &KeyStroke) -> bool {
+    if key.control || key.alt || key.sup {
+      return false;
+    }
+
+    let count = self.workspaces.len();
+    match key.key {
+      be_input::Key::Char('j') | be_input::Key::ArrowDown => {
+        self.list_selected = (self.list_selected + 1).min(count.saturating_sub(1));
+      }
+      be_input::Key::Char('k') | be_input::Key::ArrowUp => {
+        self.list_selected = self.list_selected.saturating_sub(1);
+      }
+      be_input::Key::Char('\n') => {
+        let selected = self.workspace_roots().into_iter().nth(self.list_selected);
+        match selected {
+          Some(root) => self.show(AppView::Workspace(root)),
+          None => self.show(self.list_return.clone()),
+        }
+      }
+      be_input::Key::Escape => self.show(self.list_return.clone()),
+      _ => return false,
+    }
+    true
+  }
+
   pub fn on_key(&mut self, key: KeyStroke, store: &mut RenderStore) {
+    if matches!(self.active, AppView::Workspaces) && self.keys.is_empty() {
+      if self.on_workspace_list_key(&key) {
+        return;
+      }
+    }
+
     self.keys.push(key);
 
     if let AppView::Workspace(w) = &mut self.active {
@@ -423,7 +501,7 @@ impl State {
   pub fn layout(&mut self, layout: &mut Layout) {
     match &mut self.active {
       AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().layout(layout),
-      AppView::Loading => {}
+      AppView::Loading | AppView::Workspaces => {}
       AppView::Terminal => {
         layout.active = Some(ViewId(0));
         self.terminal.layout(layout);
@@ -438,6 +516,9 @@ impl State {
       AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().draw(render),
       AppView::Terminal => self.terminal.draw(render),
       AppView::Loading => self.draw_loading(render),
+      AppView::Workspaces => {
+        workspace_list::draw(render, &self.workspace_roots(), self.list_selected)
+      }
     }
   }
   fn draw_loading(&self, render: &mut Render) {
@@ -472,21 +553,21 @@ impl State {
     match &self.active {
       AppView::Workspace(_) => false,
       AppView::Terminal => self.terminal_should_exit,
-      AppView::Loading => false,
+      AppView::Loading | AppView::Workspaces => false,
     }
   }
   pub fn animated(&self) -> bool {
     match &self.active {
       AppView::Workspace(w) => self.workspaces[w].animated(),
       AppView::Loading => self.loading.as_ref().is_some_and(|l| l.opening.is_some()),
-      AppView::Terminal => false,
+      AppView::Terminal | AppView::Workspaces => false,
     }
   }
   pub fn on_mouse(&mut self, ev: MouseEvent, size: kurbo::Size, store: &RenderStore) -> CursorKind {
     match &mut self.active {
       AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().on_mouse(ev, size, store),
       AppView::Terminal => self.terminal.on_mouse(&ev, size, store),
-      AppView::Loading => CursorKind::Default,
+      AppView::Loading | AppView::Workspaces => CursorKind::Default,
     }
   }
   /// Handles an event. Returns `true` if the app should close.
@@ -501,12 +582,20 @@ impl State {
 
     match &mut self.active {
       AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().on_event(event, store),
-      AppView::Terminal | AppView::Loading => false,
+      AppView::Terminal | AppView::Loading | AppView::Workspaces => false,
     }
   }
 
   fn perform_action(&mut self, action: Action, store: &mut RenderStore) {
     match action {
+      Action::Navigate { nav: Navigation::Workspaces } => {
+        if matches!(self.active, AppView::Workspaces) {
+          self.show(self.list_return.clone());
+        } else {
+          self.open_workspace_list();
+        }
+      }
+
       Action::Navigate { nav: Navigation::OpenWorkspace } => {
         if matches!(self.active, AppView::Terminal) {
           let path = if let Some(id) = self.terminal_remote_id {
@@ -534,7 +623,7 @@ impl State {
       _ => match &mut self.active {
         AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().perform_action(action, store),
         AppView::Terminal => self.terminal.perform_action(action),
-        AppView::Loading => {}
+        AppView::Loading | AppView::Workspaces => {}
       },
     }
   }

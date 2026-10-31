@@ -21,7 +21,10 @@ pub enum Action {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Navigation {
+  /// Toggle between the home terminal and the active workspace.
   OpenWorkspace,
+  /// Toggle the screen listing every open workspace.
+  Workspaces,
   OpenSearch,
   OpenSymbolSearch,
   Direction(Direction),

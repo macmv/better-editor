@@ -103,4 +103,18 @@ mod tests {
       );
     }
   }
+
+  #[test]
+  fn navigation_binds() {
+    use be_input::{Action, Key, KeyStroke, Mode, Navigation};
+
+    let key = |key| KeyStroke { key, sup: false, shift: false, control: false, alt: false };
+    let nav = |k| {
+      let settings = parse_default_config().value;
+      settings.keybinds.parse(Mode::Insert, &[key(Key::Char('\\')), key(k)])
+    };
+
+    assert!(matches!(nav(Key::Tab), Ok(Action::Navigate { nav: Navigation::Zoom })));
+    assert!(matches!(nav(Key::Char('z')), Ok(Action::Navigate { nav: Navigation::Workspaces })));
+  }
 }

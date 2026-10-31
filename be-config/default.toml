@@ -74,7 +74,8 @@ navigate = "\\"
 "e" = { action = "navigate", nav = "next_pane" }
 "q" = { action = "navigate", nav = "prev_pane" }
 "x" = { action = "navigate", nav = "close_pane" }
-"z" = { action = "navigate", nav = "zoom" }
+"TAB" = { action = "navigate", nav = "zoom" }
+"z" = { action = "navigate", nav = "workspaces" }
 "v" = { action = "navigate", nav = { nav = "create_split", axis = "vertical" } }
 "f" = { action = "navigate", nav = { nav = "create_split", axis = "horizontal" } }
 "o" = { action = "navigate", nav = "open_workspace" }
