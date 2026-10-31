@@ -1,9 +1,8 @@
-use std::{
-  io,
-  path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
-use be_fs::{DirEntry, FileData, FileKind, Fs, PendingRead, PendingReadDir, PendingWrite, WriteResult};
+use be_fs::{
+  DirEntry, FileData, FileKind, Fs, Pending, PendingRead, PendingReadDir, PendingWrite, WriteResult,
+};
 use lode::Bytes;
 
 use crate::{DirKind, Host, Transport, transport};
@@ -37,7 +36,9 @@ impl Fs for RemoteFs {
     self.t.io_done();
     PendingRead::new(move || {
       Some(match call.try_take()? {
-        Ok(f) => Ok(FileData { path: PathBuf::from(f.path), mtime: f.mtime, data: f.data.to_vec() }),
+        Ok(f) => {
+          Ok(FileData { path: PathBuf::from(f.path), mtime: f.mtime, data: f.data.to_vec() })
+        }
         Err(lode_local::CallError::App(e)) => Err(transport::io_error(e)),
         Err(lode_local::CallError::Rpc(e)) => Err(transport::rpc_error(e)),
       })
@@ -72,8 +73,17 @@ impl Fs for RemoteFs {
 }
 
 impl RemoteFs {
-  /// Every file under `root` that git would not ignore, relative to `root`.
-  pub fn list_files(&self, root: &Path) -> io::Result<Vec<String>> {
-    self.t.wait(self.t.local().proxy::<Host>().list_files(path_str(root)))
+  /// Starts listing every file under `root` that git would not ignore,
+  /// relative to `root`.
+  pub fn begin_list_files(&self, root: &Path) -> Pending<Vec<String>> {
+    let mut call = self.t.local().proxy::<Host>().list_files(path_str(root));
+    self.t.io_done();
+    Pending::new(move || {
+      Some(match call.try_take()? {
+        Ok(files) => Ok(files),
+        Err(lode_local::CallError::App(e)) => Err(transport::io_error(e)),
+        Err(lode_local::CallError::Rpc(e)) => Err(transport::rpc_error(e)),
+      })
+    })
   }
 }

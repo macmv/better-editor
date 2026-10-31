@@ -1,4 +1,4 @@
-use be_fs::{WorkspacePath, WorkspaceRoot};
+use be_fs::{Pending, WorkspacePath, WorkspaceRoot};
 use be_input::{Action, Direction, Edit, Move};
 use kurbo::{Point, Rect, RoundedRect, Stroke};
 use nucleo::{Injector, Nucleo};
@@ -21,12 +21,15 @@ pub struct Search {
 struct Index {
   nucleo:  Nucleo<String>,
   matcher: nucleo::Matcher, // Used when rendering to highlight matches.
+
+  /// The files of a workspace on another machine, while they are on their way.
+  listing: Option<(Pending<Vec<String>>, Injector<String>)>,
 }
 
 impl Search {
   /// `listed`: the workspace's files, if they can't be found by walking
-  /// `root` on this machine.
-  pub fn new(root: WorkspaceRoot, notify: Notify, listed: Option<Vec<String>>) -> Self {
+  /// `root` on this machine. They are added as they arrive.
+  pub fn new(root: WorkspaceRoot, notify: Notify, listed: Option<Pending<Vec<String>>>) -> Self {
     let mut search = Search {
       root: root.clone(),
       index: Index::new(root, notify.clone(), listed),
@@ -38,7 +41,10 @@ impl Search {
     search
   }
 
-  pub fn layout(&mut self) { self.index.nucleo.tick(1); }
+  pub fn layout(&mut self) {
+    self.index.poll_listing();
+    self.index.nucleo.tick(1);
+  }
 
   pub fn draw(&mut self, render: &mut Render) {
     let snap = self.index.nucleo.snapshot();
@@ -174,25 +180,42 @@ impl Search {
 }
 
 impl Index {
-  pub fn new(root: WorkspaceRoot, notify: Notify, listed: Option<Vec<String>>) -> Self {
+  pub fn new(
+    root: WorkspaceRoot,
+    notify: Notify,
+    listed: Option<Pending<Vec<String>>>,
+  ) -> Self {
     let config = nucleo::Config::DEFAULT;
     let nucleo = Nucleo::new(config.clone(), std::sync::Arc::new(move || notify.wake()), None, 1);
     let matcher = nucleo::Matcher::new(config);
 
     let mut injector = nucleo.injector();
-    match listed {
-      Some(files) => {
+    let listing = match listed {
+      Some(listing) => Some((listing, injector)),
+      // TODO: Thread pool.
+      None => {
+        std::thread::spawn(move || recurse(root, &mut injector));
+        None
+      }
+    };
+
+    Index { nucleo, matcher, listing }
+  }
+
+  /// Adds the workspace's files once the host has listed them.
+  fn poll_listing(&mut self) {
+    let Some((listing, injector)) = &mut self.listing else { return };
+    let Some(res) = listing.poll() else { return };
+
+    match res {
+      Ok(files) => {
         for file in files {
           injector.push(file, |path, columns| columns[0] = path.as_str().into());
         }
       }
-      // TODO: Thread pool.
-      None => {
-        std::thread::spawn(move || recurse(root, &mut injector));
-      }
+      Err(e) => error!("failed to list the remote workspace's files: {e}"),
     }
-
-    Index { nucleo, matcher }
+    self.listing = None;
   }
 }
 

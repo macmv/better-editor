@@ -1016,14 +1016,9 @@ impl WorkspaceLayout {
         tab.zoomed = if tab.zoomed.is_some() { None } else { Some(tab.content.active()) };
       }
       Action::Navigate { nav: Navigation::OpenSearch } => {
-        // The files of a remote workspace come from the host, which stalls the
-        // editor for a round trip.
-        let listed = self.remote.as_ref().map(|r| {
-          r.list_files(self.workspace.root.as_path()).unwrap_or_else(|e| {
-            error!("failed to list the remote workspace's files: {e}");
-            vec![]
-          })
-        });
+        // The files of a remote workspace come from the host, so the popup opens
+        // empty and fills in when they arrive.
+        let listed = self.remote.as_ref().map(|r| r.begin_list_files(self.workspace.root.as_path()));
         self.active_tab_mut().popup = Some(view::Popup::Search(view::Search::new(
           self.workspace.root.clone(),
           self.notify.clone(),

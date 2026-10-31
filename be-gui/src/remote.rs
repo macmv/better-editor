@@ -298,7 +298,9 @@ impl RemoteHandle {
   }
 
   /// Every file under `root` that git would not ignore, relative to `root`.
-  pub fn list_files(&self, root: &Path) -> io::Result<Vec<String>> { self.fs().list_files(root) }
+  pub fn begin_list_files(&self, root: &Path) -> be_fs::Pending<Vec<String>> {
+    self.fs().begin_list_files(root)
+  }
 }
 
 enum OpenStage {
@@ -699,7 +701,17 @@ mod tests {
     std::fs::write(dir.join("sub/b.txt"), "b\n").unwrap();
     let dir = dir.canonicalize().unwrap();
 
-    let mut files = handle.list_files(&dir).unwrap();
+    let mut listing = handle.begin_list_files(&dir);
+    let start = Instant::now();
+    let mut files = loop {
+      if let Some(res) = listing.poll() {
+        break res.unwrap();
+      }
+      assert!(start.elapsed() < WAIT, "the file list never arrived");
+      if let Ok(wake) = rx.recv_timeout(Duration::from_millis(50)) {
+        session.on_wake(wake);
+      }
+    };
     files.sort();
     assert_eq!(files, ["a.txt", "sub/b.txt"]);
 
