@@ -1,7 +1,8 @@
 use anstyle_parse::{Params, Perform};
 
 use crate::{
-  BuiltinColor, Charset, Style, StyleFlags, TerminalColor, TerminalFlags, TerminalState,
+  BuiltinColor, Charset, KITTY_STACK_LIMIT, Style, StyleFlags, TerminalColor, TerminalFlags,
+  TerminalState,
 };
 
 impl Perform for TerminalState {
@@ -383,10 +384,28 @@ impl Perform for TerminalState {
         19 => self.send_text(&format!("\x1b[9;{};{}t", self.size.rows, self.size.cols)),
         _ => unhandled!(),
       },
-      (b'u', [b'?']) => unhandled!("report keyboard mode"),
-      (b'u', [b'=']) => unhandled!("set keyboard mode"),
-      (b'u', [b'>']) => unhandled!("push keyboard mode"),
-      (b'u', [b'<']) => unhandled!("pop keyboard modes"),
+      // Kitty keyboard protocol: query, set, push and pop the keyboard mode flags.
+      (b'u', [b'?']) => self.send_text(&format!("\x1b[?{}u", self.kitty_flags)),
+      (b'u', [b'=']) => {
+        let flags = next_param_or(0) as u8;
+        match next_param_or(1) {
+          2 => self.kitty_flags |= flags,
+          3 => self.kitty_flags &= !flags,
+          _ => self.kitty_flags = flags,
+        }
+      }
+      (b'u', [b'>']) => {
+        if self.kitty_stack.len() >= KITTY_STACK_LIMIT {
+          self.kitty_stack.remove(0);
+        }
+        self.kitty_stack.push(self.kitty_flags);
+        self.kitty_flags = next_param_or(0) as u8;
+      }
+      (b'u', [b'<']) => {
+        for _ in 0..next_param_or(1) {
+          self.kitty_flags = self.kitty_stack.pop().unwrap_or(0);
+        }
+      }
       // Kitty keyboard protocol: query current keyboard mode flags.
       // Should respond with CSI ? flags u (where flags is a bitmask of active
       // KKP flags). Until KKP is implemented, reply with 0 (no flags set).

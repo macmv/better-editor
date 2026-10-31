@@ -135,6 +135,10 @@ pub struct TerminalState {
   pub title: String,
   flags:     TerminalFlags,
 
+  // Kitty keyboard protocol: the active flags, and the flags saved by `CSI > flags u` pushes.
+  kitty_flags: u8,
+  kitty_stack: Vec<u8>,
+
   pending_writes: Vec<u8>,
   charsets:       [Charset; 4],
 
@@ -163,6 +167,13 @@ bitflags::bitflags! {
     const KEYPAD_APPLICATION_MODE = 1 << 7;
   }
 }
+
+/// Kitty keyboard protocol flag: report keys like Ctrl+Enter with `CSI u`
+/// escape codes.
+const KITTY_DISAMBIGUATE: u8 = 1;
+/// The most keyboard mode pushes we remember, so a misbehaving program can't
+/// grow the stack forever.
+const KITTY_STACK_LIMIT: usize = 16;
 
 #[derive(Clone, Copy)]
 enum Charset {
@@ -304,6 +315,16 @@ impl Terminal {
   pub fn perform_backspace(&mut self) { self.pty.write_bytes(&[control::C0::DEL]); }
   pub fn perform_delete(&mut self) { self.pty.write_bytes(&[control::C0::DEL]); }
   pub fn perform_control(&mut self, b: u8) { self.pty.write_bytes(&[b]); }
+  /// Sends Ctrl+Enter. Plain terminals can't tell this apart from Enter, so it
+  /// only gets a distinct encoding if the program asked for it with the kitty
+  /// keyboard protocol.
+  pub fn perform_ctrl_enter(&mut self) {
+    if self.state.kitty_flags & KITTY_DISAMBIGUATE != 0 {
+      self.pty.write_bytes(b"\x1b[13;5u");
+    } else {
+      self.pty.write_bytes(b"\r");
+    }
+  }
   pub fn perform_escape(&mut self) { self.pty.write_bytes(&[control::C0::ESC]); }
   pub fn perform_tab(&mut self) { self.pty.write_bytes(&[control::C0::HT]); }
   pub fn perform_shift_tab(&mut self) { self.pty.write_bytes(b"\x1b[Z"); }
@@ -662,6 +683,9 @@ impl TerminalState {
 
       title: String::new(),
       flags: TerminalFlags::empty(),
+
+      kitty_flags: 0,
+      kitty_stack: vec![],
 
       pending_writes: vec![],
       charsets: [Charset::Ascii; 4],

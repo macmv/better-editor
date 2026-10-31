@@ -137,6 +137,33 @@ fn check(seq: Seq, expect: Expect) {
 }
 
 #[test]
+fn kitty_keyboard_flags() {
+  let mut vt = Vt::new(2, 16);
+  assert_eq!(vt.state.kitty_flags, 0);
+
+  vt.feed_bytes(b"\x1b[>1u");
+  assert_eq!(vt.state.kitty_flags, 1);
+
+  vt.feed_bytes(b"\x1b[?u");
+  assert_eq!(vt.state.pending_writes, b"\x1b[?1u");
+
+  vt.feed_bytes(b"\x1b[>0u");
+  assert_eq!(vt.state.kitty_flags, 0);
+
+  vt.feed_bytes(b"\x1b[<u");
+  assert_eq!(vt.state.kitty_flags, 1);
+
+  vt.feed_bytes(b"\x1b[=8;2u");
+  assert_eq!(vt.state.kitty_flags, 9);
+  vt.feed_bytes(b"\x1b[=1;3u");
+  assert_eq!(vt.state.kitty_flags, 8);
+
+  // Popping more than was pushed resets to 0.
+  vt.feed_bytes(b"\x1b[<5u");
+  assert_eq!(vt.state.kitty_flags, 0);
+}
+
+#[test]
 fn plain_text() {
   check(
     s().print("hello world"),
