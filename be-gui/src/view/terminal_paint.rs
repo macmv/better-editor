@@ -350,39 +350,3 @@ fn terminal_color(_theme: &Theme, color: Option<TerminalColor>) -> Option<Color>
     _ => return None,
   })
 }
-
-/// A piece of text in a line built by [`styled_line`].
-pub struct Span<'a> {
-  pub text:  &'a str,
-  /// `None` is the theme's text color.
-  pub color: Option<Color>,
-  pub bold:  bool,
-}
-
-/// Lays out one line of terminal-font text with per-span color and weight,
-/// the same way [`TerminalPainter`] does for terminal lines, so the glyphs
-/// line up with the cells of terminal output.
-pub fn styled_line(render: &mut Render, spans: &[Span]) -> TextLayout {
-  let line: String = spans.iter().map(|s| s.text).collect();
-  let mut layout = render.store.text.layout_builder(
-    crate::Font::Terminal,
-    &line,
-    render.theme().text,
-    render.scale(),
-  );
-
-  let mut start = 0;
-  for span in spans {
-    let end = start + span.text.len();
-    if let Some(color) = span.color {
-      layout.color_range(start..end, color);
-    }
-    if span.bold {
-      layout.apply(start..end, parley::StyleProperty::FontWeight(FontWeight::BLACK));
-    }
-    start = end;
-  }
-
-  let (layout, backgrounds) = layout.build(&line);
-  render.build_layout(crate::Font::Terminal, layout, backgrounds)
-}

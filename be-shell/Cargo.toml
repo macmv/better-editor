@@ -6,9 +6,5 @@ edition = "2024"
 [dependencies]
 be-terminal = { path = "../be-terminal" }
 
-git2 = { version = "0.20.4", default-features = false }
 libc = "0.2.190"
 log = "0.4.34"
-
-[dev-dependencies]
-expect-test.workspace = true

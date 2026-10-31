@@ -569,17 +569,6 @@ impl State {
       }
     }
 
-    // The shell view's block mode handles its own keys, unless a bind is
-    // half typed (so the navigation prefix still works).
-    if self.keys.is_empty()
-      && let AppView::Workspace(w) = &mut self.active
-      && let ViewContent::Shell(shell) =
-        &mut self.workspaces.get_mut(w).unwrap().active_view_mut().content
-      && shell.on_raw_key(&key)
-    {
-      return;
-    }
-
     self.keys.push(key);
     self.keys_at = None;
 
@@ -1646,20 +1635,14 @@ impl WorkspaceLayout {
   }
 
   /// A shell view in the workspace root. Remote workspaces don't have one yet,
-  /// so they get a plain terminal, as does a shell that fails to start.
+  /// so they get a plain terminal.
   fn shell_content(&mut self) -> ViewContent {
     if self.remote.is_some() {
       warn!("the shell view is not available in remote workspaces yet, opening a terminal");
       return self.terminal_view().into();
     }
 
-    match view::ShellView::new(&self.workspace.clipboard, self.workspace.root.as_path()) {
-      Ok(shell) => shell.into(),
-      Err(e) => {
-        warn!("failed to start the shell view, opening a terminal: {e}");
-        self.terminal_view().into()
-      }
-    }
+    view::ShellView::new(&self.workspace.clipboard, self.workspace.root.as_path()).into()
   }
 }
 

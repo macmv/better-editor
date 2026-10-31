@@ -10,17 +10,12 @@ family = "monospace"
 size = 16
 family = "monospace"
 
-[shell]
-# Collapse a command's output once it finishes with more than this many lines.
-# 0 turns this off.
-auto-collapse-lines = 0
-
 [ui.font]
 size = 13
 family = "sans-serif"
 
-# Panes are "terminal", "editor", "file-tree", "split", and "shell" (a block
-# based shell view, which is opt-in: use `pane = "shell"` in a tab, or bind
+# Panes are "terminal", "editor", "file-tree", "split", and "shell" (a minimal
+# shell view, which is opt-in: use `pane = "shell"` in a tab, or bind
 # `nav = "new_shell"` below).
 [[layout.tab]]
 pane = "terminal"

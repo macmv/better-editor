@@ -442,8 +442,6 @@ name = "be-shell"
 version = "0.1.0"
 dependencies = [
  "be-terminal",
- "expect-test",
- "git2",
  "libc",
  "log",
 ]

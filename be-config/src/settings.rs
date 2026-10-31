@@ -7,7 +7,6 @@ pub struct Settings {
   pub editor:   EditorSettings,
   pub ui:       UiSettings,
   pub terminal: TerminalSettings,
-  pub shell:    ShellSettings,
   pub layout:   LayoutSettings,
   pub keybinds: Keybinds,
 }
@@ -27,13 +26,6 @@ pub struct UiSettings {
 #[derive(Default, Config, Clone)]
 pub struct TerminalSettings {
   pub font: FontSettings,
-}
-
-#[derive(Default, Config, Clone)]
-pub struct ShellSettings {
-  /// Collapse a command's output when it finishes with more than this many
-  /// lines. 0 turns this off.
-  pub auto_collapse_lines: u32,
 }
 
 #[derive(Default, Config, Clone)]
