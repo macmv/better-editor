@@ -64,8 +64,6 @@ const TIP_PAD_Y: f64 = 4.0;
 /// half a cell so that pills one cell apart never touch, and it only adds
 /// room around the text: it never moves a cell.
 const PILL_PAD_X: f64 = 0.35;
-/// The space above and below a pill inside its row, in pixels.
-const PILL_INSET_Y: f64 = 2.0;
 /// How opaque the tinted background of a pill is.
 const PILL_ALPHA: f32 = 0.18;
 /// How opaque the band behind the header of the focused block is.
@@ -1149,8 +1147,8 @@ impl ShellView {
     }
     if e.kind.is_pill() {
       let pad = PILL_PAD_X * ch.width;
-      let rect = Rect::new(x - pad, y + PILL_INSET_Y, x + w + pad, y + ch.height - PILL_INSET_Y);
-      render.fill(&rect.to_rounded_rect(rect.height() / 2.0), fg.multiply_alpha(PILL_ALPHA));
+      let rect = Rect::new(x - pad, y, x + w + pad, y + ch.height);
+      render.fill(&rect.to_rounded_rect(rect.height() / 4.0), fg.multiply_alpha(PILL_ALPHA));
     }
 
     let bold = e.kind == Kind::Cwd;
