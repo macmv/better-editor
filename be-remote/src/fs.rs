@@ -7,7 +7,8 @@ use lode::Bytes;
 
 use crate::{DirKind, Host, Transport, transport};
 
-/// The remote machine's filesystem. Every call blocks for a round trip.
+/// The remote machine's filesystem. Nothing here blocks: each call returns a
+/// pending answer that arrives with the connection.
 pub struct RemoteFs {
   t: Transport,
 }

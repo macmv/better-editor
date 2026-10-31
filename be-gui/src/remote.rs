@@ -249,19 +249,15 @@ impl RemoteHandle {
     id
   }
 
-  /// Blocking calls over this connection. These stall the editor for a round
-  /// trip, so they're for startup and for rare actions.
+  /// Calls over this connection. They return pending answers, which arrive
+  /// as the session is driven by its wakes.
   fn transport(&self) -> Transport {
     let local = self.link.host.borrow().connection().local().clone();
     let on_io = {
       let link = self.link.clone();
       Rc::new(move || link.rearm())
     };
-    let pump = {
-      let link = self.link.clone();
-      Rc::new(move || link.host.borrow().pump(50)) as Rc<dyn Fn() -> bool>
-    };
-    Transport::new(local, on_io, pump)
+    Transport::new(local, on_io)
   }
 
   pub fn fs(&self) -> RemoteFs { RemoteFs::new(self.transport()) }
@@ -682,7 +678,7 @@ mod tests {
   }
 
   /// A workspace on the host opens, lists, and saves files there, with the
-  /// connection driven by blocking calls alone.
+  /// connection driven by its wakes.
   #[test]
   fn a_remote_workspace_opens_and_saves_files() {
     let Some(host) = be_host() else { return };

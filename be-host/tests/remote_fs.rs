@@ -23,11 +23,7 @@ fn connect() -> Session {
   cmd.arg("--stdio");
   let host = Rc::new(RefCell::new(RemoteHost::spawn(cmd, Instant::now()).unwrap()));
   let local = host.borrow().connection().local().clone();
-  let pump = {
-    let host = host.clone();
-    Rc::new(move || host.borrow().pump(50)) as Rc<dyn Fn() -> bool>
-  };
-  Session { t: Transport::new(local, Rc::new(|| {}), pump), host }
+  Session { t: Transport::new(local, Rc::new(|| {})), host }
 }
 
 fn temp_dir(name: &str) -> PathBuf {
@@ -142,7 +138,7 @@ fn git_state() {
   // Nothing is known until the host answers.
   assert!(git.head().is_none());
   let deadline = Instant::now() + Duration::from_secs(10);
-  let wait_for = |what: &str, mut done: &mut dyn FnMut() -> bool| {
+  let wait_for = |what: &str, done: &mut dyn FnMut() -> bool| {
     while !done() {
       assert!(Instant::now() < deadline, "{what} never arrived");
       s.host.borrow().pump(50);
