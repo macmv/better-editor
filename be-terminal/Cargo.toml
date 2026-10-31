@@ -11,7 +11,6 @@ log = "0.4.34"
 polling = "3.11.0"
 rustix = { version = "1.1.5", features = ["std"] }
 rustix-openpty = "0.2.0"
-unicode-width = "0.2.2"
 
 be-async = { version = "0.1.0", path = "../be-async" }
 be-macros = { path = "../be-macros" }

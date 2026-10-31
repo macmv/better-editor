@@ -286,7 +286,6 @@ name = "be-fs"
 version = "0.1.0"
 dependencies = [
  "btree-slab",
- "crossbeam-channel",
  "dispatch2",
  "expect-test",
  "inotify",
@@ -353,7 +352,6 @@ dependencies = [
  "puffin_http",
  "skrifa",
  "smithay-clipboard",
- "smol_str 0.3.6",
  "unicode-segmentation",
  "vello",
  "wgpu",
@@ -486,7 +484,6 @@ dependencies = [
  "polling",
  "rustix 1.1.5",
  "rustix-openpty",
- "unicode-width",
 ]
 
 [[package]]
@@ -555,16 +552,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdeb9d870516001442e364c5220d3574d2da8dc765554b4a617230d33fa58ef5"
 dependencies = [
  "objc2 0.6.5",
-]
-
-[[package]]
-name = "borsh"
-version = "1.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "553c5d846a6ba5150c65e3b1b8ec073bcf1abc20f9b7220de384a4443ea4e20a"
-dependencies = [
- "bytes",
- "cfg_aliases",
 ]
 
 [[package]]
@@ -3392,16 +3379,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "smol_str"
-version = "0.3.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4aaa7368fcf4852a4c2dd92df0cace6a71f2091ca0a23391ce7f3a31833f1523"
-dependencies = [
- "borsh",
- "serde_core",
-]
-
-[[package]]
 name = "spirv"
 version = "0.4.0+sdk-1.4.341.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4517,7 +4494,7 @@ dependencies = [
  "redox_syscall 0.4.1",
  "rustix 0.38.44",
  "smithay-client-toolkit 0.19.2",
- "smol_str 0.2.2",
+ "smol_str",
  "tracing",
  "unicode-segmentation",
  "wasm-bindgen",
