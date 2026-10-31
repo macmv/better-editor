@@ -30,6 +30,10 @@ impl Spinner {
     let angle = (render.now() - self.start).as_secs_f64() * SPEED * TAU;
 
     let arc = Arc::new(center, Vec2::new(radius, radius), angle, SWEEP, 0.0);
-    render.stroke(&arc, render.theme().text, Stroke::new(thickness).with_caps(Cap::Round));
+    render.stroke(
+      &arc,
+      render.theme().background_raised_outline,
+      Stroke::new(thickness).with_caps(Cap::Round),
+    );
   }
 }
