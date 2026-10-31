@@ -46,7 +46,7 @@ pub struct GitRepo {
 
 impl GitRepo {
   pub fn open(path: &Path) -> Result<Self, git2::Error> {
-    let path = path.canonicalize().unwrap();
+    let path = path.canonicalize().map_err(|e| git2::Error::from_str(&e.to_string()))?;
     Ok(GitRepo { repo: Repository::open(&path)?, root: path })
   }
 

@@ -361,6 +361,8 @@ dependencies = [
 name = "be-host"
 version = "0.1.0"
 dependencies = [
+ "be-fs",
+ "be-git",
  "be-remote",
  "be-terminal",
  "libc",
@@ -409,6 +411,8 @@ dependencies = [
 name = "be-remote"
 version = "0.1.0"
 dependencies = [
+ "be-fs",
+ "be-git",
  "be-terminal",
  "lode",
  "lode-local",

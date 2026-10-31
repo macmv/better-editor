@@ -1,0 +1,128 @@
+//! Runs the real `be-host` binary over a pipe and drives the remote
+//! filesystem against it.
+
+use std::{
+  cell::RefCell,
+  path::{Path, PathBuf},
+  process::Command,
+  rc::Rc,
+  time::{Duration, Instant},
+};
+
+use be_fs::{FileKind, Fs, Watcher};
+use be_git::GitBackend;
+use be_remote::{RemoteFs, RemoteGit, RemoteHost, RemoteWatcher, Transport};
+
+struct Session {
+  host: Rc<RefCell<RemoteHost>>,
+  t:    Transport,
+}
+
+fn connect() -> Session {
+  let mut cmd = Command::new(env!("CARGO_BIN_EXE_be-host"));
+  cmd.arg("--stdio");
+  let host = Rc::new(RefCell::new(RemoteHost::spawn(cmd, Instant::now()).unwrap()));
+  let local = host.borrow().connection().local().clone();
+  let pump = {
+    let host = host.clone();
+    Rc::new(move || host.borrow().pump(50)) as Rc<dyn Fn() -> bool>
+  };
+  Session { t: Transport::new(local, Rc::new(|| {}), pump), host }
+}
+
+fn temp_dir(name: &str) -> PathBuf {
+  let dir = std::env::temp_dir().join(format!("be-host-test-{name}-{}", std::process::id()));
+  let _ = std::fs::remove_dir_all(&dir);
+  std::fs::create_dir_all(&dir).unwrap();
+  dir.canonicalize().unwrap()
+}
+
+#[test]
+fn fs_round_trip() {
+  let dir = temp_dir("fs");
+  std::fs::write(dir.join("a.txt"), "hello\n").unwrap();
+  std::fs::create_dir(dir.join("sub")).unwrap();
+
+  let s = connect();
+  let fs = RemoteFs::new(s.t.clone());
+
+  assert_eq!(fs.canonicalize(&dir.join("sub/..")).unwrap(), dir);
+  assert_eq!(fs.metadata(&dir.join("sub")).unwrap().kind, FileKind::Dir);
+  assert_eq!(fs.metadata(&dir.join("a.txt")).unwrap().kind, FileKind::File);
+  assert_eq!(fs.read(&dir.join("a.txt")).unwrap(), b"hello\n");
+
+  fs.write(&dir.join("a.txt"), b"bye\n").unwrap();
+  assert_eq!(std::fs::read(dir.join("a.txt")).unwrap(), b"bye\n");
+
+  let mut names: Vec<_> = fs.read_dir(&dir).unwrap().into_iter().map(|e| e.name).collect();
+  names.sort();
+  assert_eq!(names, ["a.txt", "sub"]);
+
+  let err = fs.read(&dir.join("missing")).unwrap_err();
+  assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+
+  drop(s.host);
+  let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn watch_reports_changes() {
+  let dir = temp_dir("watch");
+  let s = connect();
+
+  let mut watcher = RemoteWatcher::new(&s.t, 1, &dir);
+  // Let the watch start before touching anything.
+  for _ in 0..4 {
+    s.host.borrow().pump(50);
+  }
+  std::fs::write(dir.join("new.txt"), "x").unwrap();
+
+  let deadline = Instant::now() + Duration::from_secs(10);
+  let mut seen = vec![];
+  while Instant::now() < deadline && seen.is_empty() {
+    s.host.borrow().pump(50);
+    seen = watcher.poll().iter().map(|p| p.to_string()).collect();
+  }
+  assert_eq!(seen, ["new.txt"]);
+
+  let _ = std::fs::remove_dir_all(&dir);
+}
+
+fn git(dir: &Path, args: &[&str]) {
+  let status = Command::new("git")
+    .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+    .args(args)
+    .current_dir(dir)
+    .status()
+    .unwrap();
+  assert!(status.success(), "git {args:?} failed");
+}
+
+#[test]
+fn git_state() {
+  let dir = temp_dir("git");
+  git(&dir, &["init", "-q"]);
+  std::fs::write(dir.join("a.txt"), "one\n").unwrap();
+  std::fs::write(dir.join(".gitignore"), "ignored.txt\n").unwrap();
+  git(&dir, &["add", "."]);
+  git(&dir, &["commit", "-q", "-m", "init"]);
+
+  let s = connect();
+  let git = RemoteGit::new(s.t.clone(), &dir);
+
+  assert!(git.head().is_some());
+  assert_eq!(git.lookup_in_head(&dir.join("a.txt")).as_deref(), Some("one\n"));
+  assert_eq!(git.lookup_in_head(&dir.join("nope.txt")), None);
+
+  std::fs::write(dir.join("a.txt"), "two\n").unwrap();
+  std::fs::write(dir.join("b.txt"), "new\n").unwrap();
+  std::fs::write(dir.join("ignored.txt"), "x\n").unwrap();
+  std::thread::sleep(Duration::from_millis(150));
+
+  assert!(git.is_modified(&dir.join("a.txt")));
+  assert!(!git.is_added(&dir.join("a.txt")));
+  assert!(git.is_added(&dir.join("b.txt")));
+  assert!(git.is_ignored(&dir.join("ignored.txt")));
+
+  let _ = std::fs::remove_dir_all(&dir);
+}

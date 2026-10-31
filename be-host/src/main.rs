@@ -3,20 +3,31 @@
 //! print to stdout. Logs go to stderr.
 
 mod terminal;
+mod watch;
 
-use std::{cell::RefCell, fs, io, rc::Rc, time::Instant};
+use std::{cell::RefCell, collections::HashMap, fs, io, path::Path, rc::Rc, time::Instant};
 
+use std::os::unix::fs::MetadataExt;
+
+use be_git::{GitBackend, GitRepo};
 use be_remote::{
-  Bytes, DirEntry, DirKind, Host, HostError, HostInfo, HostService, PROTOCOL_VERSION, TermSize,
+  Bytes, DirEntry, DirKind, FileStat, GitFileStatus, Host, HostError, HostInfo, HostService,
+  PROTOCOL_VERSION, TermSize,
 };
 use be_terminal::{PtyHost, Size};
 use lode_local::{Event, Reply, Sink, Token};
 use lode_poll::{ChannelFds, Connection, sys};
 
-use crate::terminal::{SharedTerms, Term};
+use crate::{
+  terminal::{SharedTerms, Term},
+  watch::SharedWatches,
+};
 
-struct Fs {
-  terms: SharedTerms,
+struct Service {
+  terms:   SharedTerms,
+  watches: SharedWatches,
+  /// `None`: the root is not in a repository.
+  repos:   RefCell<HashMap<String, Option<GitRepo>>>,
 }
 
 fn io_error(e: io::Error) -> HostError {
@@ -28,10 +39,18 @@ fn io_error(e: io::Error) -> HostError {
   }
 }
 
+impl Service {
+  fn with_repo<R>(&self, root: &str, f: impl FnOnce(&GitRepo) -> R) -> Option<R> {
+    let mut repos = self.repos.borrow_mut();
+    let repo = repos.entry(root.to_string()).or_insert_with(|| GitRepo::open(Path::new(root)).ok());
+    repo.as_ref().map(f)
+  }
+}
+
 fn size(s: TermSize) -> Size { Size { rows: s.rows as usize, cols: s.cols as usize } }
 
 #[lode::handler]
-impl Host for Fs {
+impl Host for Service {
   fn info(&self) -> Result<HostInfo, HostError> {
     let cwd = std::env::current_dir().map_err(io_error)?;
     Ok(HostInfo { version: PROTOCOL_VERSION, cwd: cwd.to_string_lossy().into_owned() })
@@ -54,6 +73,67 @@ impl Host for Fs {
 
   fn read_file(&self, path: String) -> Result<String, HostError> {
     fs::read_to_string(path).map_err(io_error)
+  }
+
+  fn stat(&self, path: String) -> Result<FileStat, HostError> {
+    let meta = fs::metadata(path).map_err(io_error)?;
+    let kind = match meta.file_type() {
+      t if t.is_dir() => DirKind::Dir,
+      t if t.is_file() => DirKind::File,
+      _ => DirKind::Other,
+    };
+    Ok(FileStat { kind, mtime: meta.mtime() })
+  }
+
+  fn canonicalize(&self, path: String) -> Result<String, HostError> {
+    let path = fs::canonicalize(path).map_err(io_error)?;
+    Ok(path.to_string_lossy().into_owned())
+  }
+
+  fn read_bytes(&self, path: String) -> Result<Bytes, HostError> {
+    fs::read(path).map(Bytes::from).map_err(io_error)
+  }
+
+  fn write_bytes(&self, path: String, data: Bytes) -> Result<(), HostError> {
+    use std::io::Write;
+
+    let mut file =
+      fs::OpenOptions::new().write(true).truncate(true).open(&path).map_err(io_error)?;
+    file.write_all(&data).map_err(io_error)?;
+    drop(file);
+    self.watches.borrow_mut().notify_saved(Path::new(&path));
+    Ok(())
+  }
+
+  // Takes its `Reply` by hand, like `spawn_terminal`: the call stays open until
+  // the client drops it.
+  fn watch(&self, id: u64, root: String, sink: Sink<Vec<String>>, reply: Reply<(), HostError>) {
+    if let Err(e) = fs::metadata(&root) {
+      return reply.err(io_error(e));
+    }
+    reply.on_cancel(Token(id));
+    self.watches.borrow_mut().insert(id, Path::new(&root), sink, reply);
+  }
+
+  fn git_head(&self, root: String) -> Result<Option<String>, HostError> {
+    Ok(self.with_repo(&root, |repo| GitBackend::head(repo)).flatten())
+  }
+
+  fn git_lookup(&self, root: String, path: String) -> Result<Option<String>, HostError> {
+    Ok(self.with_repo(&root, |repo| GitBackend::lookup_in_head(repo, Path::new(&path))).flatten())
+  }
+
+  fn git_status(&self, root: String, path: String) -> Result<GitFileStatus, HostError> {
+    let path = Path::new(&path);
+    Ok(
+      self
+        .with_repo(&root, |repo| GitFileStatus {
+          ignored:  GitBackend::is_ignored(repo, path),
+          added:    GitBackend::is_added(repo, path),
+          modified: GitBackend::is_modified(repo, path),
+        })
+        .unwrap_or_default(),
+    )
   }
 
   // Takes its `Reply` by hand: the call stays open until the shell exits.
@@ -98,17 +178,20 @@ fn main() {
   }
 
   let terms: SharedTerms = Rc::new(RefCell::new(Default::default()));
+  let watches: SharedWatches = Rc::new(RefCell::new(Default::default()));
 
   let conn = Connection::builder()
     .serve::<Host, _>({
       let terms = terms.clone();
-      move |_| Fs { terms }
+      let watches = watches.clone();
+      move |_| Service { terms, watches, repos: Default::default() }
     })
     .accept(vec![ChannelFds::stdio().expect("stdio")], Instant::now())
     .expect("accept");
 
   while !conn.is_finished() {
     terms.borrow_mut().pump();
+    watches.borrow_mut().pump();
 
     let mut fds: Vec<_> = conn
       .read_fds()
@@ -126,7 +209,11 @@ fn main() {
     let conn_fds = fds.len();
     fds.extend(terms.borrow().poll_fds());
 
-    let ready = match sys::poll(&fds, conn.poll_timeout_ms(Instant::now())) {
+    let mut timeout = conn.poll_timeout_ms(Instant::now());
+    if !watches.borrow().is_empty() {
+      timeout = if timeout < 0 { watch::POLL_MS } else { timeout.min(watch::POLL_MS) };
+    }
+    let ready = match sys::poll(&fds, timeout) {
       Ok(r) => r,
       Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
       Err(e) => {
@@ -148,6 +235,7 @@ fn main() {
     while let Some(event) = conn.poll_event() {
       if let Event::Ready(Token(id)) = event {
         terms.borrow_mut().remove(id);
+        watches.borrow_mut().remove(id);
       }
     }
   }

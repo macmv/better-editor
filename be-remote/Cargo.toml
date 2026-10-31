@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 be-terminal = { path = "../be-terminal" }
+be-fs = { path = "../be-fs" }
+be-git = { path = "../be-git" }
 log = "0.4.34"
 lode = { version = "*", default-features = false }
 lode-local = { version = "*" }

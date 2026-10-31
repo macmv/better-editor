@@ -6,7 +6,6 @@ use std::{
 
 use be_doc::{Document, DocumentSnapshot};
 use be_fs::{Fs, LocalFs};
-use git::GitRepo;
 
 #[macro_use]
 extern crate log;
@@ -15,7 +14,7 @@ mod diff;
 mod git;
 
 pub use diff::{Change, LineDiff, LineDiffSimilarity};
-pub use git::GitBackend;
+pub use git::{GitBackend, GitRepo};
 
 /// This acts like a store for modified files in the editor.
 ///

@@ -1,7 +1,10 @@
 use std::{io, process::Command, time::Instant};
 
 use lode_local::Pending;
-use lode_poll::Connection;
+use lode_poll::{
+  Connection,
+  sys::{self, PollFd},
+};
 
 use crate::{DirEntry, Host, HostError, HostInfo};
 
@@ -30,6 +33,49 @@ impl RemoteHost {
 
   pub fn connect_ssh(target: &str, host_cmd: &str, now: Instant) -> io::Result<RemoteHost> {
     RemoteHost::spawn(ssh_command(target, host_cmd), now)
+  }
+
+  /// Waits up to `max_ms` for the connection to have something to do, and does
+  /// it. For owners with no poll loop of their own, and for blocking calls.
+  /// Returns false once the connection has closed.
+  pub fn pump(&self, max_ms: i32) -> bool {
+    let conn = &self.conn;
+    if conn.is_finished() {
+      return false;
+    }
+
+    let mut fds: Vec<_> = conn
+      .read_fds()
+      .into_iter()
+      .map(|fd| PollFd { fd, readable: true, writable: false })
+      .collect();
+    fds.extend(conn.write_fds().into_iter().map(|fd| PollFd {
+      fd,
+      readable: false,
+      writable: true,
+    }));
+
+    let timeout = match conn.poll_timeout_ms(Instant::now()) {
+      t if t < 0 => max_ms,
+      t => t.min(max_ms),
+    };
+    let ready = match sys::poll(&fds, timeout) {
+      Ok(r) => r,
+      Err(e) if e.kind() == io::ErrorKind::Interrupted => return true,
+      Err(_) => return false,
+    };
+
+    let now = Instant::now();
+    if ready.iter().zip(&fds).any(|(r, f)| r.readable && f.readable) {
+      conn.handle_readable(now);
+    }
+    if ready.iter().zip(&fds).any(|(r, f)| r.writable && f.writable) {
+      conn.handle_writable();
+    }
+    conn.handle_timeout(now);
+    while conn.poll_event().is_some() {}
+
+    !conn.is_finished()
   }
 
   pub fn connection(&self) -> &Connection { &self.conn }
