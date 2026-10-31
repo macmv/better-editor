@@ -3,7 +3,11 @@ use std::{
   ffi::OsStr,
   fs,
   os::{fd::AsRawFd, unix::net::UnixStream},
-  path::PathBuf,
+  path::{Path, PathBuf},
+  sync::{
+    Arc,
+    mpsc::{Receiver, TryRecvError},
+  },
   time::{Duration, Instant},
 };
 
@@ -14,32 +18,74 @@ use btree_slab::{
 use inotify::{EventMask, Inotify, WatchDescriptor, WatchMask};
 
 use super::Watcher;
-use crate::{DirectoryChanges, WorkspacePath, WorkspacePathBuf, WorkspaceRoot};
+use crate::{DirectoryChanges, WorkspacePath, WorkspacePathBuf, WorkspaceRoot, ignore::Ignores};
 
+/// How long one `poll` spends adding the watches the background walk found.
+const WALK_BUDGET: Duration = Duration::from_millis(4);
+/// How many directories the background walk hands over at a time.
+const WALK_BATCH: usize = 128;
+
+type SharedWaker = Arc<dyn Fn() + Send + Sync>;
+
+/// What the background walk reports.
+enum Walked {
+  /// Directories that should be watched.
+  Dirs(Vec<WorkspacePathBuf>),
+  /// There is nothing more.
+  Done,
+}
+
+/// Watches every directory under the root that git doesn't ignore.
 pub struct INotifyWatcher {
   root:          WorkspaceRoot,
   inotify:       Inotify,
   watch:         BTreeMap<WorkspacePathBuf, WatchDescriptor>,
   reverse_watch: HashMap<WatchDescriptor, WorkspacePathBuf>,
   recent_saves:  HashMap<PathBuf, Instant>,
+  ignores:       Ignores,
+  /// Set if `spawn` should walk the tree, because only the root is watched.
+  needs_walk:    bool,
+  /// Directories found by the walk that are waiting to be watched.
+  walk:          Option<Receiver<Walked>>,
+  waker:         Option<SharedWaker>,
   /// Dropped with the watcher, which hangs up the waker thread's end and
   /// tells it to exit.
   waker_stop:    std::cell::RefCell<Option<UnixStream>>,
 }
 
 impl INotifyWatcher {
+  /// A watcher of just the root and `.git`. `spawn` goes on to find the rest
+  /// of the tree on a background thread, so this doesn't have to wait for it.
   pub fn new(root: &WorkspaceRoot) -> Self {
+    let mut watcher = INotifyWatcher::empty(root);
+    watcher.needs_walk = true;
+    watcher.add_watch_for(WorkspacePath::new(""));
+    watcher.add_watch_for(WorkspacePath::new(".git"));
+    watcher
+  }
+
+  /// A watcher of every directory under the root that git doesn't ignore.
+  /// This walks the tree before returning, which can take a long time.
+  pub fn recursive(root: &WorkspaceRoot) -> Self {
+    let mut watcher = INotifyWatcher::empty(root);
+    watcher.add_watch_tree_for(WorkspacePath::new(""));
+    watcher
+  }
+
+  fn empty(root: &WorkspaceRoot) -> Self {
     let inotify = Inotify::init().unwrap();
-    let mut watcher = INotifyWatcher {
+    INotifyWatcher {
       root: root.clone(),
       inotify,
       watch: BTreeMap::new(),
       reverse_watch: HashMap::new(),
       recent_saves: HashMap::new(),
+      ignores: Ignores::new(root.as_path()),
+      needs_walk: false,
+      walk: None,
+      waker: None,
       waker_stop: Default::default(),
-    };
-    watcher.add_watch_tree_for(WorkspacePath::new(""));
-    watcher
+    }
   }
 
   fn path_for_event(
@@ -62,6 +108,8 @@ impl INotifyWatcher {
     let mask = if dir.is_empty() { root_mask() } else { inner_mask() };
     let wd = match self.inotify.watches().add(self.root.resolve_path(dir), mask) {
       Ok(wd) => wd,
+      // The directory is gone, or was never there (like a missing `.git`).
+      Err(err) if err.kind() == std::io::ErrorKind::NotFound => return,
       Err(err) => {
         warn!("failed to register inotify watch for `{dir}`: {err}");
         return;
@@ -73,45 +121,107 @@ impl INotifyWatcher {
     self.watch.insert(dir, wd);
   }
 
-  /// Watches a directory and all of its subdirectories, recursively.
+  /// Watches a directory and its subdirectories, except for ones that git
+  /// ignores and `.git`'s.
   fn add_watch_tree_for(&mut self, root: &WorkspacePath) {
-    let mut stack = vec![root.to_path_buf()];
+    let mut dirs = vec![];
+    walk_dirs(self.root.as_path(), &mut self.ignores, root, |dir| {
+      dirs.push(dir.to_path_buf());
+      true
+    });
 
-    while let Some(dir) = stack.pop() {
-      if self.watch.contains_key(&dir) {
-        continue;
+    for dir in dirs {
+      self.add_watch_for(&dir);
+    }
+  }
+
+  /// Watches the directories the background walk has found, for as long as
+  /// there is time. Returns true once the walk has finished.
+  fn take_walked(&mut self) -> bool {
+    let Some(rx) = self.walk.take() else { return false };
+
+    let start = Instant::now();
+    let mut done = false;
+    let mut more = false;
+    loop {
+      if start.elapsed() > WALK_BUDGET {
+        more = true;
+        break;
       }
 
-      // Watch before recursing to avoid races.
-      self.add_watch_for(&dir);
-      let Ok(entries) = fs::read_dir(self.root.resolve_path(&dir)) else { continue };
-
-      for entry in entries {
-        let Ok(entry) = entry else { continue };
-        let Ok(file_type) = entry.file_type() else { continue };
-
-        // TODO: Follow symlinks without making cycles.
-        if !file_type.is_dir() || file_type.is_symlink() {
-          continue;
-        }
-
-        if let Ok(rel) = entry.path().strip_prefix(self.root.as_path())
-          && let Some(rel) = rel.to_str()
-        {
-          // TODO: Paths that are watched should be triggered by handles. We
-          // should not greedily watch paths.
-          if !rel.starts_with("target") {
-            stack.push(WorkspacePathBuf::from(&rel));
+      match rx.try_recv() {
+        Ok(Walked::Dirs(dirs)) => {
+          for dir in dirs {
+            self.add_watch_for(&dir);
           }
         }
+        Ok(Walked::Done) | Err(TryRecvError::Disconnected) => {
+          done = true;
+          break;
+        }
+        Err(TryRecvError::Empty) => break,
       }
+    }
+
+    if !done {
+      self.walk = Some(rx);
+      if more && let Some(waker) = &self.waker {
+        // Out of time. Come back for the rest.
+        waker();
+      }
+    }
+
+    done
+  }
+
+  /// Finds the directories to watch on another thread. They are watched by
+  /// `poll`, as they arrive.
+  fn start_walk(&mut self, waker: SharedWaker) {
+    if !self.needs_walk {
+      return;
+    }
+    self.needs_walk = false;
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    let root = self.root.as_path().to_path_buf();
+    let spawned = std::thread::Builder::new().name("inotify-walk".into()).spawn(move || {
+      let mut ignores = Ignores::new(&root);
+      let mut batch = vec![];
+      walk_dirs(&root, &mut ignores, WorkspacePath::new(""), |dir| {
+        batch.push(dir.to_path_buf());
+        if batch.len() >= WALK_BATCH {
+          if tx.send(Walked::Dirs(std::mem::take(&mut batch))).is_err() {
+            // The watcher is gone.
+            return false;
+          }
+          waker();
+        }
+        true
+      });
+      if !batch.is_empty() {
+        let _ = tx.send(Walked::Dirs(batch));
+      }
+      let _ = tx.send(Walked::Done);
+      waker();
+    });
+
+    match spawned {
+      Ok(_) => self.walk = Some(rx),
+      Err(err) => error!("failed to start the directory walk: {err}"),
     }
   }
 
   /// Spawns a background thread that blocks until inotify events are ready,
   /// then calls `waker`. Events are not consumed -- the main thread must still
   /// call `poll()` to drain them. The thread exits when the watcher is dropped.
-  pub fn spawn(&self, waker: super::Waker) {
+  ///
+  /// This also starts walking the tree for directories to watch, if that's
+  /// still to do.
+  pub fn spawn(&mut self, waker: super::Waker) {
+    let waker: SharedWaker = Arc::from(waker);
+    self.waker = Some(waker.clone());
+    self.start_walk(waker.clone());
+
     let fd = self.inotify.as_raw_fd();
     // dup() so the thread owns a valid fd for the lifetime of the thread,
     // independent of when the original Inotify is dropped.
@@ -202,17 +312,24 @@ impl INotifyWatcher {
 
 impl Watcher for INotifyWatcher {
   fn poll(&mut self) -> DirectoryChanges {
+    let mut changes = DirectoryChanges::default();
+
+    // Things may have changed in the directories that weren't watched yet, so
+    // report the root as changed, to look again.
+    if self.take_walked() {
+      changes.insert(WorkspacePathBuf::from(""));
+    }
+
     let mut buffer = [0; 1024];
     let events = match self.inotify.read_events(&mut buffer) {
       Ok(events) => events,
-      Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return DirectoryChanges::default(),
+      Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return changes,
       Err(e) => {
         error!("inotify error: {}", e);
-        return DirectoryChanges::default();
+        return changes;
       }
     };
 
-    let mut changes = DirectoryChanges::default();
     let mut pending_move_from_dirs: HashMap<u32, WorkspacePathBuf> = HashMap::new();
 
     for ev in events {
@@ -234,7 +351,13 @@ impl Watcher for INotifyWatcher {
         None => continue,
       };
 
-      if is_dir && ev.mask.contains(EventMask::CREATE) {
+      // Ignored paths are left alone.
+      if ev.name.is_some_and(|n| n == ".gitignore") {
+        self.ignores.forget(&parent.clone());
+      }
+      let ignored = self.ignores.is_ignored(&path, is_dir);
+
+      if !ignored && is_dir && ev.mask.contains(EventMask::CREATE) {
         self.add_watch_tree_for(&path);
       }
 
@@ -257,7 +380,9 @@ impl Watcher for INotifyWatcher {
         {
           self.remove_watch_tree_for(&old_path);
         }
-        self.add_watch_tree_for(&path);
+        if !ignored {
+          self.add_watch_tree_for(&path);
+        }
       }
 
       if ev.mask.contains(EventMask::IGNORED) {
@@ -266,7 +391,9 @@ impl Watcher for INotifyWatcher {
         }
       }
 
-      changes.insert(path);
+      if !ignored {
+        changes.insert(path);
+      }
     }
 
     for (_, path) in pending_move_from_dirs.into_iter() {
@@ -282,6 +409,43 @@ impl Watcher for INotifyWatcher {
 
   fn notify_saved(&mut self, path: &std::path::Path) {
     self.recent_saves.insert(path.to_path_buf(), Instant::now());
+  }
+}
+
+/// Calls `visit` with `start`, and every directory under it that git doesn't
+/// ignore, until it returns false. Symlinks are not followed. The contents of
+/// `.git` are skipped, as nothing there is worth watching.
+fn walk_dirs(
+  root: &Path,
+  ignores: &mut Ignores,
+  start: &WorkspacePath,
+  mut visit: impl FnMut(&WorkspacePath) -> bool,
+) {
+  let mut stack = vec![start.to_path_buf()];
+
+  while let Some(dir) = stack.pop() {
+    if !visit(&dir) {
+      return;
+    }
+    if dir.file_name() == Some(".git") {
+      continue;
+    }
+
+    let Ok(entries) = fs::read_dir(root.join(dir.to_string())) else { continue };
+    for entry in entries.flatten() {
+      // This doesn't follow symlinks, so they are left out.
+      // TODO: Follow symlinks without making cycles.
+      let Ok(file_type) = entry.file_type() else { continue };
+      if !file_type.is_dir() {
+        continue;
+      }
+      let Some(name) = entry.file_name().to_str().map(str::to_owned) else { continue };
+
+      let child = if dir.is_empty() { WorkspacePathBuf::from(&name) } else { dir.join(&name) };
+      if !ignores.is_ignored(&child, true) {
+        stack.push(child);
+      }
+    }
   }
 }
 
@@ -322,7 +486,7 @@ mod tests {
   fn make_watcher_in(temp: TempDir, path: &str) -> (expect_test::TempDir, INotifyWatcher) {
     let root = WorkspaceRoot::from_path(temp.path().join(path));
     mkdir(&temp.path().join(path));
-    let watcher = INotifyWatcher::new(&root);
+    let watcher = INotifyWatcher::recursive(&root);
     (temp, watcher)
   }
 
@@ -420,5 +584,96 @@ mod tests {
 
     check_changes(&mut watcher, expect![@r#"["bar"]"#]);
     check_watches(&watcher, expect!(@r#"["", "bar", "bar/baz"]"#));
+  }
+
+  #[test]
+  fn new_only_watches_the_root_and_git_at_first() {
+    let temp = temp_dir!();
+    let root = WorkspaceRoot::from_path(temp.path().to_path_buf());
+    write(&temp.path().join("a/b/c.txt"), "x");
+    mkdir(&temp.path().join(".git"));
+
+    let mut watcher = INotifyWatcher::new(&root);
+    check_watches(&watcher, expect!(@r#"["", ".git"]"#));
+
+    // Files in a directory that isn't watched yet are not reported.
+    write(&temp.path().join("a/b/c.txt"), "y");
+    check_changes(&mut watcher, expect![@"[]"]);
+  }
+
+  #[test]
+  fn recursive_skips_ignored_dirs_and_git_internals() {
+    let temp = temp_dir!();
+    let root = WorkspaceRoot::from_path(temp.path().to_path_buf());
+    write(&temp.path().join(".gitignore"), "target/\nnode_modules\n");
+    mkdir(&temp.path().join(".git/objects/ab"));
+    mkdir(&temp.path().join("src/deep"));
+    mkdir(&temp.path().join("target/debug"));
+    mkdir(&temp.path().join("src/node_modules/x"));
+
+    let mut watcher = INotifyWatcher::recursive(&root);
+    check_watches(&watcher, expect!(@r#"["", ".git", "src", "src/deep"]"#));
+
+    // Ignored directories are not picked up when they appear, nor are their
+    // events reported.
+    mkdir(&temp.path().join("target/release"));
+    write(&temp.path().join("target/out.txt"), "x");
+    mkdir(&temp.path().join("src/new"));
+    check_changes(&mut watcher, expect![@r#"["src/new"]"#]);
+    check_watches(&watcher, expect!(@r#"["", ".git", "src", "src/deep", "src/new"]"#));
+  }
+
+  #[test]
+  fn ignored_files_are_not_reported() {
+    let temp = temp_dir!();
+    let root = WorkspaceRoot::from_path(temp.path().to_path_buf());
+    write(&temp.path().join(".gitignore"), "*.log\n");
+    mkdir(&temp.path().join("src"));
+
+    let mut watcher = INotifyWatcher::recursive(&root);
+    write(&temp.path().join("src/a.log"), "x");
+    write(&temp.path().join("src/a.txt"), "x");
+    check_changes(&mut watcher, expect![@r#"["src/a.txt"]"#]);
+
+    // Editing the .gitignore takes effect.
+    write(&temp.path().join(".gitignore"), "*.txt\n");
+    check_changes(&mut watcher, expect![@r#"[".gitignore"]"#]);
+    write(&temp.path().join("src/a.log"), "y");
+    write(&temp.path().join("src/a.txt"), "y");
+    check_changes(&mut watcher, expect![@r#"["src/a.log"]"#]);
+  }
+
+  #[test]
+  fn background_walk_finds_the_tree() {
+    let temp = temp_dir!();
+    let root = WorkspaceRoot::from_path(temp.path().to_path_buf());
+    write(&temp.path().join(".gitignore"), "target/\n");
+    mkdir(&temp.path().join("a/b"));
+    mkdir(&temp.path().join("c"));
+    mkdir(&temp.path().join("target/debug"));
+
+    let mut watcher = INotifyWatcher::new(&root);
+    watcher.spawn(Box::new(|| {}));
+
+    // The walk reports the root as changed once it is done.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut changes = DirectoryChanges::default();
+    while Instant::now() < deadline {
+      changes.merge_with(&watcher.poll());
+      if !changes.is_empty() {
+        break;
+      }
+      thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(format!("{changes:?}"), r#"[""]"#);
+    check_watches(&watcher, expect!(@r#"["", "a", "a/b", "c"]"#));
+  }
+
+  #[test]
+  fn lazy_without_git_dir() {
+    let temp = temp_dir!();
+    let root = WorkspaceRoot::from_path(temp.path().to_path_buf());
+    let watcher = INotifyWatcher::new(&root);
+    check_watches(&watcher, expect!(@r#"[""]"#));
   }
 }

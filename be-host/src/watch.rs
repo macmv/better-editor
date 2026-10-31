@@ -147,7 +147,7 @@ fn begin(
   std::thread::Builder::new()
     .name("watch-setup".into())
     .spawn(move || {
-      let watcher = be_fs::INotifyWatcher::new(&root);
+      let mut watcher = be_fs::INotifyWatcher::recursive(&root);
       watcher.spawn(Box::new(wake_fn));
       // If the watch was dropped meanwhile, nobody wants this.
       if tx.send(Box::new(watcher) as Box<dyn Watcher + Send>).is_ok() {

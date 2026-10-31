@@ -18,7 +18,7 @@ pub type Waker = Box<dyn Fn() + Send + Sync>;
 pub fn default_watcher(root: &WorkspaceRoot, waker: Waker) -> Box<dyn Watcher> {
   #[cfg(target_os = "linux")]
   {
-    let w = INotifyWatcher::new(root);
+    let mut w = INotifyWatcher::new(root);
     w.spawn(waker);
     return Box::new(w);
   }
@@ -31,5 +31,6 @@ pub fn default_watcher(root: &WorkspaceRoot, waker: Waker) -> Box<dyn Watcher> {
 
 pub trait Watcher {
   fn poll(&mut self) -> DirectoryChanges;
+
   fn notify_saved(&mut self, path: &Path) { let _ = path; }
 }
