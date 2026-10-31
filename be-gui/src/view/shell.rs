@@ -1066,9 +1066,11 @@ impl ShellView {
     let info_y = y + ch.height;
     let width = render.size().width;
     let elements = prompt_elements(ctx, &result, chevron, self.geom.cols);
+    // `clipped` moves the origin to the top left of the clip, so the row is
+    // drawn at y = 0 inside it.
     render.clipped(Rect::new(0.0, info_y, width, info_y + ch.height), |render| {
       for e in &elements {
-        self.draw_element(render, e, info_y, hot);
+        self.draw_element(render, e, 0.0, hot);
       }
     });
 
