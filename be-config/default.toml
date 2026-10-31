@@ -90,8 +90,7 @@ navigate = "\\"
 "o" = { action = "navigate", nav = "open_workspace" }
 ":" = { action = "set_mode", mode = "command" }
 "c" = { action = "navigate", nav = "new_terminal" }
-# Opens a new tab with a shell view. Not bound by default, for example:
-# "b" = { action = "navigate", nav = "new_shell" }
+"b" = { action = "navigate", nav = "new_shell" }
 # A literal backslash, as the prefix would otherwise swallow it.
 "\\" = { edit = "insert", char = "\\" }
 "0" = { action = "navigate", nav = { nav = "tab", tab = 0 } }
