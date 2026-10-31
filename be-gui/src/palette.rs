@@ -61,10 +61,37 @@ fn catalog(in_workspace: bool) -> Vec<(&'static str, Navigation, bool)> {
     ("Pane: focus left", Direction(be_input::Direction::Left), true),
     ("Pane: focus right", Direction(be_input::Direction::Right), true),
     ("Tab: new terminal", NewTerminal, true),
+    ("Tab: switch to 0", Tab(0), true),
+    ("Tab: switch to 1", Tab(1), true),
+    ("Tab: switch to 2", Tab(2), true),
+    ("Tab: switch to 3", Tab(3), true),
+    ("Tab: switch to 4", Tab(4), true),
+    ("Tab: switch to 5", Tab(5), true),
+    ("Tab: switch to 6", Tab(6), true),
+    ("Tab: switch to 7", Tab(7), true),
+    ("Tab: switch to 8", Tab(8), true),
+    ("Tab: switch to 9", Tab(9), true),
   ]
   .into_iter()
   .filter(|(_, _, workspace)| in_workspace || !workspace)
   .collect()
+}
+
+/// The actions the palette lists, with the names it lists them under. This
+/// is also the set of actions the which-key popup knows about.
+pub fn actions(in_workspace: bool) -> Vec<(&'static str, Navigation)> {
+  catalog(in_workspace).into_iter().map(|(name, nav, _)| (name, nav)).collect()
+}
+
+/// Fills `Rect::ZERO`-origin `shape` as a floating panel: the background
+/// and outline the palette and which-key popup share.
+pub fn draw_panel(render: &mut Render, radius: f64) {
+  let size = render.size();
+  let shape = Rect::from_origin_size(Point::ZERO, size);
+  let outline = render.theme().background_raised_outline;
+
+  render.fill(&shape.to_rounded_rect(radius), render.theme().background_raised);
+  render.stroke(&shape.inset(-0.5).to_rounded_rect(radius - 0.5), outline, kurbo::Stroke::new(1.0));
 }
 
 impl Palette {
@@ -206,15 +233,7 @@ impl Palette {
 
     render.clipped(bounds, |render| {
       let size = render.size();
-      let shape = Rect::from_origin_size(Point::ZERO, size);
-      let outline = render.theme().background_raised_outline;
-
-      render.fill(&shape.to_rounded_rect(RADIUS), render.theme().background_raised);
-      render.stroke(
-        &shape.inset(-0.5).to_rounded_rect(RADIUS - 0.5),
-        outline,
-        kurbo::Stroke::new(1.0),
-      );
+      draw_panel(render, RADIUS);
 
       // The input.
       let input =

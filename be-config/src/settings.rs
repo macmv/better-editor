@@ -133,4 +133,15 @@ mod tests {
     assert_eq!(keybinds.describe(Navigation::Zoom).as_deref(), Some("\\ TAB"));
     assert_eq!(keybinds.describe(Navigation::OpenSearch).as_deref(), Some("SP s"));
   }
+
+  #[test]
+  fn all_binds() {
+    use be_input::Navigation;
+
+    let keybinds = parse_default_config().value.keybinds;
+
+    let binds = keybinds.binds(Navigation::Zoom);
+    assert_eq!(binds.len(), 1);
+    assert_eq!(binds[0].len(), 2);
+  }
 }

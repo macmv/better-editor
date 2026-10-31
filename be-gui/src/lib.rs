@@ -36,6 +36,7 @@ mod remote;
 mod spinner;
 mod theme;
 mod view;
+mod which_key;
 mod widget;
 mod workspace_list;
 
@@ -64,7 +65,10 @@ pub struct Args {
 }
 
 struct State {
-  keys: Vec<KeyStroke>,
+  keys:    Vec<KeyStroke>,
+  /// When the last key of a half-typed sequence was pressed, for the which-key
+  /// popup.
+  keys_at: Option<std::time::Instant>,
 
   terminal:             crate::view::TerminalView,
   /// The terminal's shell runs on a remote host, so its directory is not a
@@ -280,6 +284,7 @@ impl State {
 
     let mut state = State {
       keys: vec![],
+      keys_at: None,
       terminal,
       terminal_remote_id,
       terminal_should_exit: false,
@@ -563,6 +568,7 @@ impl State {
     }
 
     self.keys.push(key);
+    self.keys_at = None;
 
     if let AppView::Workspace(w) = &mut self.active {
       if let ViewContent::Editor(e) =
@@ -580,6 +586,8 @@ impl State {
       }
       Err(be_input::ActionError::Unrecognized) => self.keys.clear(),
       Err(be_input::ActionError::Incomplete) => {
+        self.keys_at = Some(std::time::Instant::now());
+
         let has_temporary = self.keys.len() == 1 && !self.keys[0].control;
 
         if has_temporary {
@@ -626,6 +634,19 @@ impl State {
 
     self.draw_buttons(render);
 
+    if let Some(at) = self.keys_at
+      && !self.keys.is_empty()
+      && at.elapsed() >= which_key::DELAY
+    {
+      let in_workspace = matches!(self.active, AppView::Workspace(_));
+      let entries = which_key::entries(
+        &render.store.config.borrow().settings.keybinds,
+        in_workspace,
+        &self.keys,
+      );
+      which_key::draw(render, &entries);
+    }
+
     if let Some(palette) = &self.palette {
       palette.draw(render);
     }
@@ -666,6 +687,11 @@ impl State {
     }
   }
   pub fn animated(&self) -> bool {
+    // Keep redrawing until the which-key popup is due.
+    if !self.keys.is_empty() && self.keys_at.is_some_and(|at| at.elapsed() < which_key::DELAY) {
+      return true;
+    }
+
     match &self.active {
       AppView::Workspace(w) => self.workspaces[w].animated(),
       AppView::Loading => self.loading.as_ref().is_some_and(|l| l.opening.is_some()),

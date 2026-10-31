@@ -6,6 +6,7 @@ mod lang;
 mod parse;
 mod settings;
 
+pub use keybind::Keybinds;
 pub use lang::*;
 pub use settings::*;
 

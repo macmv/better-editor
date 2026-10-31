@@ -73,23 +73,31 @@ struct KeyParser<'a> {
 }
 
 impl Keybinds {
-  /// The keys that run `nav`, written like the config does, such as `\ SP`.
-  /// This is the shortest bind, if there are several.
-  pub fn describe(&self, nav: Navigation) -> Option<String> {
-    let prefix = self.settings.navigate.0.iter().map(|k| k.label()).collect::<Vec<_>>();
-
-    let find = |map: &KeyMap<Action>, prefix: &[String]| {
+  /// Every key sequence that runs `nav`, including the navigate prefix.
+  pub fn binds(&self, nav: Navigation) -> Vec<Vec<KeyStroke>> {
+    let find = |map: &KeyMap<Action>, prefix: &[KeyStroke]| {
       map
         .keys
         .iter()
         .filter(|(_, a)| matches!(a, Action::Navigate { nav: n } if *n == nav))
-        .map(|(k, _)| prefix.iter().cloned().chain(k.0.iter().map(|s| s.label())).collect())
-        .collect::<Vec<Vec<String>>>()
+        .map(|(k, _)| prefix.iter().chain(k.0.iter()).copied().collect())
+        .collect::<Vec<Vec<KeyStroke>>>()
     };
 
-    let mut found = find(&self.navigation, &prefix);
+    let mut found = find(&self.navigation, &self.settings.navigate.0);
     found.extend(find(&self.normal, &[]));
     found.extend(find(&self.global, &[]));
+    found
+  }
+
+  /// The keys that run `nav`, written like the config does, such as `\ SP`.
+  /// This is the shortest bind, if there are several.
+  pub fn describe(&self, nav: Navigation) -> Option<String> {
+    let found = self
+      .binds(nav)
+      .into_iter()
+      .map(|keys| keys.iter().map(|s| s.label()).collect::<Vec<_>>())
+      .collect::<Vec<_>>();
 
     found.into_iter().min_by(|a, b| (a.len(), a).cmp(&(b.len(), b))).map(|keys| keys.join(" "))
   }
