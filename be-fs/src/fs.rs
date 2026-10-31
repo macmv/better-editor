@@ -81,11 +81,10 @@ impl PendingWrite {
 /// The file operations the editor needs from whichever machine holds the
 /// workspace. `LocalFs` goes straight to disk.
 pub trait Fs {
-  fn canonicalize(&self, path: &Path) -> io::Result<PathBuf>;
   fn read_dir(&self, path: &Path) -> io::Result<Vec<DirEntry>>;
 
   /// False if every call here waits on another machine, which makes the cheap
-  /// ones (like `canonicalize`) worth avoiding on the UI thread.
+  /// ones (like resolving symlinks) worth avoiding on the UI thread.
   fn is_local(&self) -> bool { true }
 
   /// Starts reading `path` for opening in an editor. An `Fs` that has to wait
@@ -111,8 +110,6 @@ fn kind(t: std::fs::FileType) -> FileKind {
 }
 
 impl Fs for LocalFs {
-  fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> { path.canonicalize() }
-
   fn begin_read(&self, path: &Path) -> PendingRead {
     PendingRead::ready((|| {
       let path = path.canonicalize()?;

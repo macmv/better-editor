@@ -1,11 +1,9 @@
 use std::{
   collections::HashMap,
   path::{Path, PathBuf},
-  rc::Rc,
 };
 
 use be_doc::DocumentSnapshot;
-use be_fs::{Fs, LocalFs};
 
 #[macro_use]
 extern crate log;
@@ -22,7 +20,6 @@ pub use git::{GitBackend, GitRepo};
 /// Otherwise, this will show changes since the editor was opened.
 pub struct Repo {
   root: PathBuf,
-  fs:   Rc<dyn Fs>,
   git:  Option<Box<dyn GitBackend>>,
   head: Option<String>,
 
@@ -39,13 +36,13 @@ impl Repo {
     // TODO: Handle `root` not existing
     let root = root.canonicalize().unwrap();
     let git = GitRepo::open(&root).ok().map(|g| Box::new(g) as Box<dyn GitBackend>);
-    Repo::with_backends(root, Rc::new(LocalFs), git)
+    Repo::with_backends(root, git)
   }
 
   /// A repo over another machine's filesystem and git state. `root` must
   /// already be canonical on that machine.
-  pub fn with_backends(root: PathBuf, fs: Rc<dyn Fs>, git: Option<Box<dyn GitBackend>>) -> Self {
-    Repo { git, head: None, fs, root, files: HashMap::new() }
+  pub fn with_backends(root: PathBuf, git: Option<Box<dyn GitBackend>>) -> Self {
+    Repo { git, head: None, root, files: HashMap::new() }
   }
 
   pub fn update(&mut self) {
@@ -75,12 +72,8 @@ impl Repo {
     }
   }
 
+  /// `path` must be canonical.
   pub fn update_file(&mut self, path: &Path, doc: DocumentSnapshot) {
-    let Ok(path) = self.fs.canonicalize(path) else {
-      error!("unknown path: {}", path.display());
-      return;
-    };
-
     if let Ok(rel) = path.strip_prefix(&self.root) {
       if let Some(file) = self.files.get_mut(rel) {
         file.current = doc;
@@ -93,8 +86,6 @@ impl Repo {
   }
 
   pub fn changes_in(&self, path: &Path) -> Option<LineDiffSimilarity> {
-    let path = self.fs.canonicalize(path).ok()?;
-
     if let Ok(rel) = path.strip_prefix(&self.root)
       && let Some(file) = self.files.get(rel)
     {
@@ -105,13 +96,11 @@ impl Repo {
   }
 
   pub fn is_added(&self, path: &Path) -> bool {
-    let Some(path) = self.fs.canonicalize(path).ok() else { return false };
-
     if let Ok(rel) = path.strip_prefix(&self.root) {
       if let Some(file) = self.files.get(rel) {
         return file.is_added();
       } else if let Some(git) = &self.git {
-        return git.is_added(&path);
+        return git.is_added(path);
       }
     }
 
@@ -119,13 +108,11 @@ impl Repo {
   }
 
   pub fn is_modified(&self, path: &Path) -> bool {
-    let Some(path) = self.fs.canonicalize(path).ok() else { return false };
-
     if let Ok(rel) = path.strip_prefix(&self.root) {
       if let Some(file) = self.files.get(rel) {
         return file.is_modified();
       } else if let Some(git) = &self.git {
-        return git.is_modified(&path);
+        return git.is_modified(path);
       }
     }
 

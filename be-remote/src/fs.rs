@@ -28,10 +28,6 @@ fn kind(k: DirKind) -> FileKind {
 fn path_str(path: &Path) -> String { path.to_string_lossy().into_owned() }
 
 impl Fs for RemoteFs {
-  fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> {
-    self.t.wait(self.t.local().proxy::<Host>().canonicalize(path_str(path))).map(PathBuf::from)
-  }
-
   fn is_local(&self) -> bool { false }
 
   /// One round trip, and no waiting: the result is picked up by polling, as

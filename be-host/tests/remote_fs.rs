@@ -46,7 +46,6 @@ fn fs_round_trip() {
   let s = connect();
   let fs = RemoteFs::new(s.t.clone());
 
-  assert_eq!(fs.canonicalize(&dir.join("sub/..")).unwrap(), dir);
   let mut read = fs.begin_read(&dir.join("a.txt"));
   let data = loop {
     if let Some(res) = read.poll() {

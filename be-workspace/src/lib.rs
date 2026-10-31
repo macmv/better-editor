@@ -81,11 +81,7 @@ impl Workspace {
     let (files, repo, fs) = match backend {
       Some(backend) => {
         lsp.set_launcher(backend.launcher);
-        let repo = Repo::with_backends(
-          root.as_path().to_path_buf(),
-          backend.fs.clone(),
-          backend.git,
-        );
+        let repo = Repo::with_backends(root.as_path().to_path_buf(), backend.git);
         (EditorFs(backend.fs), repo, WorkspaceWatcher::with_watcher(backend.watcher))
       }
       None => {
@@ -141,7 +137,7 @@ impl Workspace {
     // Resolving symlinks takes a round trip on another machine, so a remote
     // file is found by the path it was asked for. Opening the same file by two
     // spellings gives two editors there.
-    let key = if self.files.is_local() { self.files.canonicalize(path)? } else { path.to_path_buf() };
+    let key = if self.files.is_local() { path.canonicalize()? } else { path.to_path_buf() };
 
     if let Some(handle) = self.editors_by_path.get(&key)
       && let Some(handle) = handle.upgrade()
