@@ -1,13 +1,18 @@
 use parking_lot::Mutex;
 use std::{
   any::Any,
+  cell::RefCell,
   sync::{Arc, Weak},
 };
 
-#[derive(Clone)]
-pub struct Task<T: 'static> {
-  inner:    Arc<Mutex<TaskData>>,
-  _phantom: std::marker::PhantomData<T>,
+/// A result that isn't there yet. Either another thread fills it in through a
+/// `Completer`, or the task polls for it itself.
+pub enum Task<T: 'static> {
+  /// Completed through a `Completer`, from any thread.
+  Shared { inner: Arc<Mutex<TaskData>>, _phantom: std::marker::PhantomData<T> },
+  /// Polled on the thread that owns it, such as an RPC call that is answered
+  /// as its connection is driven. Not `Send`, and can't be cloned.
+  Poll(RefCell<PollData<T>>),
 }
 
 pub struct Completer<T: 'static> {
@@ -15,50 +20,117 @@ pub struct Completer<T: 'static> {
   _phantom: std::marker::PhantomData<T>,
 }
 
-struct TaskData {
+pub struct TaskData {
   complete: bool,
   result:   Option<Box<dyn Any + Send>>,
   mapper:   Option<Box<dyn FnOnce(Box<dyn Any + Send>) -> Box<dyn Any + Send> + Send>>,
 }
 
+pub struct PollData<T> {
+  poll: Box<dyn FnMut() -> Option<T>>,
+  done: bool,
+}
+
+impl<T: 'static> Clone for Task<T> {
+  /// Only a task with a `Completer` can be cloned.
+  fn clone(&self) -> Self {
+    match self {
+      Task::Shared { inner, _phantom } => {
+        Task::Shared { inner: inner.clone(), _phantom: *_phantom }
+      }
+      Task::Poll(_) => panic!("a polled task cannot be cloned"),
+    }
+  }
+}
+
 impl<T: 'static> Task<T> {
+  /// A task that a `Completer` finishes.
   pub fn new() -> Task<T> {
-    Task {
+    Task::Shared {
       inner:    Arc::new(Mutex::new(TaskData { complete: false, result: None, mapper: None })),
       _phantom: std::marker::PhantomData,
     }
   }
 
-  pub fn completer(&self) -> Completer<T> {
-    Completer { inner: Arc::downgrade(&self.inner), _phantom: std::marker::PhantomData }
+  /// A task that finishes when `poll` returns `Some`. `poll` is not called
+  /// again after that.
+  pub fn from_poll(poll: impl FnMut() -> Option<T> + 'static) -> Task<T> {
+    Task::Poll(RefCell::new(PollData { poll: Box::new(poll), done: false }))
   }
 
-  pub fn completed(&self) -> Option<T> {
-    let mut inner = self.inner.lock();
-    let res = inner.result.take()?;
+  /// A task that has already finished.
+  pub fn ready(value: T) -> Task<T> {
+    let mut value = Some(value);
+    Task::from_poll(move || value.take())
+  }
 
-    let res = if let Some(mapper) = inner.mapper.take() { mapper(res) } else { res };
-    Some(*res.downcast().expect("task data contained the wrong type"))
+  /// Panics on a task made with `from_poll` or `ready`, which finish
+  /// themselves.
+  pub fn completer(&self) -> Completer<T> {
+    match self {
+      Task::Shared { inner, .. } => {
+        Completer { inner: Arc::downgrade(inner), _phantom: std::marker::PhantomData }
+      }
+      Task::Poll(_) => panic!("a polled task has no completer"),
+    }
+  }
+
+  /// The result, once there is one. After that, this returns `None` forever.
+  pub fn completed(&self) -> Option<T> {
+    match self {
+      Task::Shared { inner, .. } => {
+        let mut inner = inner.lock();
+        let res = inner.result.take()?;
+
+        let res = if let Some(mapper) = inner.mapper.take() { mapper(res) } else { res };
+        Some(*res.downcast().expect("task data contained the wrong type"))
+      }
+      Task::Poll(data) => {
+        let mut data = data.borrow_mut();
+        if data.done {
+          return None;
+        }
+        let res = (data.poll)()?;
+        data.done = true;
+        Some(res)
+      }
+    }
   }
 
   pub fn map<U: Send>(self, f: impl FnOnce(T) -> U + Send + 'static) -> Task<U> {
-    {
-      let mut inner = self.inner.lock();
-      if let Some(mapper) = inner.mapper.take() {
-        inner.mapper = Some(Box::new(move |v: Box<dyn Any + Send>| {
-          let v = mapper(v);
-          let res = f(*v.downcast().expect("task data contained the wrong type"));
-          Box::new(res) as Box<dyn Any + Send>
-        }));
-      } else {
-        inner.mapper = Some(Box::new(move |v: Box<dyn Any + Send>| {
-          let res = f(*v.downcast().expect("task data contained the wrong type"));
-          Box::new(res) as Box<dyn Any + Send>
-        }));
-      };
-    }
+    match self {
+      Task::Shared { inner: data, .. } => {
+        {
+          let mut inner = data.lock();
+          if let Some(mapper) = inner.mapper.take() {
+            inner.mapper = Some(Box::new(move |v: Box<dyn Any + Send>| {
+              let v = mapper(v);
+              let res = f(*v.downcast().expect("task data contained the wrong type"));
+              Box::new(res) as Box<dyn Any + Send>
+            }));
+          } else {
+            inner.mapper = Some(Box::new(move |v: Box<dyn Any + Send>| {
+              let res = f(*v.downcast().expect("task data contained the wrong type"));
+              Box::new(res) as Box<dyn Any + Send>
+            }));
+          };
+        }
 
-    Task { inner: self.inner, _phantom: std::marker::PhantomData }
+        Task::Shared { inner: data, _phantom: std::marker::PhantomData }
+      }
+      Task::Poll(data) => {
+        let mut data = data.into_inner();
+        let mut f = Some(f);
+        Task::from_poll(move || {
+          if data.done {
+            return None;
+          }
+          let v = (data.poll)()?;
+          data.done = true;
+          Some((f.take()?)(v))
+        })
+      }
+    }
   }
 }
 
@@ -101,6 +173,27 @@ mod tests {
         break;
       }
     }
+  }
+
+  #[test]
+  fn poll_works() {
+    let mut calls = 0;
+    let task = Task::from_poll(move || {
+      calls += 1;
+      (calls == 3).then_some(calls)
+    });
+
+    assert_eq!(task.completed(), None);
+    assert_eq!(task.completed(), None);
+    assert_eq!(task.completed(), Some(3));
+    assert_eq!(task.completed(), None);
+  }
+
+  #[test]
+  fn poll_map_works() {
+    let task = Task::ready(21).map(|v| v * 2).map(|v| v + 1);
+    assert_eq!(task.completed(), Some(43));
+    assert_eq!(task.completed(), None);
   }
 
   #[test]
