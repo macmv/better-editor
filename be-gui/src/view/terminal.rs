@@ -395,6 +395,11 @@ impl TerminalView {
       };
       (foreground, s)
     }) {
+      let foreground = if style.flags.contains(StyleFlags::DIM) {
+        Some(foreground.unwrap_or(theme.text).multiply_alpha(DIM_ALPHA))
+      } else {
+        foreground
+      };
       if let Some(foreground) = foreground {
         layout.color_range(prev..i, foreground);
       }
@@ -485,6 +490,9 @@ impl TerminalView {
     self.clipboard.copy(&buf);
   }
 }
+
+/// How opaque `SGR 2` (dim) text is drawn.
+const DIM_ALPHA: f32 = 0.55;
 
 fn terminal_color(_theme: &Theme, color: Option<TerminalColor>) -> Option<Color> {
   use be_terminal::BuiltinColor::*;
