@@ -3,6 +3,11 @@
 //! A watcher wakes the main loop through a pipe when the filesystem changes,
 //! and the loop then forwards what changed to the client. Nothing polls on a
 //! timer.
+//!
+//! Setting a watcher up walks the whole tree, which can take a long time in a
+//! big directory, so that happens on a thread. The main loop serves everything
+//! else meanwhile, and the client is sent the root as changed once the watcher
+//! is ready, to cover whatever happened while it wasn't.
 
 use std::{
   cell::RefCell,
@@ -11,16 +16,22 @@ use std::{
   os::{fd::AsRawFd, unix::net::UnixStream},
   path::Path,
   rc::Rc,
-  sync::Arc,
+  sync::{Arc, mpsc},
 };
 
-use be_fs::{DirectoryChanges, WorkspaceRoot, Watcher};
+use be_fs::{DirectoryChanges, Watcher, WorkspacePathBuf, WorkspaceRoot};
 use be_remote::HostError;
 use lode_local::{Reply, Sink, TrySendError};
 use lode_poll::sys::PollFd;
 
+enum State {
+  /// The watcher is still being set up.
+  Starting(mpsc::Receiver<Box<dyn Watcher + Send>>),
+  Running(Box<dyn Watcher>),
+}
+
 struct Watch {
-  watcher: Box<dyn Watcher>,
+  state:   State,
   sink:    Sink<Vec<String>>,
   /// Kept open until the client drops the call.
   _reply:  Reply<(), HostError>,
@@ -57,14 +68,17 @@ impl Watches {
   ) {
     let root = WorkspaceRoot::from_path(root.to_path_buf());
     let wake = self.wake_tx.clone();
-    let watcher = be_fs::default_watcher(
-      &root,
-      Box::new(move || {
+    let wake_fn = {
+      let wake = wake.clone();
+      move || {
         // A full pipe already has a wake pending.
         let _ = (&*wake).write(&[1]);
-      }),
-    );
-    self.watches.insert(id, Watch { watcher, sink, _reply: reply, pending: Default::default() });
+      }
+    };
+
+    let state = begin(root, wake, wake_fn);
+
+    self.watches.insert(id, Watch { state, sink, _reply: reply, pending: Default::default() });
   }
 
   pub fn remove(&mut self, id: u64) { self.watches.remove(&id); }
@@ -77,7 +91,9 @@ impl Watches {
   /// Tells every watch that this host is the one who wrote `path`.
   pub fn notify_saved(&mut self, path: &Path) {
     for w in self.watches.values_mut() {
-      w.watcher.notify_saved(path);
+      if let State::Running(watcher) = &mut w.state {
+        watcher.notify_saved(path);
+      }
     }
   }
 
@@ -88,7 +104,20 @@ impl Watches {
 
     let mut gone = vec![];
     for (&id, w) in &mut self.watches {
-      w.pending.merge_with(&w.watcher.poll());
+      match &mut w.state {
+        State::Starting(rx) => match rx.try_recv() {
+          Ok(watcher) => {
+            w.state = State::Running(watcher);
+            w.pending.insert(WorkspacePathBuf::from(""));
+          }
+          Err(mpsc::TryRecvError::Empty) => continue,
+          Err(mpsc::TryRecvError::Disconnected) => {
+            gone.push(id);
+            continue;
+          }
+        },
+        State::Running(watcher) => w.pending.merge_with(&watcher.poll()),
+      }
       if w.pending.is_empty() {
         continue;
       }
@@ -105,4 +134,37 @@ impl Watches {
       self.watches.remove(&id);
     }
   }
+}
+
+/// Starts watching `root` on a thread, and wakes the main loop when it's ready.
+#[cfg(target_os = "linux")]
+fn begin(
+  root: WorkspaceRoot,
+  wake: Arc<UnixStream>,
+  wake_fn: impl Fn() + Send + Sync + 'static,
+) -> State {
+  let (tx, rx) = mpsc::channel();
+  std::thread::Builder::new()
+    .name("watch-setup".into())
+    .spawn(move || {
+      let watcher = be_fs::INotifyWatcher::new(&root);
+      watcher.spawn(Box::new(wake_fn));
+      // If the watch was dropped meanwhile, nobody wants this.
+      if tx.send(Box::new(watcher) as Box<dyn Watcher + Send>).is_ok() {
+        let _ = (&*wake).write(&[1]);
+      }
+    })
+    .expect("spawn watch setup");
+  State::Starting(rx)
+}
+
+// Other platforms' watchers aren't known to be `Send`, so they can't be set up
+// on a thread. A big directory stalls the main loop there.
+#[cfg(not(target_os = "linux"))]
+fn begin(
+  root: WorkspaceRoot,
+  _wake: Arc<UnixStream>,
+  wake_fn: impl Fn() + Send + Sync + 'static,
+) -> State {
+  State::Running(be_fs::default_watcher(&root, Box::new(wake_fn)))
 }

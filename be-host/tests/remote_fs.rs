@@ -71,19 +71,22 @@ fn watch_reports_changes() {
   let s = connect();
 
   let mut watcher = RemoteWatcher::new(&s.t, 1, &dir);
-  // Let the watch start before touching anything.
-  for _ in 0..4 {
-    s.host.borrow().pump(50);
-  }
-  std::fs::write(dir.join("new.txt"), "x").unwrap();
-
   let deadline = Instant::now() + Duration::from_secs(10);
-  let mut seen = vec![];
-  while Instant::now() < deadline && seen.is_empty() {
-    s.host.borrow().pump(50);
-    seen = watcher.poll().iter().map(|p| p.to_string()).collect();
-  }
-  assert_eq!(seen, ["new.txt"]);
+  let mut next = || {
+    let mut seen = vec![];
+    while Instant::now() < deadline && seen.is_empty() {
+      s.host.borrow().pump(50);
+      seen = watcher.poll().iter().map(|p| p.to_string()).collect::<Vec<_>>();
+    }
+    seen
+  };
+
+  // The host says the root changed once the watch is ready, so nothing that
+  // happens while it starts is missed.
+  assert_eq!(next(), [""]);
+
+  std::fs::write(dir.join("new.txt"), "x").unwrap();
+  assert_eq!(next(), ["new.txt"]);
 
   let _ = std::fs::remove_dir_all(&dir);
 }
