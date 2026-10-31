@@ -73,6 +73,27 @@ struct KeyParser<'a> {
 }
 
 impl Keybinds {
+  /// The keys that run `nav`, written like the config does, such as `\ SP`.
+  /// This is the shortest bind, if there are several.
+  pub fn describe(&self, nav: Navigation) -> Option<String> {
+    let prefix = self.settings.navigate.0.iter().map(|k| k.label()).collect::<Vec<_>>();
+
+    let find = |map: &KeyMap<Action>, prefix: &[String]| {
+      map
+        .keys
+        .iter()
+        .filter(|(_, a)| matches!(a, Action::Navigate { nav: n } if *n == nav))
+        .map(|(k, _)| prefix.iter().cloned().chain(k.0.iter().map(|s| s.label())).collect())
+        .collect::<Vec<Vec<String>>>()
+    };
+
+    let mut found = find(&self.navigation, &prefix);
+    found.extend(find(&self.normal, &[]));
+    found.extend(find(&self.global, &[]));
+
+    found.into_iter().min_by(|a, b| (a.len(), a).cmp(&(b.len(), b))).map(|keys| keys.join(" "))
+  }
+
   pub fn parse(&self, mode: Mode, input: &[KeyStroke]) -> Result<be_input::Action, ActionError> {
     use be_input::*;
 

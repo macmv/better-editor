@@ -70,7 +70,8 @@ navigate = "\\"
 "a" = { action = "navigate", nav = "left" }
 "s" = { action = "navigate", nav = "down" }
 "d" = { action = "navigate", nav = "right" }
-"SP" = { action = "navigate", nav = "last_pane" }
+"SP" = { action = "navigate", nav = "command_palette" }
+"r" = { action = "navigate", nav = "last_pane" }
 "e" = { action = "navigate", nav = "next_pane" }
 "q" = { action = "navigate", nav = "prev_pane" }
 "x" = { action = "navigate", nav = "close_pane" }

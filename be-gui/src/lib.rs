@@ -14,7 +14,7 @@ use be_fs::{WorkspacePath, WorkspaceRoot};
 use be_input::{Action, KeyStroke, Mode, Navigation};
 use be_shared::SharedHandle;
 use be_workspace::{Workspace, WorkspaceEvent};
-use kurbo::{Affine, Axis, Point, Rect, Size, Stroke};
+use kurbo::{Affine, Axis, Point, Rect, RoundedRect, RoundedRectRadii, Size, Stroke, Vec2};
 pub use render::*;
 
 use pane::{HitResult, Pane, SplitPath};
@@ -27,6 +27,7 @@ use crate::{
 
 mod icon;
 mod layout;
+mod palette;
 mod pane;
 mod remote;
 mod spinner;
@@ -88,6 +89,11 @@ struct State {
 
   /// The mouse is over the menu button in the bottom right.
   menu_hover: bool,
+
+  /// The mouse is over the command palette button, left of the menu button.
+  palette_hover: bool,
+  /// The command palette, if it is open. It floats over whatever is showing.
+  palette:       Option<palette::Palette>,
 }
 
 #[derive(Clone)]
@@ -146,6 +152,9 @@ const TAB_BAR_HEIGHT: f64 = 30.0;
 const MENU_BUTTON_SIZE: f64 = TAB_BAR_HEIGHT - 10.0;
 /// The gap between the menu button and the window edges.
 const MENU_BUTTON_MARGIN: f64 = 5.0;
+/// The width the buttons in the bottom right take, with the margin after them.
+/// The tab bar leaves this much room for them.
+const BUTTONS_WIDTH: f64 = MENU_BUTTON_SIZE * 2.0 + MENU_BUTTON_MARGIN * 2.0;
 
 struct Tab {
   title:   String,
@@ -280,6 +289,8 @@ impl State {
       list_selected: 0,
       list_return: AppView::Terminal,
       menu_hover: false,
+      palette_hover: false,
+      palette: None,
     };
 
     if let Some(root) = args.editor {
@@ -439,7 +450,7 @@ impl State {
     }
   }
 
-  /// Where the menu button sits in a window of `size`.
+  /// Where the menu button sits in a window of `size`: the rightmost slot.
   fn menu_bounds(size: Size) -> Rect {
     Rect::from_origin_size(
       Point::new(
@@ -450,39 +461,113 @@ impl State {
     )
   }
 
-  /// The menu button is on every screen but the full screen terminal.
+  /// Where the command palette button sits: the leftmost slot of the button
+  /// group, which is the corner itself when the menu button is hidden.
+  fn palette_button_bounds(size: Size, menu_visible: bool) -> Rect {
+    let menu = Self::menu_bounds(size);
+    if menu_visible { menu - Vec2::new(MENU_BUTTON_SIZE, 0.0) } else { menu }
+  }
+
+  /// The menu button is on every screen but the full screen terminal. The
+  /// palette button is on all of them.
   fn menu_visible(&self) -> bool { !matches!(self.active, AppView::Terminal) }
 
-  fn draw_menu_button(&self, render: &mut Render) {
-    if !self.menu_visible() {
-      return;
+  /// Draws the buttons in the bottom right as one rounded rectangle, split by
+  /// a thin line when there are two.
+  fn draw_buttons(&self, render: &mut Render) {
+    let size = render.size();
+    let menu_visible = self.menu_visible();
+
+    let (command_icon, menu_icon) = (icon::COMMAND, icon::MENU);
+
+    // (bounds, icon, active, hover), left to right.
+    let mut buttons = vec![(
+      Self::palette_button_bounds(size, menu_visible),
+      &command_icon,
+      self.palette.is_some(),
+      self.palette_hover,
+    )];
+    if menu_visible {
+      buttons.push((
+        Self::menu_bounds(size),
+        &menu_icon,
+        matches!(self.active, AppView::Workspaces),
+        self.menu_hover,
+      ));
     }
 
-    let active = matches!(self.active, AppView::Workspaces);
-    let bounds = Self::menu_bounds(render.size());
+    let group = buttons.iter().skip(1).fold(buttons[0].0, |group, (b, ..)| group.union(*b));
+    let outline = render.theme().background_raised_outline;
 
-    render.clipped(bounds, |render| {
-      let shape = Rect::from_origin_size(Point::ZERO, bounds.size());
-      let outline = render.theme().background_raised_outline;
+    render.clipped(group, |render| {
+      let shape = Rect::from_origin_size(Point::ZERO, group.size());
+      render.fill(&shape.to_rounded_rect(4.0), render.theme().background_raised);
 
-      render.fill(
-        &shape.to_rounded_rect(4.0),
-        if active { outline } else { render.theme().background_raised },
-      );
-      if active || self.menu_hover {
+      let last = buttons.len() - 1;
+      for (i, (bounds, icon, active, hover)) in buttons.iter().enumerate() {
+        let segment = *bounds - group.origin().to_vec2();
+        // Only the outer corners of the group are rounded.
+        let radii = RoundedRectRadii::new(
+          if i == 0 { 4.0 } else { 0.0 },
+          if i == last { 4.0 } else { 0.0 },
+          if i == last { 4.0 } else { 0.0 },
+          if i == 0 { 4.0 } else { 0.0 },
+        );
+
+        if *active {
+          render.fill(&RoundedRect::from_rect(segment, radii), outline);
+        }
+        if *active || *hover {
+          render.stroke_transform(
+            &RoundedRect::from_rect(segment.inset(-0.5), radii),
+            Affine::IDENTITY,
+            outline,
+            Stroke::new(1.0),
+          );
+        }
+
+        let icon_size = 14.0;
+        let offset = (MENU_BUTTON_SIZE - icon_size) / 2.0;
+        let color = render.theme().text;
+        icon.stroke(segment.origin() + Vec2::splat(offset), icon_size, color, render);
+      }
+
+      // The line between the buttons.
+      for (bounds, ..) in buttons.iter().skip(1) {
+        let x = bounds.x0 - group.x0;
         render.stroke_transform(
-          &shape.inset(-0.5).to_rounded_rect(3.5),
+          &kurbo::Line::new((x, 0.0), (x, shape.height())),
           Affine::IDENTITY,
           outline,
           Stroke::new(1.0),
         );
       }
-
-      let icon_size = 14.0;
-      let offset = (MENU_BUTTON_SIZE - icon_size) / 2.0;
-      let color = render.theme().text;
-      icon::MENU.stroke(Point::new(offset, offset), icon_size, color, render);
     });
+  }
+
+  /// Opens the command palette, or closes it if it is open.
+  fn toggle_palette(&mut self, store: &RenderStore) {
+    if self.palette.is_some() {
+      self.palette = None;
+      return;
+    }
+
+    let in_workspace = matches!(self.active, AppView::Workspace(_));
+    let config = store.config.borrow();
+    self.palette =
+      Some(palette::Palette::new(in_workspace, |nav| config.settings.keybinds.describe(nav)));
+  }
+
+  /// Applies what a key or click did to the palette.
+  fn on_palette_outcome(&mut self, outcome: palette::Outcome, store: &mut RenderStore) {
+    match outcome {
+      palette::Outcome::Open => {}
+      palette::Outcome::Close => self.palette = None,
+      palette::Outcome::Run(nav) => {
+        self.palette = None;
+        self.perform_action(Action::Navigate { nav }, store);
+      }
+    }
   }
 
   fn open_workspace_list(&mut self) {
@@ -525,6 +610,14 @@ impl State {
   }
 
   pub fn on_key(&mut self, key: KeyStroke, store: &mut RenderStore) {
+    if let Some(palette) = &mut self.palette {
+      // The palette takes every key, so the navigate prefix pressed while it
+      // is open is just text.
+      let outcome = palette.on_key(&key);
+      self.on_palette_outcome(outcome, store);
+      return;
+    }
+
     if matches!(self.active, AppView::Workspaces) && self.keys.is_empty() {
       if self.on_workspace_list_key(&key) {
         return;
@@ -593,7 +686,11 @@ impl State {
       }
     }
 
-    self.draw_menu_button(render);
+    self.draw_buttons(render);
+
+    if let Some(palette) = &self.palette {
+      palette.draw(render);
+    }
   }
   fn draw_loading(&self, render: &mut Render) {
     let Some(loading) = &self.loading else { return };
@@ -637,19 +734,52 @@ impl State {
       AppView::Terminal | AppView::Workspaces => false,
     }
   }
-  pub fn on_mouse(&mut self, ev: MouseEvent, size: kurbo::Size, store: &RenderStore) -> CursorKind {
+  pub fn on_mouse(
+    &mut self,
+    ev: MouseEvent,
+    size: kurbo::Size,
+    store: &mut RenderStore,
+  ) -> CursorKind {
+    let line_height = store.text.font_metrics(Font::Ui).line_height;
+    if let Some(palette) = &mut self.palette {
+      let (outcome, over_row) = match ev {
+        MouseEvent::Move { pos } => palette.on_mouse(pos, false, size, line_height),
+        MouseEvent::Button { pos, pressed: true, button: MouseButton::Left } => {
+          palette.on_mouse(pos, true, size, line_height)
+        }
+        _ => (palette::Outcome::Open, false),
+      };
+      // A click that closes the palette on the palette button is a toggle, so
+      // it must not reopen it below.
+      let on_button = matches!(ev, MouseEvent::Button { pos, .. }
+        if Self::palette_button_bounds(size, self.menu_visible()).contains(pos));
+      if !on_button || !matches!(outcome, palette::Outcome::Close) {
+        self.on_palette_outcome(outcome, store);
+        return if over_row { CursorKind::Pointer } else { CursorKind::Default };
+      }
+    }
+
     let menu = Self::menu_bounds(size);
+    let palette_button = Self::palette_button_bounds(size, self.menu_visible());
     match ev {
-      MouseEvent::Move { pos } => self.menu_hover = self.menu_visible() && menu.contains(pos),
-      MouseEvent::Leave => self.menu_hover = false,
+      MouseEvent::Move { pos } => {
+        self.menu_hover = self.menu_visible() && menu.contains(pos);
+        self.palette_hover = palette_button.contains(pos);
+      }
+      MouseEvent::Leave => {
+        self.menu_hover = false;
+        self.palette_hover = false;
+      }
       _ => {}
     }
-    if self.menu_hover {
+    if self.menu_hover || self.palette_hover {
       match ev {
-        MouseEvent::Button { pos, pressed: true, button: MouseButton::Left }
-          if menu.contains(pos) =>
-        {
-          self.toggle_workspace_list();
+        MouseEvent::Button { pos, pressed: true, button: MouseButton::Left } => {
+          if menu.contains(pos) {
+            self.toggle_workspace_list();
+          } else if palette_button.contains(pos) {
+            self.toggle_palette(store);
+          }
         }
         _ => {}
       }
@@ -704,6 +834,10 @@ impl State {
     match action {
       Action::Navigate { nav: Navigation::Workspaces } => {
         self.toggle_workspace_list();
+      }
+
+      Action::Navigate { nav: Navigation::CommandPalette } => {
+        self.toggle_palette(store);
       }
 
       Action::Navigate { nav: Navigation::OpenWorkspace } => {
@@ -1348,7 +1482,7 @@ impl WorkspaceLayout {
       left.push(button.id);
     }
 
-    // Leaves room for the menu button, which is drawn over the tab bar.
+    // Leaves room for the buttons, which are drawn over the tab bar.
     let mut right = vec![];
     match self.views.get(self.tabs[self.active].content.active()).unwrap().content {
       ViewContent::Editor(ref e) => {
@@ -1363,7 +1497,7 @@ impl WorkspaceLayout {
       tab_layout
         .add_widget(
           crate::widget::Stack::new(Axis::Horizontal, Align::Start, Justify::Start, vec![])
-            .main_size(MENU_BUTTON_SIZE + MENU_BUTTON_MARGIN),
+            .main_size(BUTTONS_WIDTH),
         )
         .id,
     );

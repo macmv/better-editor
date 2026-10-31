@@ -161,7 +161,8 @@ impl winit::application::ApplicationHandler<Event> for App {
             init.app.texture.height() as f64 / init.scale,
           );
 
-          let new_cursor = init.app.state.on_mouse(MouseEvent::Move { pos }, size, &init.app.store);
+          let new_cursor =
+            init.app.state.on_mouse(MouseEvent::Move { pos }, size, &mut init.app.store);
           if new_cursor != init.cursor_kind {
             super::cursor::set_cursor(&init.window, new_cursor);
             init.cursor_kind = new_cursor;
@@ -177,7 +178,7 @@ impl winit::application::ApplicationHandler<Event> for App {
             init.app.texture.width() as f64 / init.scale,
             init.app.texture.height() as f64 / init.scale,
           );
-          init.app.state.on_mouse(MouseEvent::Leave, size, &init.app.store);
+          init.app.state.on_mouse(MouseEvent::Leave, size, &mut init.app.store);
           init.window.request_redraw();
         }
       }
@@ -207,7 +208,7 @@ impl winit::application::ApplicationHandler<Event> for App {
               button,
             },
             size,
-            &init.app.store,
+            &mut init.app.store,
           );
           init.window.request_redraw();
         }
@@ -236,7 +237,7 @@ impl winit::application::ApplicationHandler<Event> for App {
               },
             },
             size,
-            &init.app.store,
+            &mut init.app.store,
           );
           init.window.request_redraw();
         }

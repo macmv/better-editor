@@ -223,6 +223,7 @@ impl ParseKey for be_input::Navigation {
       Some("workspaces") => Ok(Workspaces),
       Some("open_search") => Ok(OpenSearch),
       Some("open_symbol_search") => Ok(OpenSymbolSearch),
+      Some("command_palette") => Ok(CommandPalette),
       Some("up") => Ok(Direction(Direction::Up)),
       Some("down") => Ok(Direction(Direction::Down)),
       Some("left") => Ok(Direction(Direction::Left)),

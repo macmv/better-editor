@@ -116,5 +116,21 @@ mod tests {
 
     assert!(matches!(nav(Key::Tab), Ok(Action::Navigate { nav: Navigation::Zoom })));
     assert!(matches!(nav(Key::Char('z')), Ok(Action::Navigate { nav: Navigation::Workspaces })));
+    assert!(matches!(
+      nav(Key::Char(' ')),
+      Ok(Action::Navigate { nav: Navigation::CommandPalette })
+    ));
+    assert!(matches!(nav(Key::Char('r')), Ok(Action::Navigate { nav: Navigation::LastPane })));
+  }
+
+  #[test]
+  fn describe_binds() {
+    use be_input::Navigation;
+
+    let keybinds = parse_default_config().value.keybinds;
+
+    assert_eq!(keybinds.describe(Navigation::CommandPalette).as_deref(), Some("\\ SP"));
+    assert_eq!(keybinds.describe(Navigation::Zoom).as_deref(), Some("\\ TAB"));
+    assert_eq!(keybinds.describe(Navigation::OpenSearch).as_deref(), Some("SP s"));
   }
 }

@@ -11,6 +11,7 @@ use crate::{Color, Render};
 // - devicons::rust
 // - lucide::chevron-down
 // - lucide::chevron-right
+// - lucide::command
 // - lucide::folder
 // - lucide::menu
 // - lucide::minus

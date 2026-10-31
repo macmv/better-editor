@@ -19,7 +19,7 @@ pub enum Action {
   ClipboardPaste,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Navigation {
   /// Toggle between the home terminal and the active workspace.
   OpenWorkspace,
@@ -27,6 +27,8 @@ pub enum Navigation {
   Workspaces,
   OpenSearch,
   OpenSymbolSearch,
+  /// Toggle the searchable list of every navigation action.
+  CommandPalette,
   Direction(Direction),
   /// Focus the next or previous pane in the current tab, wrapping around.
   Cycle(ChangeDirection),
@@ -41,7 +43,7 @@ pub enum Navigation {
   NewTerminal,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Axis {
   Horizontal,
   Vertical,
@@ -73,7 +75,7 @@ pub enum Move {
   BackDefinition,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ChangeDirection {
   Next,
   Prev,
@@ -100,7 +102,7 @@ pub enum ActionError {
   Incomplete,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Direction {
   Up,
   Down,
