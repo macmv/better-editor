@@ -112,6 +112,7 @@ impl Workspace {
 
     editor.fs = self.files.clone();
     editor.repo = self.repo.clone();
+    editor.root = Some(self.root.as_path().to_path_buf());
     editor.config = self.config.clone();
     editor.lsp.store = self.lsp.clone();
     editor.send = Some(Box::new({

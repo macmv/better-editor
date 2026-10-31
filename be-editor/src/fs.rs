@@ -168,7 +168,11 @@ impl EditorState {
       send(crate::EditorEvent::SavedFile(path.clone()));
     }
 
-    self.status = Some(crate::Status::for_success(format!("{}: written", path.display())));
+    let shown = match &self.root {
+      Some(root) => path.strip_prefix(root).unwrap_or(&path),
+      None => &path,
+    };
+    self.status = Some(crate::Status::for_success(format!("{}: written", shown.display())));
     Ok(())
   }
 

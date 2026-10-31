@@ -65,6 +65,8 @@ pub struct EditorState {
   pub config:    Rc<RefCell<Config>>,
   pub fs:        EditorFs,
   pub repo:      SharedHandle<Option<Repo>>,
+  /// The workspace root, used to show paths relative to it.
+  pub root:      Option<std::path::PathBuf>,
   pub lsp:       lsp::LspState,
   pub send:      Option<Box<dyn Fn(EditorEvent)>>,
   pub clipboard: SharedHandle<Clipboard>,
