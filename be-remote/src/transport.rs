@@ -34,9 +34,19 @@ impl Transport {
   /// thread, so the editor stalls for a round trip.
   pub(crate) fn wait<T: lode::Message, E: lode::Message + Into<HostError>>(
     &self,
-    mut call: Pending<T, E>,
+    call: Pending<T, E>,
   ) -> io::Result<T> {
     self.io_done();
+    let result = self.wait_inner(call);
+    // The pump consumed whatever woke the owner; it must wait on what's left.
+    self.io_done();
+    result
+  }
+
+  fn wait_inner<T: lode::Message, E: lode::Message + Into<HostError>>(
+    &self,
+    mut call: Pending<T, E>,
+  ) -> io::Result<T> {
     let start = std::time::Instant::now();
     loop {
       match call.try_take() {

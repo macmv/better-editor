@@ -9,10 +9,10 @@ use std::{
 
 use be_config::Config;
 use be_editor::{EditorEvent, EditorFs, EditorState, SearchState};
-use be_fs::{Fs, WorkspaceRoot, WorkspaceWatcher};
-use be_git::Repo;
+use be_fs::{Fs, LocalFs, Watcher, WorkspaceRoot, WorkspaceWatcher};
+use be_git::{GitBackend, Repo};
 use be_input::Clipboard;
-use be_lsp::LanguageServerStore;
+use be_lsp::{LanguageServerStore, ServerLauncher};
 use be_shared::{SharedHandle, WeakHandle};
 use parking_lot::Mutex;
 
@@ -34,6 +34,16 @@ pub struct Workspace {
   editors_by_path: HashMap<PathBuf, WeakHandle<EditorState>>,
 }
 
+/// Where a workspace's files, git state, and language servers live, when that
+/// isn't this machine.
+pub struct Backend {
+  pub fs:       Rc<dyn Fs>,
+  /// `None`: the root isn't in a git repository.
+  pub git:      Option<Box<dyn GitBackend>>,
+  pub watcher:  Box<dyn Watcher>,
+  pub launcher: ServerLauncher,
+}
+
 #[derive(Debug)]
 pub enum WorkspaceEvent {
   Refresh,
@@ -42,6 +52,20 @@ pub enum WorkspaceEvent {
 
 impl Workspace {
   pub fn new(root: WorkspaceRoot, config: Rc<RefCell<Config>>) -> Self {
+    Workspace::build(root, config, None)
+  }
+
+  /// A workspace whose root is on another machine, reached through `backend`.
+  /// `root` must already be canonical there.
+  pub fn with_backend(
+    root: WorkspaceRoot,
+    config: Rc<RefCell<Config>>,
+    backend: Backend,
+  ) -> Self {
+    Workspace::build(root, config, Some(backend))
+  }
+
+  fn build(root: WorkspaceRoot, config: Rc<RefCell<Config>>, backend: Option<Backend>) -> Self {
     let notifier: Arc<Mutex<Box<dyn Fn(WorkspaceEvent) + Send>>> =
       Arc::new(Mutex::new(Box::new(|_| {})));
 
@@ -54,19 +78,30 @@ impl Workspace {
       }))));
     }
 
-    let repo = Repo::open(&root.as_path());
-    let fs = {
-      let waker = notifier.clone();
-      WorkspaceWatcher::new(&root, move || {
-        (waker.lock())(WorkspaceEvent::Refresh);
-      })
+    let (files, repo, fs) = match backend {
+      Some(backend) => {
+        lsp.set_launcher(backend.launcher);
+        let repo = Repo::with_backends(
+          root.as_path().to_path_buf(),
+          backend.fs.clone(),
+          backend.git,
+        );
+        (EditorFs(backend.fs), repo, WorkspaceWatcher::with_watcher(backend.watcher))
+      }
+      None => {
+        let waker = notifier.clone();
+        let fs = WorkspaceWatcher::new(&root, move || {
+          (waker.lock())(WorkspaceEvent::Refresh);
+        });
+        (EditorFs(Rc::new(LocalFs)), Repo::open(&root.as_path()), fs)
+      }
     };
 
     Workspace {
       root,
       config,
       fs,
-      files: EditorFs::default(),
+      files,
       repo: SharedHandle::new(Some(repo)),
       lsp: Rc::new(RefCell::new(lsp)),
       clipboard: SharedHandle::new(Clipboard::dummy()),

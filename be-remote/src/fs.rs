@@ -50,3 +50,10 @@ impl Fs for RemoteFs {
     Ok(entries.into_iter().map(|e| DirEntry { name: e.name, kind: kind(e.kind) }).collect())
   }
 }
+
+impl RemoteFs {
+  /// Every file under `root` that git would not ignore, relative to `root`.
+  pub fn list_files(&self, root: &Path) -> io::Result<Vec<String>> {
+    self.t.wait(self.t.local().proxy::<Host>().list_files(path_str(root)))
+  }
+}

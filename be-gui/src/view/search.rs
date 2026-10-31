@@ -24,10 +24,12 @@ struct Index {
 }
 
 impl Search {
-  pub fn new(root: WorkspaceRoot, notify: Notify) -> Self {
+  /// `listed`: the workspace's files, if they can't be found by walking
+  /// `root` on this machine.
+  pub fn new(root: WorkspaceRoot, notify: Notify, listed: Option<Vec<String>>) -> Self {
     let mut search = Search {
       root: root.clone(),
-      index: Index::new(root, notify.clone()),
+      index: Index::new(root, notify.clone(), listed),
       search: String::new(),
       cursor: 0,
       notify,
@@ -172,14 +174,23 @@ impl Search {
 }
 
 impl Index {
-  pub fn new(root: WorkspaceRoot, notify: Notify) -> Self {
+  pub fn new(root: WorkspaceRoot, notify: Notify, listed: Option<Vec<String>>) -> Self {
     let config = nucleo::Config::DEFAULT;
     let nucleo = Nucleo::new(config.clone(), std::sync::Arc::new(move || notify.wake()), None, 1);
     let matcher = nucleo::Matcher::new(config);
 
     let mut injector = nucleo.injector();
-    // TODO: Thread pool.
-    std::thread::spawn(move || recurse(root, &mut injector));
+    match listed {
+      Some(files) => {
+        for file in files {
+          injector.push(file, |path, columns| columns[0] = path.as_str().into());
+        }
+      }
+      // TODO: Thread pool.
+      None => {
+        std::thread::spawn(move || recurse(root, &mut injector));
+      }
+    }
 
     Index { nucleo, matcher }
   }

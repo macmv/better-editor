@@ -365,6 +365,7 @@ dependencies = [
  "be-git",
  "be-remote",
  "be-terminal",
+ "ignore",
  "libc",
  "lode",
  "lode-local",

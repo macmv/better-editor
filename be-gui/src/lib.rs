@@ -5,11 +5,11 @@ use std::{
   fmt,
   hash::Hash,
   ops::{Index, IndexMut},
-  path::PathBuf,
+  path::{Path, PathBuf},
 };
 
 use be_editor::CursorOrLsp;
-use be_fs::{WorkspacePath, WorkspaceRoot};
+use be_fs::{Fs, WorkspacePath, WorkspaceRoot};
 use be_input::{Action, KeyStroke, Mode, Navigation};
 use be_shared::SharedHandle;
 use be_workspace::{Workspace, WorkspaceEvent};
@@ -79,6 +79,8 @@ enum AppView {
 
 struct WorkspaceLayout {
   workspace: Workspace,
+  /// Set if the workspace's files are on another machine.
+  remote:    Option<remote::RemoteHandle>,
 
   active:        usize,
   tabs:          Vec<Tab>,
@@ -225,17 +227,54 @@ impl State {
     };
 
     if let Some(root) = args.editor {
-      if !root.exists() {
-        error!("path does not exist: {}", root.display());
-        std::process::exit(1);
+      let opened = match state.remote.as_ref().map(|r| r.handle()) {
+        // With `--remote`, the path is on the host. A relative one is
+        // relative to the directory given with the host, if any.
+        Some(handle) => {
+          let path = match state.remote.as_ref().and_then(|r| r.path()) {
+            Some(base) if root.is_relative() => Path::new(base).join(&root),
+            _ => root.clone(),
+          };
+          match handle.fs().canonicalize(&path) {
+            Ok(path) => Some(state.open_remote_workspace(handle, path, store)),
+            Err(e) => {
+              error!("cannot open {} on the remote host: {e}", path.display());
+              std::process::exit(1);
+            }
+          }
+        }
+        None => {
+          if !root.exists() {
+            error!("path does not exist: {}", root.display());
+            std::process::exit(1);
+          }
+          let root = WorkspaceRoot::from_path(root);
+          state.workspaces.insert(root.clone(), WorkspaceLayout::new(root.clone(), store, None));
+          Some(root)
+        }
+      };
+      if let Some(root) = opened {
+        state.terminal.on_focus(false);
+        state.active = AppView::Workspace(root);
       }
-      let root = WorkspaceRoot::from_path(root);
-      state.workspaces.insert(root.clone(), WorkspaceLayout::new(root.clone(), store));
-      state.terminal.on_focus(false);
-      state.active = AppView::Workspace(root);
     }
 
     state
+  }
+
+  /// Opens a workspace on the remote host at `path`, which must be canonical
+  /// there. Returns its key.
+  fn open_remote_workspace(
+    &mut self,
+    handle: remote::RemoteHandle,
+    path: PathBuf,
+    store: &mut RenderStore,
+  ) -> WorkspaceRoot {
+    let root = WorkspaceRoot::remote(handle.target().to_string(), path);
+    if !self.workspaces.contains_key(&root) {
+      self.workspaces.insert(root.clone(), WorkspaceLayout::new(root.clone(), store, Some(handle)));
+    }
+    root
   }
 
   fn mode(&self) -> Mode {
@@ -340,16 +379,26 @@ impl State {
     match action {
       Action::Navigate { nav: Navigation::OpenWorkspace } => {
         if matches!(self.active, AppView::Terminal) {
-          if self.terminal_is_remote {
-            warn!("opening a workspace from a remote terminal is not supported yet");
-            return;
-          }
-
-          let path = WorkspaceRoot::from_path(self.terminal.current_dir());
-
-          if !self.workspaces.contains_key(&path) {
-            self.workspaces.insert(path.clone(), WorkspaceLayout::new(path.clone(), store));
-          }
+          let path = if self.terminal_is_remote {
+            // The host doesn't report where the shell has `cd`ed to, so this
+            // is the directory the terminal started in.
+            let Some(handle) = self.remote.as_ref().map(|r| r.handle()) else { return };
+            let dir = self.terminal.current_dir();
+            let dir = if dir.as_os_str().is_empty() { PathBuf::from(".") } else { dir };
+            match handle.fs().canonicalize(&dir) {
+              Ok(dir) => self.open_remote_workspace(handle, dir, store),
+              Err(e) => {
+                error!("cannot open {} on the remote host: {e}", dir.display());
+                return;
+              }
+            }
+          } else {
+            let path = WorkspaceRoot::from_path(self.terminal.current_dir());
+            if !self.workspaces.contains_key(&path) {
+              self.workspaces.insert(path.clone(), WorkspaceLayout::new(path.clone(), store, None));
+            }
+            path
+          };
 
           self.terminal.on_focus(false);
           self.active = AppView::Workspace(path);
@@ -382,8 +431,18 @@ impl Tab {
 }
 
 impl WorkspaceLayout {
-  pub fn new(root: WorkspaceRoot, store: &mut RenderStore) -> Self {
-    let mut workspace = Workspace::new(root, store.config.clone());
+  pub fn new(
+    root: WorkspaceRoot,
+    store: &mut RenderStore,
+    remote: Option<remote::RemoteHandle>,
+  ) -> Self {
+    let mut workspace = match &remote {
+      Some(remote) => {
+        let backend = remote.backend(root.as_path());
+        Workspace::with_backend(root, store.config.clone(), backend)
+      }
+      None => Workspace::new(root, store.config.clone()),
+    };
     workspace.clipboard = store.clipboard.clone();
 
     let notify = store.notifier();
@@ -391,6 +450,7 @@ impl WorkspaceLayout {
 
     let mut state = WorkspaceLayout {
       workspace,
+      remote,
 
       active: 1,
       tabs: vec![],
@@ -431,9 +491,20 @@ impl WorkspaceLayout {
             .collect(),
           })
         }
-        be_config::TabSettings::Terminal => Pane::View(state.views.new_view(
-          view::TerminalView::new(&state.workspace.clipboard, state.workspace.root.as_path()),
-        )),
+        be_config::TabSettings::Terminal => {
+          let clipboard = &state.workspace.clipboard;
+          let root = state.workspace.root.as_path();
+          let terminal = match &state.remote {
+            Some(remote) => {
+              let size = be_terminal::Size { rows: 40, cols: 80 };
+              let pty = remote.new_pty(size, root.to_string_lossy().into_owned());
+              let terminal = be_terminal::Terminal::with_host(size, Box::new(pty));
+              view::TerminalView::from_handle(clipboard, SharedHandle::new(terminal))
+            }
+            None => view::TerminalView::new(clipboard, root),
+          };
+          Pane::View(state.views.new_view(terminal))
+        }
         be_config::TabSettings::Editor => {
           Pane::View(state.views.new_view(view::EditorView::new(&mut state.workspace)))
         }
@@ -870,9 +941,18 @@ impl WorkspaceLayout {
         tab.zoomed = if tab.zoomed.is_some() { None } else { Some(tab.content.active()) };
       }
       Action::Navigate { nav: Navigation::OpenSearch } => {
+        // The files of a remote workspace come from the host, which stalls the
+        // editor for a round trip.
+        let listed = self.remote.as_ref().map(|r| {
+          r.list_files(self.workspace.root.as_path()).unwrap_or_else(|e| {
+            error!("failed to list the remote workspace's files: {e}");
+            vec![]
+          })
+        });
         self.active_tab_mut().popup = Some(view::Popup::Search(view::Search::new(
           self.workspace.root.clone(),
           self.notify.clone(),
+          listed,
         )));
       }
       Action::Navigate { nav: Navigation::Split(axis) } => {

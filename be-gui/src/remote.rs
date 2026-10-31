@@ -11,12 +11,13 @@
 //! interest, which is every call and every `handle_*`.
 
 use std::{
-  cell::RefCell,
+  cell::{Cell, RefCell},
   io::{self, Read, Write},
   os::{
     fd::{AsRawFd, RawFd},
     unix::net::UnixStream,
   },
+  path::Path,
   process::Command,
   rc::Rc,
   sync::{Arc, Condvar, Mutex},
@@ -24,7 +25,11 @@ use std::{
   time::{Duration, Instant},
 };
 
-use be_remote::{DirEntry, HostError, HostInfo, RemoteHost, RemotePty};
+use be_remote::{
+  DirEntry, HostError, HostInfo, RemoteFs, RemoteGit, RemoteHost, RemotePty, RemoteWatcher,
+  Transport,
+};
+use be_workspace::Backend;
 use lode_local::{CallError, Pending, RpcError};
 use lode_poll::sys::{self, PollFd};
 
@@ -196,8 +201,13 @@ enum Stage {
 /// poller too.
 struct Link {
   // Drops first: the thread must stop polling before the fds close.
-  poller: Poller,
-  host:   RefCell<RemoteHost>,
+  poller:  Poller,
+  host:    RefCell<RemoteHost>,
+  /// What `ssh` was told to connect to, for starting other things on the same
+  /// machine.
+  target:  String,
+  /// Names this connection's terminals and watches.
+  next_id: Cell<u64>,
 }
 
 impl Link {
@@ -220,7 +230,68 @@ pub struct RemoteSession {
   path:     Option<String>,
   stage:    Stage,
   reported: bool,
-  next_id:  u64,
+}
+
+/// Starts things on a host: terminals, and workspaces. Cheap to clone, and
+/// keeps the connection alive.
+#[derive(Clone)]
+pub struct RemoteHandle {
+  link: Rc<Link>,
+}
+
+impl RemoteHandle {
+  /// What `ssh` connects to, such as `user@box`.
+  pub fn target(&self) -> &str { &self.link.target }
+
+  fn next_id(&self) -> u64 {
+    let id = self.link.next_id.get();
+    self.link.next_id.set(id + 1);
+    id
+  }
+
+  /// Blocking calls over this connection. These stall the editor for a round
+  /// trip, so they're for startup and for rare actions.
+  fn transport(&self) -> Transport {
+    let local = self.link.host.borrow().connection().local().clone();
+    let on_io = {
+      let link = self.link.clone();
+      Rc::new(move || link.rearm())
+    };
+    let pump = {
+      let link = self.link.clone();
+      Rc::new(move || link.host.borrow().pump(50)) as Rc<dyn Fn() -> bool>
+    };
+    Transport::new(local, on_io, pump)
+  }
+
+  pub fn fs(&self) -> RemoteFs { RemoteFs::new(self.transport()) }
+
+  /// A shell on the host, in `cwd` (empty: the host's working directory).
+  pub fn new_pty(&self, size: be_terminal::Size, cwd: String) -> RemotePty {
+    let id = self.next_id();
+    let local = self.link.host.borrow().connection().local().clone();
+    let link = self.link.clone();
+    RemotePty::new(local, id, size, cwd, Rc::new(move || link.rearm()))
+  }
+
+  /// The pieces of a workspace rooted at `root` on the host. `root` must
+  /// already be canonical there.
+  pub fn backend(&self, root: &Path) -> Backend {
+    let t = self.transport();
+    let git = RemoteGit::new(t.clone(), root);
+    // Without a repository, the editor diffs against what it opened instead.
+    let git = be_git::GitBackend::head(&git).is_some().then(|| Box::new(git) as _);
+    let target = self.link.target.clone();
+    Backend {
+      fs: Rc::new(RemoteFs::new(t.clone())),
+      git,
+      watcher: Box::new(RemoteWatcher::new(&t, self.next_id(), root)),
+      launcher: Box::new(move |cmd, dir| be_remote::ssh_exec_command(&target, dir, cmd)),
+    }
+  }
+
+  /// Every file under `root` that git would not ignore, relative to `root`.
+  pub fn list_files(&self, root: &Path) -> io::Result<Vec<String>> { self.fs().list_files(root) }
 }
 
 impl RemoteSession {
@@ -230,7 +301,7 @@ impl RemoteSession {
     on_wake: impl Fn(RemoteWake) + Send + 'static,
   ) -> io::Result<RemoteSession> {
     let host = RemoteHost::connect_ssh(&target.host, host_cmd, Instant::now())?;
-    RemoteSession::new(host, host_cmd.into(), target.path, on_wake)
+    RemoteSession::new(host, target.host, host_cmd.into(), target.path, on_wake)
   }
 
   /// `Command` form of `connect`, for tests and unusual transports.
@@ -239,31 +310,41 @@ impl RemoteSession {
     cmd: Command,
     on_wake: impl Fn(RemoteWake) + Send + 'static,
   ) -> io::Result<RemoteSession> {
-    RemoteSession::new(RemoteHost::spawn(cmd, Instant::now())?, String::new(), None, on_wake)
+    RemoteSession::new(
+      RemoteHost::spawn(cmd, Instant::now())?,
+      String::new(),
+      String::new(),
+      None,
+      on_wake,
+    )
   }
 
   fn new(
     host: RemoteHost,
+    target: String,
     host_cmd: String,
     path: Option<String>,
     on_wake: impl Fn(RemoteWake) + Send + 'static,
   ) -> io::Result<RemoteSession> {
     let stage = Stage::Info(host.info());
-    let link = Rc::new(Link { poller: Poller::new(on_wake)?, host: RefCell::new(host) });
+    let link = Rc::new(Link {
+      poller: Poller::new(on_wake)?,
+      host: RefCell::new(host),
+      target,
+      next_id: Cell::new(1),
+    });
     link.rearm();
-    Ok(RemoteSession { link, host_cmd, path, stage, reported: false, next_id: 1 })
+    Ok(RemoteSession { link, host_cmd, path, stage, reported: false })
   }
 
   /// The directory the session was pointed at, if it was given one.
   pub fn path(&self) -> Option<&str> { self.path.as_deref() }
 
+  pub fn handle(&self) -> RemoteHandle { RemoteHandle { link: self.link.clone() } }
+
   /// A shell on the host, in `cwd` (empty: the host's working directory).
   pub fn new_pty(&mut self, size: be_terminal::Size, cwd: String) -> RemotePty {
-    let id = self.next_id;
-    self.next_id += 1;
-    let local = self.link.host.borrow().connection().local().clone();
-    let link = self.link.clone();
-    RemotePty::new(local, id, size, cwd, Rc::new(move || link.rearm()))
+    self.handle().new_pty(size, cwd)
   }
 
   pub fn on_wake(&mut self, wake: RemoteWake) {
@@ -535,6 +616,51 @@ mod tests {
     }
     assert!(matches!(session.stage, Stage::Done));
     assert!(!session.link.host.borrow().connection().is_finished());
+  }
+
+  /// A workspace on the host opens, lists, and saves files there, with the
+  /// connection driven by blocking calls alone.
+  #[test]
+  fn a_remote_workspace_opens_and_saves_files() {
+    let Some(host) = be_host() else { return };
+    let (tx, _rx) = mpsc::channel();
+    let tx = Mutex::new(tx);
+    let mut cmd = Command::new(host);
+    cmd.arg("--stdio");
+    let session =
+      RemoteSession::spawn(cmd, move |w| tx.lock().unwrap().send(w).unwrap()).unwrap();
+    let handle = session.handle();
+
+    let dir = std::env::temp_dir().join(format!("be-gui-remote-ws-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("sub")).unwrap();
+    std::fs::write(dir.join("a.txt"), "hello\nworld\n").unwrap();
+    std::fs::write(dir.join("sub/b.txt"), "b\n").unwrap();
+    let dir = dir.canonicalize().unwrap();
+
+    let mut files = handle.list_files(&dir).unwrap();
+    files.sort();
+    assert_eq!(files, ["a.txt", "sub/b.txt"]);
+
+    let root = be_fs::WorkspaceRoot::remote("box".into(), dir.clone());
+    let config = Rc::new(RefCell::new(be_config::Config::default()));
+    let mut workspace =
+      be_workspace::Workspace::with_backend(root, config, handle.backend(&dir));
+
+    // Relative to nothing local: the path only exists on the host.
+    let editor = workspace.open_file(&dir.join("sub/../a.txt")).unwrap();
+    assert_eq!(editor.doc().to_string(), "hello\nworld\n");
+    assert_eq!(editor.file(), Some(dir.join("a.txt").as_path()));
+
+    // Saving writes through the host, over whatever changed there meanwhile.
+    std::fs::write(dir.join("a.txt"), "changed\n").unwrap();
+    let mut editor = editor;
+    editor.save().unwrap();
+    assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "hello\nworld\n");
+
+    assert!(workspace.open_file(&dir.join("missing.txt")).is_err());
+
+    let _ = std::fs::remove_dir_all(&dir);
   }
 
   #[test]

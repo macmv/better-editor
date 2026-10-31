@@ -114,6 +114,16 @@ impl WorkspaceWatcher {
     }
   }
 
+  /// A watcher over a watcher of the caller's choosing, such as one that
+  /// reports changes on another machine.
+  pub fn with_watcher(watcher: Box<dyn Watcher>) -> Self {
+    WorkspaceWatcher {
+      watcher,
+      state: Arc::new(Mutex::new(WorkspaceState { versions: VecDeque::new() })),
+      handles: vec![],
+    }
+  }
+
   pub fn notify_saved(&mut self, path: &Path) { self.watcher.notify_saved(path); }
 
   pub fn add_handle(&mut self) -> WatcherHandle {

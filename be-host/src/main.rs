@@ -75,6 +75,23 @@ impl Host for Service {
     fs::read_to_string(path).map_err(io_error)
   }
 
+  fn list_files(&self, root: String) -> Result<Vec<String>, HostError> {
+    fs::metadata(&root).map_err(io_error)?;
+
+    let mut files = vec![];
+    for entry in ignore::Walk::new(&root).flatten() {
+      if entry.file_type().is_some_and(|t| t.is_dir()) {
+        continue;
+      }
+      if let Ok(rel) = entry.path().strip_prefix(&root)
+        && let Some(rel) = rel.to_str()
+      {
+        files.push(rel.to_string());
+      }
+    }
+    Ok(files)
+  }
+
   fn stat(&self, path: String) -> Result<FileStat, HostError> {
     let meta = fs::metadata(path).map_err(io_error)?;
     let kind = match meta.file_type() {

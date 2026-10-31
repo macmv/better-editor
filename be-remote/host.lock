@@ -26,6 +26,10 @@ type be_remote::DirEntry = struct { name: string, kind: be_remote::DirKind }
 type be_remote::DirKind = enum { File=0(), Dir=1(), Other=2() }
 type be_remote::HostError = enum { NotFound=0(), PermissionDenied=1(), NotUtf8=2(), Io=3(0: string) }
 
+[Host::list_files v1] id=ecfa59dadcab0728
+sig = ((string), (vec<string>, be_remote::HostError))
+type be_remote::HostError = enum { NotFound=0(), PermissionDenied=1(), NotUtf8=2(), Io=3(0: string) }
+
 [Host::read_bytes v1] id=adfb4bc790aa6590
 sig = ((string), (bytes, be_remote::HostError))
 type be_remote::HostError = enum { NotFound=0(), PermissionDenied=1(), NotUtf8=2(), Io=3(0: string) }

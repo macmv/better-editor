@@ -12,6 +12,7 @@ lode = { version = "*", default-features = false }
 lode-local = { version = "*" }
 lode-poll = { version = "*" }
 libc = "0.2"
+ignore = "0.4"
 
 [dev-dependencies]
 be-fs = { path = "../be-fs" }

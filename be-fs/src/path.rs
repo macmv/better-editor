@@ -14,6 +14,8 @@ pub use relative_path::Component;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct WorkspaceRoot {
   path: PathBuf,
+  /// The machine `path` is on, as the user named it. `None`: this one.
+  host: Option<String>,
 }
 
 /// A path to a file within a workspace. This can only be resolved to a path
@@ -35,7 +37,14 @@ pub struct WorkspacePathBuf {
 }
 
 impl WorkspaceRoot {
-  pub fn from_path(path: PathBuf) -> Self { WorkspaceRoot { path } }
+  pub fn from_path(path: PathBuf) -> Self { WorkspaceRoot { path, host: None } }
+
+  /// A root on another machine, such as `user@box`. Two roots with the same
+  /// path on different machines are different roots.
+  pub fn remote(host: String, path: PathBuf) -> Self { WorkspaceRoot { path, host: Some(host) } }
+
+  /// The machine this root is on, if it isn't this one.
+  pub fn host(&self) -> Option<&str> { self.host.as_deref() }
 
   pub fn as_path(&self) -> &Path { &self.path }
 

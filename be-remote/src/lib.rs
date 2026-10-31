@@ -88,6 +88,9 @@ pub trait Host {
   /// Replaces the contents of an existing file.
   fn write_bytes(&self, path: String, data: Bytes) -> Result<(), HostError>;
 
+  /// Every file under `root` that git would not ignore, relative to `root`.
+  fn list_files(&self, root: String) -> Result<Vec<String>, HostError>;
+
   /// Streams the workspace-relative paths that changed under `root`, in
   /// batches. `id` names the watch, and is unique among the connection's
   /// terminals and watches. The call answers never; dropping it stops the
