@@ -192,6 +192,15 @@ impl ParseKey for bool {
   }
 }
 
+impl ParseKey for char {
+  fn parse(p: &KeybindParser) -> Result<Self, String> {
+    match p.string() {
+      Some(s) if s.chars().count() == 1 => Ok(s.chars().next().unwrap()),
+      _ => Err("expected a single character".to_string()),
+    }
+  }
+}
+
 impl ParseKey for i32 {
   fn parse(de: &KeybindParser) -> Result<Self, String> {
     match de.value {
@@ -207,7 +216,7 @@ impl ParseKey for i32 {
 
 impl ParseKey for be_input::Navigation {
   fn parse(p: &KeybindParser) -> Result<Self, String> {
-    use be_input::{Direction, Navigation::*};
+    use be_input::{ChangeDirection, Direction, Navigation::*};
 
     match p.string_or("nav") {
       Some("open_workspace") => Ok(OpenWorkspace),
@@ -216,6 +225,11 @@ impl ParseKey for be_input::Navigation {
       Some("down") => Ok(Direction(Direction::Down)),
       Some("left") => Ok(Direction(Direction::Left)),
       Some("right") => Ok(Direction(Direction::Right)),
+      Some("next_pane") => Ok(Cycle(ChangeDirection::Next)),
+      Some("prev_pane") => Ok(Cycle(ChangeDirection::Prev)),
+      Some("last_pane") => Ok(LastPane),
+      Some("close_pane") => Ok(ClosePane),
+      Some("zoom") => Ok(Zoom),
       Some("create_split") => Ok(Split(p.get("axis")?)),
       Some("tab") => {
         Ok(Tab(u8::try_from(p.get::<i32>("tab")?).map_err(|_| format!("invalid tab"))?))
@@ -305,6 +319,7 @@ impl ParseKey for grammar::Edit {
       Some("delete_rest_of_line") => Ok(DeleteRestOfLine),
       Some("paste") => Ok(Paste { after: p.get("after")? }),
       Some("backspace") => Ok(Backspace),
+      Some("insert") => Ok(Insert(p.get("char")?)),
       Some("undo") => Ok(Undo),
       Some("redo") => Ok(Redo),
       Some("switch_case") => Ok(SwitchCase),

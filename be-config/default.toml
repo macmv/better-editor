@@ -56,35 +56,30 @@ pane = "terminal"
 # Actions can be replaced by setting a keybind to an empty table, {}.
 
 [keybinds.settings]
-# To enter any navigation bind, first press this key. Applies in any mode.
-# Caps Lock can send this key with `kb_options = caps:menu` (Hyprland/xkb).
-navigate = "MENU"
+# To enter any navigation bind, first press this key. Applies in any mode. This
+# is on the right hand so that the left hand can press the bind that follows.
+navigate = "\\"
 
 [keybinds.global]
-# Checked first, in every mode.
-"C-h" = { action = "navigate", nav = "left" }
-"C-j" = { action = "navigate", nav = "down" }
-"C-k" = { action = "navigate", nav = "up" }
-"C-l" = { action = "navigate", nav = "right" }
-"C-0" = { action = "navigate", nav = { nav = "tab", tab = 0 } }
-"C-1" = { action = "navigate", nav = { nav = "tab", tab = 1 } }
-"C-2" = { action = "navigate", nav = { nav = "tab", tab = 2 } }
-"C-3" = { action = "navigate", nav = { nav = "tab", tab = 3 } }
-"C-4" = { action = "navigate", nav = { nav = "tab", tab = 4 } }
-"C-5" = { action = "navigate", nav = { nav = "tab", tab = 5 } }
-"C-6" = { action = "navigate", nav = { nav = "tab", tab = 6 } }
-"C-7" = { action = "navigate", nav = { nav = "tab", tab = 7 } }
-"C-8" = { action = "navigate", nav = { nav = "tab", tab = 8 } }
-"C-9" = { action = "navigate", nav = { nav = "tab", tab = 9 } }
-"C-s" = { action = "navigate", nav = { nav = "create_split", axis = "vertical" } }
-"C-f" = { action = "navigate", nav = { nav = "create_split", axis = "horizontal" } }
-"C-\\" = { action = "navigate", nav = "open_workspace" }
+# Checked first, in every mode. Intentionally empty: terminals need every Ctrl
+# key, so navigation goes through the prefix above.
 
 [keybinds.navigation]
-"h" = { action = "navigate", nav = "left" }
-"j" = { action = "navigate", nav = "down" }
-"k" = { action = "navigate", nav = "up" }
-"l" = { action = "navigate", nav = "right" }
+# Left-hand keys, as the right hand is busy holding the prefix.
+"w" = { action = "navigate", nav = "up" }
+"a" = { action = "navigate", nav = "left" }
+"s" = { action = "navigate", nav = "down" }
+"d" = { action = "navigate", nav = "right" }
+"SP" = { action = "navigate", nav = "last_pane" }
+"e" = { action = "navigate", nav = "next_pane" }
+"q" = { action = "navigate", nav = "prev_pane" }
+"x" = { action = "navigate", nav = "close_pane" }
+"z" = { action = "navigate", nav = "zoom" }
+"v" = { action = "navigate", nav = { nav = "create_split", axis = "vertical" } }
+"f" = { action = "navigate", nav = { nav = "create_split", axis = "horizontal" } }
+"o" = { action = "navigate", nav = "open_workspace" }
+# A literal backslash, as the prefix would otherwise swallow it.
+"\\" = { edit = "insert", char = "\\" }
 "0" = { action = "navigate", nav = { nav = "tab", tab = 0 } }
 "1" = { action = "navigate", nav = { nav = "tab", tab = 1 } }
 "2" = { action = "navigate", nav = { nav = "tab", tab = 2 } }
@@ -95,10 +90,6 @@ navigate = "MENU"
 "7" = { action = "navigate", nav = { nav = "tab", tab = 7 } }
 "8" = { action = "navigate", nav = { nav = "tab", tab = 8 } }
 "9" = { action = "navigate", nav = { nav = "tab", tab = 9 } }
-"\\" = { action = "navigate", nav = "open_workspace" }
-"C-\\" = { action = "navigate", nav = "open_workspace" }
-"v" = { action = "navigate", nav = { nav = "create_split", axis = "vertical" } }
-"f" = { action = "navigate", nav = { nav = "create_split", axis = "horizontal" } }
 
 [keybinds.normal]
 "i" = { action = "set_mode", mode = "insert" }

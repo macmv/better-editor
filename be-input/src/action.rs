@@ -24,6 +24,13 @@ pub enum Navigation {
   OpenWorkspace,
   OpenSearch,
   Direction(Direction),
+  /// Focus the next or previous pane in the current tab, wrapping around.
+  Cycle(ChangeDirection),
+  /// Focus the previously focused pane in the current tab.
+  LastPane,
+  ClosePane,
+  /// Toggle the active pane filling the whole tab.
+  Zoom,
   Split(Axis),
   Tab(u8),
 }

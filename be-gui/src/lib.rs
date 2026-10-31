@@ -101,6 +101,10 @@ struct Tab {
   title:   String,
   content: Pane,
   popup:   Option<view::Popup>,
+  /// The previously focused view, for `LastPane`.
+  last:    Option<ViewId>,
+  /// If set, this view fills the whole tab.
+  zoomed:  Option<ViewId>,
 }
 
 #[derive(Debug)]
@@ -362,6 +366,20 @@ impl State {
   }
 }
 
+impl Tab {
+  /// The zoomed view, if it is still part of this tab.
+  fn zoomed(&self) -> Option<ViewId> {
+    self.zoomed.filter(|z| self.content.views().any(|id| id == *z))
+  }
+
+  fn layout(&self, views: &mut HashMap<ViewId, View>, layout: &mut Layout) {
+    match self.zoomed() {
+      Some(z) => Pane::View(z).layout(views, layout),
+      None => self.content.layout(views, layout),
+    }
+  }
+}
+
 impl WorkspaceLayout {
   pub fn new(root: WorkspaceRoot, store: &mut RenderStore) -> Self {
     let mut workspace = Workspace::new(root, store.config.clone());
@@ -436,7 +454,7 @@ impl WorkspaceLayout {
     for tab in layout.tab {
       let title = tab_title(&tab);
       let view = build_view(&mut state, store, tab);
-      state.tabs.push(Tab { title: title.unwrap_or_default(), content: view, popup: None });
+      state.tabs.push(Tab { title: title.unwrap_or_default(), content: view, popup: None, last: None, zoomed: None });
     }
 
     for view in state.tabs[state.active].content.views() {
@@ -474,7 +492,7 @@ impl WorkspaceLayout {
         }
         {
           puffin::profile_scope!("layout views");
-          tab.content.layout(&mut self.views.views, layout);
+          tab.layout(&mut self.views.views, layout);
         }
         if !layout.to_close.is_empty() {
           for to_close in layout.to_close.drain(..) {
@@ -493,7 +511,7 @@ impl WorkspaceLayout {
           // Re-run layout after removing closed views.
           {
             puffin::profile_scope!("layout views after close");
-            tab.content.layout(&mut self.views.views, layout);
+            tab.layout(&mut self.views.views, layout);
           }
         }
       },
@@ -507,7 +525,10 @@ impl WorkspaceLayout {
   fn hit_pane(&self, pos: Point, size: kurbo::Size) -> Option<HitResult> {
     if pos.y < size.height - 25.0 {
       let tab = &self.tabs[self.active];
-      tab.content.hit_pane(pos, Size::new(size.width, size.height - 25.0))
+      match tab.zoomed() {
+        Some(z) => Some(HitResult::View(z)),
+        None => tab.content.hit_pane(pos, Size::new(size.width, size.height - 25.0)),
+      }
     } else {
       Some(HitResult::View(ViewId::TABS))
     }
@@ -563,13 +584,7 @@ impl WorkspaceLayout {
         }
         Some(HitResult::View(id)) if *id != ViewId::TABS => {
           let id = *id;
-          let tab = &mut self.tabs[self.active];
-          let prev_focus = tab.content.active();
-          if id != prev_focus {
-            tab.content.focus_view(id);
-            self.views.get_mut(prev_focus).unwrap().on_focus(false);
-            self.views.get_mut(id).unwrap().on_focus(true);
-          }
+          self.focus_view(id);
         }
         _ => {}
       },
@@ -635,11 +650,19 @@ impl WorkspaceLayout {
       Distance::Pixels(-25.0),
       |state, render| {
         let tab = &mut state.tabs[state.active];
-        for view in tab.content.views() {
-          let view = state.views.get_mut(view).unwrap();
-          render.clipped(view.bounds, |render| view.draw(render));
+        match tab.zoomed() {
+          Some(z) => {
+            let view = state.views.get_mut(z).unwrap();
+            render.clipped(view.bounds, |render| view.draw(render));
+          }
+          None => {
+            for view in tab.content.views() {
+              let view = state.views.get_mut(view).unwrap();
+              render.clipped(view.bounds, |render| view.draw(render));
+            }
+            tab.content.draw_dividers(render, Point::ZERO, render.size());
+          }
         }
-        tab.content.draw_dividers(render, Point::ZERO, render.size());
 
         if let Some(popup) = &mut tab.popup {
           render.clipped(popup.bounds(render.size()), |render| popup.draw(render));
@@ -722,6 +745,21 @@ impl WorkspaceLayout {
     self.views.get_mut(self.tabs[self.active].content.active()).unwrap()
   }
 
+  /// Focuses `new` within the active tab, remembering the old focus for
+  /// `LastPane`.
+  fn focus_view(&mut self, new: ViewId) {
+    let tab = &mut self.tabs[self.active];
+    let prev = tab.content.active();
+    if prev == new {
+      return;
+    }
+    tab.zoomed = None;
+    tab.last = Some(prev);
+    tab.content.focus_view(new);
+    self.views.get_mut(prev).unwrap().on_focus(false);
+    self.views.get_mut(new).unwrap().on_focus(true);
+  }
+
   fn active_tab(&self) -> &Tab { &self.tabs[self.active] }
   fn active_tab_mut(&mut self) -> &mut Tab { &mut self.tabs[self.active] }
 
@@ -750,11 +788,48 @@ impl WorkspaceLayout {
         self.views.get_mut(self.tabs[new_active].content.active()).unwrap().on_focus(true);
       }
       Action::Navigate { nav: Navigation::Direction(dir) } => {
+        self.active_tab_mut().zoomed = None;
         let prev_focus = self.active_tab().content.active();
         if let Some(new_focus) = self.active_tab_mut().content.focus(dir) {
+          self.active_tab_mut().last = Some(prev_focus);
           self.views.get_mut(prev_focus).unwrap().on_focus(false);
           self.views.get_mut(new_focus).unwrap().on_focus(true);
         }
+      }
+      Action::Navigate { nav: Navigation::Cycle(dir) } => {
+        let ids = self.active_tab().content.views().collect::<Vec<_>>();
+        let active = self.active_tab().content.active();
+        let Some(idx) = ids.iter().position(|id| *id == active) else { return };
+        let new = match dir {
+          be_input::ChangeDirection::Next => ids[(idx + 1) % ids.len()],
+          be_input::ChangeDirection::Prev => ids[(idx + ids.len() - 1) % ids.len()],
+        };
+        self.focus_view(new);
+      }
+      Action::Navigate { nav: Navigation::LastPane } => {
+        let tab = self.active_tab();
+        if let Some(last) = tab.last
+          && tab.content.views().any(|id| id == last)
+        {
+          self.focus_view(last);
+        }
+      }
+      Action::Navigate { nav: Navigation::ClosePane } => {
+        let tab = &mut self.tabs[self.active];
+        let active_view = tab.content.active();
+        let before = tab.content.views().count();
+        tab.zoomed = None;
+        if before > 1 {
+          tab.content.close(active_view, &mut self.views.views);
+          // The close is a no-op if it was the last child of a split.
+          if tab.content.views().count() < before {
+            self.views.views.remove(&active_view);
+          }
+        }
+      }
+      Action::Navigate { nav: Navigation::Zoom } => {
+        let tab = self.active_tab_mut();
+        tab.zoomed = if tab.zoomed.is_some() { None } else { Some(tab.content.active()) };
       }
       Action::Navigate { nav: Navigation::OpenSearch } => {
         self.active_tab_mut().popup = Some(view::Popup::Search(view::Search::new(
