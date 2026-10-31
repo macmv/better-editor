@@ -6,8 +6,8 @@ use std::{
 
 use anstyle_parse::{Parser, Utf8Parser};
 
-pub use crate::pty::Pty;
 use crate::grid::{Grid, Line, OwnedLine};
+pub use crate::pty::Pty;
 
 mod control;
 mod grid;

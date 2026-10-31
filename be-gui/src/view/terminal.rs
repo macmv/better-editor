@@ -52,18 +52,18 @@ impl TerminalView {
   ) -> Self {
     TerminalView {
       terminal,
-      set_waker:       false,
-      focused:         false,
+      set_waker: false,
+      focused: false,
       viewport_offset: 0.0,
-      size:            be_terminal::Size { rows: 40, cols: 80 },
-      character_size:  kurbo::Size::ZERO,
-      cached_layouts:  vec![],
-      cached_scale:    0.0,
-      clipboard:       clipboard.clone(),
-      drag_start:      None,
-      selection:       None,
-      mouse_held:      None,
-      mouse_pos:       None,
+      size: be_terminal::Size { rows: 40, cols: 80 },
+      character_size: kurbo::Size::ZERO,
+      cached_layouts: vec![],
+      cached_scale: 0.0,
+      clipboard: clipboard.clone(),
+      drag_start: None,
+      selection: None,
+      mouse_held: None,
+      mouse_pos: None,
     }
   }
 

@@ -454,7 +454,13 @@ impl WorkspaceLayout {
     for tab in layout.tab {
       let title = tab_title(&tab);
       let view = build_view(&mut state, store, tab);
-      state.tabs.push(Tab { title: title.unwrap_or_default(), content: view, popup: None, last: None, zoomed: None });
+      state.tabs.push(Tab {
+        title:   title.unwrap_or_default(),
+        content: view,
+        popup:   None,
+        last:    None,
+        zoomed:  None,
+      });
     }
 
     for view in state.tabs[state.active].content.views() {
