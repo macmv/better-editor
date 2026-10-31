@@ -1,4 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::{
+  collections::HashMap,
+  ops::Range,
+  path::{Path, PathBuf},
+};
 
 use be_input::{Action, Clipboard, Direction, Edit, Mode, Move};
 use be_shared::SharedHandle;
@@ -24,8 +28,13 @@ pub struct TerminalView {
   size:           be_terminal::Size,
   character_size: kurbo::Size,
 
-  cached_layouts: Vec<LineLayout>,
-  cached_scale:   f64,
+  // Layouts of lines we have already drawn, by `OwnedLine::id`. Terminal lines keep their id as
+  // they scroll, so scrolling and redraws of unchanged lines never rebuild a layout.
+  cached_layouts:   HashMap<u64, CachedLine>,
+  cached_scale:     f64,
+  cached_char_size: kurbo::Size,
+  // Counts calls to `draw`, to drop cache entries that weren't visible.
+  frame:            u64,
 
   clipboard: SharedHandle<Clipboard>,
 
@@ -38,6 +47,16 @@ pub struct TerminalView {
 struct LineLayout {
   layout:     TextLayout,
   background: Vec<(f64, f64, Color)>,
+}
+
+struct CachedLine {
+  // `OwnedLine::stamp` when the layout was built.
+  stamp:     u64,
+  // The columns that were drawn selected when the layout was built.
+  selection: Option<Range<usize>>,
+  // The `frame` this was last drawn in.
+  used:      u64,
+  line:      LineLayout,
 }
 
 impl TerminalView {
@@ -57,8 +76,10 @@ impl TerminalView {
       viewport_offset: 0.0,
       size: be_terminal::Size { rows: 40, cols: 80 },
       character_size: kurbo::Size::ZERO,
-      cached_layouts: vec![],
+      cached_layouts: HashMap::new(),
       cached_scale: 0.0,
+      cached_char_size: kurbo::Size::ZERO,
+      frame: 0,
       clipboard: clipboard.clone(),
       drag_start: None,
       selection: None,
@@ -222,21 +243,13 @@ impl TerminalView {
   pub fn draw(&mut self, render: &mut Render) {
     puffin::profile_function!();
 
-    if self.cached_scale != render.scale() {
+    if self.cached_scale != render.scale() || self.cached_char_size != self.character_size {
       self.cached_layouts.clear();
       self.cached_scale = render.scale();
+      self.cached_char_size = self.character_size;
     }
 
-    // TODO
-    /*
-    if self.editor.take_damage_all() {
-      self.cached_layouts.clear();
-    }
-
-    for line in self.editor.take_damages() {
-      self.cached_layouts.remove(&line.as_usize());
-    }
-    */
+    self.frame += 1;
 
     render.fill(
       &Rect::new(0.0, 0.0, render.size().width, render.size().height),
@@ -262,6 +275,10 @@ impl TerminalView {
       }
       render.draw_text(&layout.layout, (0.0, y));
     }
+
+    // Forget lines that scrolled out of view, or were dropped from scrollback.
+    let frame = self.frame;
+    self.cached_layouts.retain(|_, cached| cached.used == frame);
 
     if self.terminal.state().cursor.visible {
       let cursor = self.terminal.state().cursor;
@@ -321,17 +338,42 @@ impl TerminalView {
     self.terminal.perform_focus_event(focus);
   }
 
-  fn layout_line(&mut self, render: &mut Render, i: isize) -> Option<&mut LineLayout> {
-    // TODO: Use cached layouts!!
-    //
-    // if i < self.cached_layouts.len() {
-    //   return Some(&mut self.cached_layouts[i]);
-    // }
-
+  /// Returns the layout for screen row `i`, which is negative for the partially
+  /// visible line of scrollback above the screen. Layouts are only rebuilt
+  /// when the line's contents or selection changed since it was last drawn.
+  fn layout_line(&mut self, render: &mut Render, i: isize) -> Option<&LineLayout> {
     let line = match usize::try_from(i) {
       Ok(i) => self.terminal.visible_line(i)?,
       Err(_) => self.terminal.scrollback_line(-i as usize + self.terminal.viewport_offset() - 1)?,
     };
+
+    let (id, stamp) = (line.id(), line.stamp());
+    let selection = self.selection_cols(i);
+
+    let fresh = self
+      .cached_layouts
+      .get(&id)
+      .is_some_and(|cached| cached.stamp == stamp && cached.selection == selection);
+    if !fresh {
+      let layout = self.build_line(render, line, selection.as_ref());
+      self.cached_layouts.insert(id, CachedLine { stamp, selection, used: 0, line: layout });
+    }
+
+    let cached = self.cached_layouts.get_mut(&id).unwrap();
+    cached.used = self.frame;
+    Some(&cached.line)
+  }
+
+  fn build_line(
+    &self,
+    render: &mut Render,
+    line: &be_terminal::OwnedLine,
+    selection: Option<&Range<usize>>,
+  ) -> LineLayout {
+    puffin::profile_function!();
+
+    let inverted_at = |col: usize| selection.is_some_and(|range| range.contains(&col));
+
     let line_string = line.to_string();
 
     let theme = &render.store.theme;
@@ -344,7 +386,7 @@ impl TerminalView {
 
     let mut prev = 0;
     for ((foreground, style), i) in line.specific_styles(|j, s| {
-      let invert = self.selection_inverted_at(i, j) ^ s.flags.contains(StyleFlags::INVERSE);
+      let invert = inverted_at(j) ^ s.flags.contains(StyleFlags::INVERSE);
       let foreground = if invert {
         Some(terminal_color(theme, s.background).unwrap_or(theme.background))
       } else {
@@ -370,7 +412,7 @@ impl TerminalView {
     let mut background = vec![];
     let mut prev = 0.0;
     for (color, i) in line.specific_styles(|j, s| {
-      let invert = self.selection_inverted_at(i, j) ^ s.flags.contains(StyleFlags::INVERSE);
+      let invert = inverted_at(j) ^ s.flags.contains(StyleFlags::INVERSE);
       if invert {
         Some(terminal_color(&render.store.theme, s.foreground).unwrap_or(render.store.theme.text))
       } else {
@@ -384,16 +426,7 @@ impl TerminalView {
       prev = x;
     }
 
-    let layout = LineLayout { layout, background };
-
-    // TODO: Real caching!! It should also be based off the real, scrollback
-    // position.
-    if self.cached_layouts.is_empty() {
-      self.cached_layouts.push(layout);
-    } else {
-      self.cached_layouts[0] = layout;
-    }
-    Some(&mut self.cached_layouts[0])
+    LineLayout { layout, background }
   }
 
   fn mouse_to_pos(&self, mouse: Point) -> Position {
@@ -403,27 +436,27 @@ impl TerminalView {
     }
   }
 
-  fn selection_inverted_at(&self, row: isize, col: usize) -> bool {
+  /// The columns of screen row `row` that are selected.
+  fn selection_cols(&self, row: isize) -> Option<Range<usize>> {
     if row < 0 {
-      return false;
+      return None;
     }
     let row = row as usize;
 
-    if let Some((start, end)) = self.selection {
-      if row < start.row || row > end.row {
-        false
-      } else if row == start.row && row == end.row {
-        col >= start.col && col < end.col
-      } else if row == start.row {
-        col >= start.col
-      } else if row == end.row {
-        col < end.col
-      } else {
-        true
-      }
+    let (start, end) = self.selection?;
+    let cols = if row < start.row || row > end.row {
+      return None;
+    } else if row == start.row && row == end.row {
+      start.col..end.col
+    } else if row == start.row {
+      start.col..usize::MAX
+    } else if row == end.row {
+      0..end.col
     } else {
-      false
-    }
+      0..usize::MAX
+    };
+
+    (!cols.is_empty()).then_some(cols)
   }
 
   fn copy(&self) {
