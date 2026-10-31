@@ -82,16 +82,14 @@ struct PendingSnapshot {
 }
 
 pub struct Shell {
-  session:       Session,
-  history:       History,
-  jobs:          Vec<Job>,
-  next_id:       u64,
-  wake:          Option<Wake>,
-  snapshot:      Option<PendingSnapshot>,
+  session:    Session,
+  history:    History,
+  jobs:       Vec<Job>,
+  next_id:    u64,
+  wake:       Option<Wake>,
+  snapshot:   Option<PendingSnapshot>,
   /// Scratch dir to remove on drop, if we created it.
-  owned_root:    Option<PathBuf>,
-  last_exit:     Option<i32>,
-  last_duration: Option<Duration>,
+  owned_root: Option<PathBuf>,
 }
 
 impl Shell {
@@ -125,8 +123,6 @@ impl Shell {
       wake: None,
       snapshot: None,
       owned_root: None,
-      last_exit: None,
-      last_duration: None,
     };
     shell.start_snapshot()?;
     Ok(shell)
@@ -179,13 +175,7 @@ impl Shell {
 
   /// The prompt for the next line.
   pub fn prompt(&self) -> PromptContext {
-    PromptContext::capture(
-      self.cwd(),
-      &self.session.state.env,
-      self.last_exit,
-      self.last_duration,
-      self.wake.clone(),
-    )
+    PromptContext::capture(self.cwd(), &self.session.state.env, self.wake.clone())
   }
 
   /// Whether any job still has output to read or is running.
@@ -254,6 +244,7 @@ impl Shell {
       id,
       line: line.to_string(),
       started: Instant::now(),
+      started_at: SystemTime::now(),
       duration: None,
       state: JobState::Running,
       emulator: Emulator::new(size),
@@ -310,8 +301,6 @@ impl Shell {
       duration_ms: job.duration.map(|d| d.as_millis() as u64).unwrap_or(0),
       command:     job.line.clone(),
     };
-    self.last_exit = Some(exit);
-    self.last_duration = job.duration;
 
     if let Some(prepared) = prepared {
       match self.session.finish(prepared) {

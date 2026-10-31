@@ -76,7 +76,8 @@ impl View {
     match &self.content {
       ViewContent::Editor(editor) => editor.animated(),
       ViewContent::FileTree(tree) => tree.animated(),
-      ViewContent::Terminal(_) | ViewContent::Shell(_) => false,
+      ViewContent::Shell(shell) => shell.animated(),
+      ViewContent::Terminal(_) => false,
     }
   }
 

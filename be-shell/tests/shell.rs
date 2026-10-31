@@ -121,8 +121,6 @@ fn output_and_exit_codes() {
   assert!(job.duration.is_some());
   assert_eq!(f.shell.history().len(), 4);
   assert_eq!(f.shell.history().entries()[1].exit_code, 1);
-  // The prompt remembers the previous command.
-  assert_eq!(f.shell.prompt().last_exit, Some(127));
 }
 
 #[test]

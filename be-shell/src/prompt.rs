@@ -4,7 +4,7 @@ use std::{
   fs,
   path::{Path, PathBuf},
   sync::{Arc, OnceLock},
-  time::{Duration, SystemTime},
+  time::SystemTime,
 };
 
 use git2::{Repository, RepositoryState, Status, StatusOptions};
@@ -41,25 +41,21 @@ pub struct GitStatus {
 
 #[derive(Debug, Clone)]
 pub struct PromptContext {
-  pub cwd:       PathBuf,
-  pub home:      Option<PathBuf>,
-  pub git:       Option<GitHead>,
+  pub cwd:    PathBuf,
+  pub home:   Option<PathBuf>,
+  pub git:    Option<GitHead>,
   /// Computed on a background thread (it can be slow in a big repo); see
   /// [`PromptContext::git_status`].
-  git_status:    Arc<OnceLock<GitStatus>>,
+  git_status: Arc<OnceLock<GitStatus>>,
   /// `$VIRTUAL_ENV`'s directory name.
-  pub venv:      Option<String>,
-  pub user:      Option<String>,
-  pub host:      Option<String>,
+  pub venv:   Option<String>,
+  pub user:   Option<String>,
+  pub host:   Option<String>,
   /// `$SSH_TTY` is set.
-  pub ssh:       bool,
+  pub ssh:    bool,
   /// Running as root.
-  pub root:      bool,
-  /// Exit status of the previous command.
-  pub last_exit: Option<i32>,
-  /// How long the previous command took.
-  pub duration:  Option<Duration>,
-  pub time:      SystemTime,
+  pub root:   bool,
+  pub time:   SystemTime,
 }
 
 impl PromptContext {
@@ -75,8 +71,6 @@ impl PromptContext {
       host:       None,
       ssh:        false,
       root:       false,
-      last_exit:  None,
-      duration:   None,
       time:       SystemTime::now(),
     }
   }
@@ -84,13 +78,7 @@ impl PromptContext {
   /// Gathers the context. Never blocks on git: the status is computed on a
   /// thread and shows up later in [`PromptContext::git_status`], after which
   /// `wake` is called.
-  pub fn capture(
-    cwd: &Path,
-    env: &[(String, String)],
-    last_exit: Option<i32>,
-    duration: Option<Duration>,
-    wake: Option<Wake>,
-  ) -> PromptContext {
+  pub fn capture(cwd: &Path, env: &[(String, String)], wake: Option<Wake>) -> PromptContext {
     let get = |k: &str| env.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone());
     let mut ctx = PromptContext::bare(cwd);
     ctx.git = git_head(cwd);
@@ -123,8 +111,6 @@ impl PromptContext {
     ctx.ssh = get("SSH_TTY").is_some_and(|v| !v.is_empty());
     // SAFETY: geteuid has no preconditions.
     ctx.root = unsafe { libc::geteuid() } == 0;
-    ctx.last_exit = last_exit;
-    ctx.duration = duration;
     ctx
   }
 
@@ -249,11 +235,10 @@ mod tests {
       ("HOME".to_string(), "/home/me".to_string()),
       ("SSH_TTY".to_string(), "/dev/pts/1".to_string()),
     ];
-    let c = PromptContext::capture(Path::new("/"), &env, Some(2), None, None);
+    let c = PromptContext::capture(Path::new("/"), &env, None);
     assert_eq!(c.venv.as_deref(), Some(".venv-foo"));
     assert_eq!(c.home.as_deref(), Some(Path::new("/home/me")));
     assert!(c.ssh);
-    assert_eq!(c.last_exit, Some(2));
   }
 
   fn commit(repo: &Repository, file: &str, msg: &str) -> git2::Oid {

@@ -2,7 +2,7 @@
 
 use crate::{prompt::PromptContext, zsh::PreparedRun};
 use be_terminal::{Emulator, PtyHost};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct JobId(pub u64);
@@ -25,6 +25,8 @@ pub struct Job {
   pub id:              JobId,
   pub line:            String,
   pub started:         Instant,
+  /// The wall-clock time of `started`.
+  pub started_at:      SystemTime,
   /// Set when the job finishes.
   pub duration:        Option<Duration>,
   pub state:           JobState,

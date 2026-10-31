@@ -1,17 +1,21 @@
-//! The text of the shell prompt, in the style of Zim's `asciiship` theme, and
-//! how a command is wrapped after it. Nothing here touches rendering: the
-//! prompt is a list of styled runs that the view draws in the terminal font.
+//! The elements of the shell prompt, in the style of Zim's `asciiship` theme,
+//! and how a command is wrapped after it. Nothing here touches rendering: the
+//! info line is a list of elements placed on terminal cell columns, which the
+//! view draws as text and rounded "pills".
 //!
 //! The prompt is a blank row, an info line, then a symbol line which the
 //! command is typed after:
 //!
 //! ```text
 //! 
-//! ~/code/proj on main [!] via .venv took 12s
-//! 127 % cargo build
+//! ~/code/proj  main  $!                                   [130 SIGINT] [12s]
+//! % cargo build
 //! ```
+//!
+//! Because the right side shows the result of the block's own command, the
+//! frozen prompt of a block does not depend on the command before it.
 
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 use be_shell::{GitHead, GitStatus, PromptContext, format_duration};
 use be_terminal::BuiltinColor;
@@ -20,9 +24,16 @@ use crate::Color;
 
 use super::terminal_paint::ansi_color;
 
-/// `zstyle ':zim:duration-info' threshold`: durations shorter than this are
-/// not shown.
-const DURATION_THRESHOLD: std::time::Duration = std::time::Duration::from_secs(2);
+/// Columns left empty between two elements.
+const GAP: usize = 1;
+/// Columns kept empty between the left and right sides.
+const SIDE_GAP: usize = 2;
+/// The shortest the working directory is cut to, ellipsis included.
+const MIN_CWD: usize = 2;
+/// Cut-off marker of a long working directory.
+pub const ELLIPSIS: char = '\u{2026}';
+/// Columns the spinner takes.
+const SPINNER_COLS: usize = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PromptColor {
@@ -49,26 +60,61 @@ impl PromptColor {
   }
 }
 
+/// How the command of a prompt is going.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BlockResult {
+  /// The live prompt: nothing has been run.
+  Live,
+  Running,
+  Done {
+    exit:     i32,
+    duration: Duration,
+  },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Side {
+  Left,
+  Right,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+  User,
+  Host,
+  Cwd,
+  Branch,
+  GitFlags,
+  GitAction,
+  Venv,
+  Exit,
+  Duration,
+  Spinner,
+}
+
+impl Kind {
+  /// Whether the element sits on a tinted rounded background.
+  pub fn is_pill(self) -> bool { !matches!(self, Kind::Cwd | Kind::Spinner) }
+}
+
+/// One thing on the info line, `col_len` cells starting at `col_start`.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Run {
-  pub text:  String,
-  pub color: PromptColor,
-  pub bold:  bool,
+pub struct Element {
+  pub kind:      Kind,
+  pub text:      String,
+  pub col_start: usize,
+  pub col_len:   usize,
+  pub color:     PromptColor,
+  /// From this char of `text` on, the text has another color.
+  pub tail:      Option<(usize, PromptColor)>,
+  pub side:      Side,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PromptRows {
-  /// The line above the symbol line.
-  pub info:   Vec<Run>,
-  /// The symbol line, up to where the command starts.
-  pub symbol: Vec<Run>,
+fn element(kind: Kind, text: impl Into<String>, color: PromptColor, side: Side) -> Element {
+  let text = text.into();
+  let col_len = if kind == Kind::Spinner { SPINNER_COLS } else { text.chars().count() };
+  Element { kind, text, col_start: 0, col_len, color, tail: None, side }
 }
-
-fn run(text: impl Into<String>, color: PromptColor, bold: bool) -> Run {
-  Run { text: text.into(), color, bold }
-}
-
-pub fn plain(runs: &[Run]) -> String { runs.iter().map(|r| r.text.as_str()).collect() }
 
 /// `%~`: the working directory, with `$HOME` as `~`.
 fn tilde_path(cwd: &Path, home: Option<&Path>) -> String {
@@ -95,71 +141,168 @@ fn git_flags(status: &GitStatus) -> String {
   .collect()
 }
 
-/// Builds the prompt as `PS1` in `.zshrc` does with asciiship.
-pub fn prompt_rows(ctx: &PromptContext) -> PromptRows {
-  use PromptColor::*;
+/// The name of the signal a shell reports as `128 + n`, for the common ones.
+fn signal_name(exit: i32) -> Option<&'static str> {
+  Some(match exit {
+    129 => "SIGHUP",
+    130 => "SIGINT",
+    131 => "SIGQUIT",
+    134 => "SIGABRT",
+    137 => "SIGKILL",
+    139 => "SIGSEGV",
+    141 => "SIGPIPE",
+    143 => "SIGTERM",
+    _ => return None,
+  })
+}
 
-  let mut info = vec![];
+/// The symbol that starts the line the command is typed on.
+pub fn symbol(ctx: &PromptContext) -> &'static str { if ctx.root { "#" } else { "%" } }
+
+/// The columns of the symbol line before the command: the symbol and a space.
+pub const SYMBOL_COLS: usize = 2;
+
+/// Green, or red for a finished command that failed.
+pub fn symbol_color(result: &BlockResult) -> PromptColor {
+  match result {
+    BlockResult::Done { exit, .. } if *exit != 0 => PromptColor::Red,
+    _ => PromptColor::Green,
+  }
+}
+
+fn left_elements(ctx: &PromptContext) -> Vec<Element> {
+  use Kind::*;
+  use PromptColor::*;
+  use Side::Left;
+
+  let mut out = vec![];
   if let Some(user) = &ctx.user {
     if ctx.root {
-      info.push(run(user, Red, true));
-      info.push(run(" in ", Default, false));
+      out.push(element(User, user, Red, Left));
     } else if ctx.ssh {
-      info.push(run(user, Yellow, true));
-      info.push(run(" in ", Default, false));
+      out.push(element(User, user, Yellow, Left));
     }
   }
   if ctx.ssh
     && let Some(host) = &ctx.host
   {
-    info.push(run(host, Green, true));
-    info.push(run(" in ", Default, false));
+    out.push(element(Host, host, Green, Left));
   }
 
-  info.push(run(tilde_path(&ctx.cwd, ctx.home.as_deref()), Cyan, true));
+  out.push(element(Cwd, tilde_path(&ctx.cwd, ctx.home.as_deref()), Cyan, Left));
 
   if let Some(head) = &ctx.git {
-    info.push(run(" on ", Default, false));
     match head {
-      GitHead::Branch(name) => info.push(run(name, Magenta, true)),
+      GitHead::Branch(name) => out.push(element(Branch, name, Magenta, Left)),
       GitHead::Detached(sha) => {
-        info.push(run("HEAD ", Magenta, true));
-        info.push(run(format!("({sha})"), Green, true));
+        let mut e = element(Branch, format!("HEAD {sha}"), Magenta, Left);
+        e.tail = Some((5, Green));
+        out.push(e);
       }
     }
+    // The status shows up later; it only adds elements after the branch.
     if let Some(status) = ctx.git_status() {
-      if let Some(action) = &status.action {
-        info.push(run(format!(" ({action})"), Yellow, true));
-      }
       let flags = git_flags(status);
       if !flags.is_empty() {
-        info.push(run(format!(" [{flags}]"), Red, true));
+        out.push(element(GitFlags, flags, Red, Left));
+      }
+      if let Some(action) = &status.action {
+        out.push(element(GitAction, action, Yellow, Left));
       }
     }
   }
 
   if let Some(venv) = &ctx.venv {
-    info.push(run(" via ", Default, false));
-    info.push(run(venv, Yellow, true));
+    out.push(element(Venv, venv, Yellow, Left));
+  }
+  out
+}
+
+/// What the right side shows, in order from left to right. Elements are
+/// dropped from the end when there is no room, so the one dropped first
+/// (the duration) comes first.
+fn right_elements(result: &BlockResult) -> Vec<Element> {
+  use PromptColor::*;
+  use Side::Right;
+
+  let mut out = vec![];
+  match result {
+    BlockResult::Live => {}
+    BlockResult::Running => out.push(element(Kind::Spinner, "", Default, Right)),
+    BlockResult::Done { exit, duration } => {
+      if let Some(text) = format_duration(*duration) {
+        out.push(element(Kind::Duration, text, Yellow, Right));
+      }
+      if *exit != 0 {
+        let text = match signal_name(*exit) {
+          Some(name) => format!("{exit} {name}"),
+          None => exit.to_string(),
+        };
+        out.push(element(Kind::Exit, text, Red, Right));
+      }
+    }
+  }
+  out
+}
+
+fn side_width(elements: &[Element]) -> usize {
+  elements.iter().map(|e| e.col_len).sum::<usize>() + GAP * elements.len().saturating_sub(1)
+}
+
+/// The last `max` chars of `text`, starting with an ellipsis if it was cut.
+fn truncate_start(text: &str, max: usize) -> String {
+  let count = text.chars().count();
+  if count <= max {
+    return text.to_string();
+  }
+  let keep = max.saturating_sub(1);
+  std::iter::once(ELLIPSIS).chain(text.chars().skip(count - keep)).collect()
+}
+
+/// The elements of the info line of a prompt in a terminal `cols` wide.
+///
+/// The left side is the working directory and what is known about the
+/// environment, in order, with a gap of one column between elements; it never
+/// moves when more is learned (git status only adds elements at its end). The
+/// right side is the result of the block, right-aligned. When the two don't
+/// fit, the duration is dropped first, then the exit code, and then the
+/// working directory is cut short from the left. Nothing ever overlaps.
+pub fn prompt_elements(ctx: &PromptContext, result: &BlockResult, cols: usize) -> Vec<Element> {
+  let mut left = left_elements(ctx);
+  let mut right = right_elements(result);
+
+  // Drop the right side, last element (exit code or spinner) last.
+  while !right.is_empty() && side_width(&left) + SIDE_GAP + side_width(&right) > cols {
+    right.remove(0);
   }
 
-  if let Some(duration) = ctx.duration.filter(|d| *d >= DURATION_THRESHOLD)
-    && let Some(text) = format_duration(duration)
-  {
-    info.push(run(" took ", Default, false));
-    info.push(run(text, Yellow, true));
+  if right.is_empty() && side_width(&left) > cols {
+    // Everything but the directory, including the gap next to it.
+    let cwd_len = left.iter().find(|e| e.kind == Kind::Cwd).map_or(0, |e| e.col_len);
+    let others = side_width(&left) - cwd_len;
+    let room = cols.saturating_sub(others).max(MIN_CWD);
+    if let Some(cwd) = left.iter_mut().find(|e| e.kind == Kind::Cwd) {
+      cwd.text = truncate_start(&cwd.text, room);
+      cwd.col_len = cwd.text.chars().count();
+    }
+    // Still too much (a very narrow pane): drop what follows the directory.
+    while side_width(&left) > cols && left.last().is_some_and(|e| e.kind != Kind::Cwd) {
+      left.pop();
+    }
   }
 
-  let status = ctx.last_exit.unwrap_or(0);
-  let mut symbol = vec![];
-  if status != 0 {
-    symbol.push(run(format!("{status} "), Red, true));
+  let mut col = 0;
+  for e in &mut left {
+    e.col_start = col;
+    col += e.col_len + GAP;
   }
-  let color = if status == 0 { Green } else { Red };
-  symbol.push(run(if ctx.root { "#" } else { "%" }, color, true));
-  symbol.push(run(" ", Default, false));
-
-  PromptRows { info, symbol }
+  let mut end = cols;
+  for e in right.iter_mut().rev() {
+    e.col_start = end.saturating_sub(e.col_len);
+    end = e.col_start.saturating_sub(GAP);
+  }
+  left.extend(right);
+  left
 }
 
 /// Where each character of a command goes when it is typed after a prompt
@@ -216,7 +359,7 @@ impl Wrapped {
 
 #[cfg(test)]
 mod tests {
-  use std::{path::PathBuf, process::Command, time::Duration};
+  use std::path::PathBuf;
 
   use expect_test::{Expect, expect};
 
@@ -239,62 +382,68 @@ mod tests {
 
   fn branch(name: &str) -> GitHead { GitHead::Branch(name.into()) }
 
-  /// Plain text on two lines, then the runs with their colors: `{cyan,b|text}`
-  /// is bold cyan, and unstyled text is bare.
-  fn show(c: &PromptContext) -> String {
-    let rows = prompt_rows(c);
-    let fmt = |runs: &[Run]| {
-      runs
-        .iter()
-        .map(|r| match (r.color, r.bold) {
-          (PromptColor::Default, false) => r.text.clone(),
-          (color, bold) => {
-            let color = format!("{color:?}").to_lowercase();
-            format!("{{{color}{}|{}}}", if bold { ",b" } else { "" }, r.text)
-          }
-        })
-        .collect::<String>()
-    };
-    // Quotes and `$` show where lines end, as trailing spaces matter.
-    format!(
-      "'{}'\n'{}'\n{}$\n{}$",
-      plain(&rows.info),
-      plain(&rows.symbol),
-      fmt(&rows.info),
-      fmt(&rows.symbol)
-    )
+  fn done(exit: i32, ms: u64) -> BlockResult {
+    BlockResult::Done { exit, duration: Duration::from_millis(ms) }
   }
 
-  fn check(c: &PromptContext, expect: Expect) { expect.assert_eq(&show(c)); }
+  /// The row as it would be laid out on the cells, then one line per element:
+  /// `kind side col_start+col_len color 'text'`.
+  fn show(c: &PromptContext, result: BlockResult, cols: usize) -> String {
+    let elements = prompt_elements(c, &result, cols);
+    let mut row = vec![' '; cols];
+    let mut lines = vec![];
+    for e in &elements {
+      assert!(e.col_start + e.col_len <= cols, "{e:?} overflows {cols}");
+      for (i, ch) in e.text.chars().enumerate() {
+        row[e.col_start + i] = ch;
+      }
+      let tail = e.tail.map(|(i, c)| format!(" tail {i}:{c:?}")).unwrap_or_default();
+      lines.push(format!(
+        "{:?} {:?} {}+{} {:?} {:?}{tail}",
+        e.kind, e.side, e.col_start, e.col_len, e.color, e.text
+      ));
+    }
+    for pair in elements.windows(2) {
+      let (a, b) = (&pair[0], &pair[1]);
+      let gap = if a.side == b.side { GAP } else { SIDE_GAP };
+      assert!(a.col_start + a.col_len + gap <= b.col_start, "{a:?} touches {b:?}");
+    }
+    let row: String = row.into_iter().collect();
+    format!("|{row}|\n{}", lines.join("\n")).replace(ELLIPSIS, "^")
+  }
+
+  fn check(c: &PromptContext, result: BlockResult, cols: usize, expect: Expect) {
+    expect.assert_eq(&show(c, result, cols));
+  }
 
   #[test]
   fn directories() {
     check(
       &ctx("/etc/nginx"),
+      BlockResult::Live,
+      30,
       expect![@r#"
-        '/etc/nginx'
-        '% '
-        {cyan,b|/etc/nginx}$
-        {green,b|%} $"#],
+      |/etc/nginx                    |
+      Cwd Left 0+10 Cyan "/etc/nginx""#],
     );
     check(
       &ctx("/home/me"),
+      BlockResult::Live,
+      30,
       expect![@r#"
-        '~'
-        '% '
-        {cyan,b|~}$
-        {green,b|%} $"#],
+      |~                             |
+      Cwd Left 0+1 Cyan "~""#],
     );
     check(
       &ctx("/home/me/x"),
+      BlockResult::Live,
+      30,
       expect![@r#"
-        '~/x'
-        '% '
-        {cyan,b|~/x}$
-        {green,b|%} $"#],
+      |~/x                           |
+      Cwd Left 0+3 Cyan "~/x""#],
     );
     // A sibling that merely shares the prefix is not under home.
-    assert_eq!(plain(&prompt_rows(&ctx("/home/media")).info), "/home/media");
+    assert_eq!(tilde_path(Path::new("/home/media"), Some(Path::new("/home/me"))), "/home/media");
   }
 
   #[test]
@@ -302,47 +451,105 @@ mod tests {
     let s = GitStatus::default;
     check(
       &ctx_git("/w", branch("main"), s()),
+      BlockResult::Live,
+      30,
       expect![@r#"
-        '/w on main'
-        '% '
-        {cyan,b|/w} on {magenta,b|main}$
-        {green,b|%} $"#],
+      |/w main                       |
+      Cwd Left 0+2 Cyan "/w"
+      Branch Left 3+4 Magenta "main""#],
+    );
+    // The status has not been computed yet.
+    let mut c = ctx("/w");
+    c.git = Some(branch("main"));
+    check(
+      &c,
+      BlockResult::Live,
+      30,
+      expect![@r#"
+      |/w main                       |
+      Cwd Left 0+2 Cyan "/w"
+      Branch Left 3+4 Magenta "main""#],
+    );
+
+    check(
+      &ctx_git("/w", branch("dev"), GitStatus { stashed: true, ..s() }),
+      BlockResult::Live,
+      30,
+      expect![@r#"
+        |/w dev $                      |
+        Cwd Left 0+2 Cyan "/w"
+        Branch Left 3+3 Magenta "dev"
+        GitFlags Left 7+1 Red "$""#],
     );
     check(
-      &ctx_git("/w", branch("main"), GitStatus { unindexed: true, ..s() }),
+      &ctx_git("/w", branch("dev"), GitStatus { unindexed: true, ..s() }),
+      BlockResult::Live,
+      30,
       expect![@r#"
-        '/w on main [!]'
-        '% '
-        {cyan,b|/w} on {magenta,b|main}{red,b| [!]}$
-        {green,b|%} $"#],
+        |/w dev !                      |
+        Cwd Left 0+2 Cyan "/w"
+        Branch Left 3+3 Magenta "dev"
+        GitFlags Left 7+1 Red "!""#],
+    );
+    check(
+      &ctx_git("/w", branch("dev"), GitStatus { indexed: true, ..s() }),
+      BlockResult::Live,
+      30,
+      expect![@r#"
+        |/w dev +                      |
+        Cwd Left 0+2 Cyan "/w"
+        Branch Left 3+3 Magenta "dev"
+        GitFlags Left 7+1 Red "+""#],
+    );
+    check(
+      &ctx_git("/w", branch("dev"), GitStatus { ahead: true, ..s() }),
+      BlockResult::Live,
+      30,
+      expect![@r#"
+        |/w dev >                      |
+        Cwd Left 0+2 Cyan "/w"
+        Branch Left 3+3 Magenta "dev"
+        GitFlags Left 7+1 Red ">""#],
+    );
+    check(
+      &ctx_git("/w", branch("dev"), GitStatus { behind: true, ..s() }),
+      BlockResult::Live,
+      30,
+      expect![@r#"
+        |/w dev <                      |
+        Cwd Left 0+2 Cyan "/w"
+        Branch Left 3+3 Magenta "dev"
+        GitFlags Left 7+1 Red "<""#],
     );
     check(
       &ctx_git(
         "/w",
         branch("main"),
-        GitStatus { stashed: true, unindexed: true, indexed: true, ahead: true, ..s() },
+        GitStatus {
+          stashed:   true,
+          unindexed: true,
+          indexed:   true,
+          ahead:     true,
+          behind:    true,
+          action:    None,
+        },
       ),
+      BlockResult::Live,
+      30,
       expect![@r#"
-        '/w on main [$!+>]'
-        '% '
-        {cyan,b|/w} on {magenta,b|main}{red,b| [$!+>]}$
-        {green,b|%} $"#],
-    );
-    check(
-      &ctx_git("/w", branch("dev"), GitStatus { behind: true, ..s() }),
-      expect![@r#"
-        '/w on dev [<]'
-        '% '
-        {cyan,b|/w} on {magenta,b|dev}{red,b| [<]}$
-        {green,b|%} $"#],
+        |/w main $!+><                 |
+        Cwd Left 0+2 Cyan "/w"
+        Branch Left 3+4 Magenta "main"
+        GitFlags Left 8+5 Red "$!+><""#],
     );
     check(
       &ctx_git("/w", GitHead::Detached("abc1234".into()), s()),
+      BlockResult::Live,
+      30,
       expect![@r#"
-        '/w on HEAD (abc1234)'
-        '% '
-        {cyan,b|/w} on {magenta,b|HEAD }{green,b|(abc1234)}$
-        {green,b|%} $"#],
+        |/w HEAD abc1234               |
+        Cwd Left 0+2 Cyan "/w"
+        Branch Left 3+12 Magenta "HEAD abc1234" tail 5:Green"#],
     );
     check(
       &ctx_git(
@@ -350,19 +557,27 @@ mod tests {
         branch("topic"),
         GitStatus { action: Some("REBASE-I".into()), indexed: true, ..s() },
       ),
+      BlockResult::Live,
+      40,
       expect![@r#"
-        '/w on topic (REBASE-I) [+]'
-        '% '
-        {cyan,b|/w} on {magenta,b|topic}{yellow,b| (REBASE-I)}{red,b| [+]}$
-        {green,b|%} $"#],
+        |/w topic + REBASE-I                     |
+        Cwd Left 0+2 Cyan "/w"
+        Branch Left 3+5 Magenta "topic"
+        GitFlags Left 9+1 Red "+"
+        GitAction Left 11+8 Yellow "REBASE-I""#],
     );
   }
 
   #[test]
-  fn git_status_not_computed_yet() {
-    let mut c = ctx("/w");
-    c.git = Some(branch("main"));
-    assert_eq!(plain(&prompt_rows(&c).info), "/w on main");
+  fn git_status_arriving_does_not_shift_anything() {
+    let mut before = ctx("/w");
+    before.git = Some(branch("main"));
+    let after =
+      ctx_git("/w", branch("main"), GitStatus { unindexed: true, ..GitStatus::default() });
+    let a = prompt_elements(&before, &BlockResult::Live, 40);
+    let b = prompt_elements(&after, &BlockResult::Live, 40);
+    assert_eq!(a[..], b[..a.len()]);
+    assert_eq!(b.len(), a.len() + 1);
   }
 
   #[test]
@@ -371,11 +586,12 @@ mod tests {
     c.venv = Some(".venv".into());
     check(
       &c,
+      BlockResult::Live,
+      30,
       expect![@r#"
-        '/w via .venv'
-        '% '
-        {cyan,b|/w} via {yellow,b|.venv}$
-        {green,b|%} $"#],
+      |/w .venv                      |
+      Cwd Left 0+2 Cyan "/w"
+      Venv Left 3+5 Yellow ".venv""#],
     );
 
     let mut c = ctx("/root");
@@ -383,52 +599,216 @@ mod tests {
     c.user = Some("root".into());
     check(
       &c,
+      BlockResult::Live,
+      30,
       expect![@r#"
-        'root in /root'
-        '# '
-        {red,b|root} in {cyan,b|/root}$
-        {green,b|#} $"#],
+      |root /root                    |
+      User Left 0+4 Red "root"
+      Cwd Left 5+5 Cyan "/root""#],
     );
+    assert_eq!(symbol(&c), "#");
 
     let mut c = ctx("/w");
     c.ssh = true;
     check(
       &c,
+      BlockResult::Live,
+      30,
       expect![@r#"
-        'me in box in /w'
-        '% '
-        {yellow,b|me} in {green,b|box} in {cyan,b|/w}$
-        {green,b|%} $"#],
+      |me box /w                     |
+      User Left 0+2 Yellow "me"
+      Host Left 3+3 Green "box"
+      Cwd Left 7+2 Cyan "/w""#],
     );
   }
 
   #[test]
-  fn exit_status_and_duration() {
-    let mut c = ctx("/w");
-    c.last_exit = Some(127);
+  fn results() {
+    let c = ctx_git("/w", branch("main"), GitStatus::default());
     check(
       &c,
+      done(0, 100),
+      40,
       expect![@r#"
-        '/w'
-        '127 % '
-        {cyan,b|/w}$
-        {red,b|127 }{red,b|%} $"#],
+      |/w main                                 |
+      Cwd Left 0+2 Cyan "/w"
+      Branch Left 3+4 Magenta "main""#],
+    );
+    check(
+      &c,
+      done(1, 100),
+      40,
+      expect![@r#"
+      |/w main                                1|
+      Cwd Left 0+2 Cyan "/w"
+      Branch Left 3+4 Magenta "main"
+      Exit Right 39+1 Red "1""#],
+    );
+    check(
+      &c,
+      done(130, 100),
+      40,
+      expect![@r#"
+      |/w main                       130 SIGINT|
+      Cwd Left 0+2 Cyan "/w"
+      Branch Left 3+4 Magenta "main"
+      Exit Right 30+10 Red "130 SIGINT""#],
+    );
+    check(
+      &c,
+      done(0, 499),
+      40,
+      expect![@r#"
+      |/w main                                 |
+      Cwd Left 0+2 Cyan "/w"
+      Branch Left 3+4 Magenta "main""#],
+    );
+    check(
+      &c,
+      done(0, 40_000),
+      40,
+      expect![@r#"
+      |/w main                              40s|
+      Cwd Left 0+2 Cyan "/w"
+      Branch Left 3+4 Magenta "main"
+      Duration Right 37+3 Yellow "40s""#],
+    );
+    check(
+      &c,
+      done(2, 65_000),
+      40,
+      expect![@r#"
+      |/w main                           1m5s 2|
+      Cwd Left 0+2 Cyan "/w"
+      Branch Left 3+4 Magenta "main"
+      Duration Right 34+4 Yellow "1m5s"
+      Exit Right 39+1 Red "2""#],
+    );
+    check(
+      &c,
+      done(0, 7_385_000),
+      40,
+      expect![@r#"
+      |/w main                             2h3m|
+      Cwd Left 0+2 Cyan "/w"
+      Branch Left 3+4 Magenta "main"
+      Duration Right 36+4 Yellow "2h3m""#],
+    );
+    check(
+      &c,
+      BlockResult::Running,
+      40,
+      expect![@r#"
+      |/w main                                 |
+      Cwd Left 0+2 Cyan "/w"
+      Branch Left 3+4 Magenta "main"
+      Spinner Right 38+2 Default """#],
     );
 
-    c.last_exit = Some(0);
-    c.duration = Some(Duration::from_millis(1900));
-    assert_eq!(plain(&prompt_rows(&c).info), "/w");
-    c.duration = Some(Duration::from_millis(2000));
+    assert_eq!(symbol_color(&BlockResult::Live), PromptColor::Green);
+    assert_eq!(symbol_color(&BlockResult::Running), PromptColor::Green);
+    assert_eq!(symbol_color(&done(0, 0)), PromptColor::Green);
+    assert_eq!(symbol_color(&done(1, 0)), PromptColor::Red);
+  }
+
+  #[test]
+  fn narrow_panes_drop_then_truncate() {
+    let c = ctx_git("/home/me/code/project", branch("main"), GitStatus::default());
+    // Everything fits.
     check(
       &c,
+      done(1, 12_000),
+      40,
       expect![@r#"
-        '/w took 2s'
-        '% '
-        {cyan,b|/w} took {yellow,b|2s}$
-        {green,b|%} $"#],
+      |~/code/project main                12s 1|
+      Cwd Left 0+14 Cyan "~/code/project"
+      Branch Left 15+4 Magenta "main"
+      Duration Right 35+3 Yellow "12s"
+      Exit Right 39+1 Red "1""#],
     );
-    c.duration = Some(Duration::from_millis(65_400));
-    assert_eq!(plain(&prompt_rows(&c).info), "/w took 1m5s");
+    // Not the duration.
+    check(
+      &c,
+      done(1, 12_000),
+      34,
+      expect![@r#"
+      |~/code/project main          12s 1|
+      Cwd Left 0+14 Cyan "~/code/project"
+      Branch Left 15+4 Magenta "main"
+      Duration Right 29+3 Yellow "12s"
+      Exit Right 33+1 Red "1""#],
+    );
+    // Not the exit code either: the directory is cut.
+    check(
+      &c,
+      done(1, 12_000),
+      24,
+      expect![@r#"
+      |~/code/project main    1|
+      Cwd Left 0+14 Cyan "~/code/project"
+      Branch Left 15+4 Magenta "main"
+      Exit Right 23+1 Red "1""#],
+    );
+    check(
+      &c,
+      done(1, 12_000),
+      15,
+      expect![@r#"
+      |^e/project main|
+      Cwd Left 0+10 Cyan "^e/project"
+      Branch Left 11+4 Magenta "main""#],
+    );
+    check(
+      &c,
+      BlockResult::Running,
+      15,
+      expect![@r#"
+      |^e/project main|
+      Cwd Left 0+10 Cyan "^e/project"
+      Branch Left 11+4 Magenta "main""#],
+    );
+    // Very narrow.
+    check(
+      &c,
+      done(1, 12_000),
+      8,
+      expect![@r#"
+      |^ct main|
+      Cwd Left 0+3 Cyan "^ct"
+      Branch Left 4+4 Magenta "main""#],
+    );
+    check(
+      &c,
+      done(1, 12_000),
+      4,
+      expect![@r#"
+      |^t  |
+      Cwd Left 0+2 Cyan "^t""#],
+    );
+  }
+
+  #[test]
+  fn very_long_directory() {
+    let long = format!("/home/me/{}", "deep/".repeat(30));
+    let c = ctx_git(&long, branch("main"), GitStatus::default());
+    check(
+      &c,
+      BlockResult::Live,
+      50,
+      expect![@r#"
+      |^deep/deep/deep/deep/deep/deep/deep/deep/deep main|
+      Cwd Left 0+45 Cyan "^deep/deep/deep/deep/deep/deep/deep/deep/deep"
+      Branch Left 46+4 Magenta "main""#],
+    );
+    check(
+      &c,
+      done(0, 3000),
+      50,
+      expect![@r#"
+      |^deep/deep/deep/deep/deep/deep/deep/deep/deep main|
+      Cwd Left 0+45 Cyan "^deep/deep/deep/deep/deep/deep/deep/deep/deep"
+      Branch Left 46+4 Magenta "main""#],
+    );
   }
 
   #[test]
@@ -453,235 +833,5 @@ mod tests {
     let w = Wrapped::new(2, "", 80);
     assert_eq!(w.height(), 1);
     assert_eq!(w.cursor(0), (0, 2));
-  }
-
-  // Compares the plain text with what zsh itself prints for the asciiship PS1
-  // (without the nested-shell and background-job pieces, which we don't
-  // show). Skipped when zsh isn't installed.
-  fn zsh_expand(
-    pwd: &str,
-    home: &str,
-    status: i32,
-    venv: &str,
-    ssh: bool,
-    git_prompt: &str,
-    duration_info: &str,
-  ) -> Option<String> {
-    let script = r#"
-      setopt promptsubst
-      cd -- $CASE_PWD
-      typeset -gA git_info
-      git_info[prompt]=$GIT_PROMPT
-      duration_info=$DURATION_INFO
-      PS1='
-%(!.%B%F{red}%n%f%b in .${SSH_TTY:+"%B%F{yellow}%n%f%b in "})${SSH_TTY:+"%B%F{green}%m%f%b in "}%B%F{cyan}%~%f%b${(e)git_info[prompt]}${VIRTUAL_ENV:+" via %B%F{yellow}${VIRTUAL_ENV:t}%f%b"}${duration_info}
-%B%(?.%F{green}.%F{red}%? )%#%f%b '
-      (exit $STATUS)
-      print -rP -- "$PS1"
-    "#;
-    let mut cmd = Command::new("zsh");
-    cmd
-      .args(["-f", "-c", script])
-      .env("HOME", home)
-      .env("CASE_PWD", pwd)
-      .env("STATUS", status.to_string());
-    cmd.env("GIT_PROMPT", git_prompt).env("DURATION_INFO", duration_info);
-    cmd.env_remove("VIRTUAL_ENV").env_remove("SSH_TTY");
-    if !venv.is_empty() {
-      cmd.env("VIRTUAL_ENV", venv);
-    }
-    if ssh {
-      cmd.env("SSH_TTY", "/dev/pts/0");
-    }
-    let out = cmd.output().ok()?;
-    if !out.status.success() {
-      return None;
-    }
-    let text = String::from_utf8(out.stdout).ok()?;
-
-    // Strip color escapes.
-    let mut plain = String::new();
-    let mut chars = text.chars().peekable();
-    while let Some(c) = chars.next() {
-      if c == '\u{1b}' {
-        for c in chars.by_ref() {
-          if c.is_ascii_alphabetic() {
-            break;
-          }
-        }
-      } else {
-        plain.push(c);
-      }
-    }
-    Some(plain.strip_suffix('\n').unwrap_or(&plain).to_string())
-  }
-
-  #[test]
-  fn matches_zsh() {
-    let Some(me) = zsh_user_and_host() else {
-      eprintln!("skipping: zsh is not available");
-      return;
-    };
-
-    struct Case {
-      cwd:      &'static str,
-      status:   i32,
-      venv:     &'static str,
-      ssh:      bool,
-      git:      Option<(GitHead, GitStatus)>,
-      duration: Option<u64>,
-    }
-    // Real directories, as zsh needs to be in them.
-    let base = std::env::temp_dir().join(format!("be-prompt-zsh-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    std::fs::create_dir_all(base.join("home/x/y")).unwrap();
-    std::fs::create_dir_all(base.join("w")).unwrap();
-    let home = base.join("home");
-    let cases = [
-      Case {
-        cwd:      "/etc",
-        status:   0,
-        venv:     "",
-        ssh:      false,
-        git:      None,
-        duration: None,
-      },
-      Case {
-        cwd:      "home",
-        status:   0,
-        venv:     "",
-        ssh:      false,
-        git:      None,
-        duration: None,
-      },
-      Case {
-        cwd:      "home/x/y",
-        status:   127,
-        venv:     "",
-        ssh:      false,
-        git:      None,
-        duration: None,
-      },
-      Case {
-        cwd:      "w",
-        status:   0,
-        venv:     "/p/.venv",
-        ssh:      true,
-        git:      None,
-        duration: Some(3),
-      },
-      Case {
-        cwd:      "w",
-        status:   2,
-        venv:     "",
-        ssh:      false,
-        git:      None,
-        duration: Some(65),
-      },
-      Case {
-        cwd:      "w",
-        status:   0,
-        venv:     "",
-        ssh:      false,
-        git:      Some((branch("main"), GitStatus::default())),
-        duration: None,
-      },
-      Case {
-        cwd:      "w",
-        status:   1,
-        venv:     "",
-        ssh:      false,
-        git:      Some((
-          branch("topic"),
-          GitStatus {
-            action:    Some("REBASE".into()),
-            stashed:   true,
-            unindexed: true,
-            indexed:   true,
-            ahead:     true,
-            behind:    true,
-          },
-        )),
-        duration: Some(7384),
-      },
-      Case {
-        cwd:      "w",
-        status:   0,
-        venv:     "",
-        ssh:      false,
-        git:      Some((GitHead::Detached("abc1234".into()), GitStatus::default())),
-        duration: None,
-      },
-    ];
-
-    for case in cases {
-      // The git and duration segments exactly as asciiship's zstyles build
-      // them, with the prompt escapes left for print -P.
-      let git_prompt = match &case.git {
-        None => String::new(),
-        Some((head, status)) => {
-          let mut s = String::from(" on %B%F{magenta}");
-          match head {
-            GitHead::Branch(b) => s.push_str(b),
-            GitHead::Detached(c) => s.push_str(&format!("HEAD %F{{green}}({c})")),
-          }
-          if let Some(a) = &status.action {
-            s.push_str(&format!(" %F{{yellow}}({a})"));
-          }
-          let flags = git_flags(status);
-          if !flags.is_empty() {
-            s.push_str(&format!(" %F{{red}}[{}]", flags.replace('$', "\\$")));
-          }
-          s.push_str("%f%b");
-          s
-        }
-      };
-      let dur = case.duration.map(Duration::from_secs);
-      let dur_info = match dur.filter(|d| *d >= DURATION_THRESHOLD).and_then(format_duration) {
-        Some(d) => format!(" took %B%F{{yellow}}{d}%f%b"),
-        None => String::new(),
-      };
-
-      let cwd = base.join(case.cwd);
-      let cwd = cwd.to_str().unwrap();
-      let want = zsh_expand(
-        cwd,
-        home.to_str().unwrap(),
-        case.status,
-        case.venv,
-        case.ssh,
-        &git_prompt,
-        &dur_info,
-      );
-      let Some(want) = want else {
-        eprintln!("skipping: zsh failed");
-        return;
-      };
-
-      let mut c = ctx(cwd);
-      c.home = Some(home.clone());
-      c.user = Some(me.0.clone());
-      c.host = Some(me.1.clone());
-      c.ssh = case.ssh;
-      c.venv = Path::new(case.venv).file_name().map(|n| n.to_string_lossy().into_owned());
-      c.last_exit = Some(case.status);
-      c.duration = dur;
-      if let Some((head, status)) = case.git {
-        c.git = Some(head);
-        c.set_git_status(status);
-      }
-      let rows = prompt_rows(&c);
-      let got = format!("\n{}\n{}", plain(&rows.info), plain(&rows.symbol));
-      assert_eq!(got, want, "case {}", case.cwd);
-    }
-    let _ = std::fs::remove_dir_all(&base);
-    {}
-  }
-
-  fn zsh_user_and_host() -> Option<(String, String)> {
-    let out = Command::new("zsh").args(["-f", "-c", "print -P '%n %m'"]).output().ok()?;
-    let text = String::from_utf8(out.stdout).ok()?;
-    let mut parts = text.split_whitespace();
-    Some((parts.next()?.to_string(), parts.next()?.to_string()))
   }
 }

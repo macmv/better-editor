@@ -30,22 +30,25 @@ use be_input::{Action, Clipboard, Direction, Edit, KeyStroke, Mode, Move};
 use be_shared::SharedHandle;
 use be_shell::{
   GitHead, Job, JobId, JobState, PromptContext, Shell, ShellEvent, SubmitResult, UiCommand,
-  format_duration,
+  format_duration, format_local_time,
 };
 use be_terminal::{Arrow, InputModes, Position, keys};
 use kurbo::{Point, Rect, RoundedRect, Size, Stroke};
 
 use super::{
   shell_input::{HistoryNav, InputLine},
-  shell_layout::{
-    BlockKind, Blocks, Item, PROMPT_KEY, ScrollState, format_ago, header_command, stack,
+  shell_layout::{BlockKind, Blocks, Item, PROMPT_KEY, ScrollState, header_command, stack},
+  shell_prompt::{
+    BlockResult, Element, Kind, SYMBOL_COLS, Wrapped, prompt_elements, symbol, symbol_color,
   },
-  shell_prompt::{PromptRows, Run, Wrapped, plain, prompt_rows},
   terminal_paint::{
     CursorDraw, DrawOptions, Span, TerminalPainter, character_size, grid_size, styled_line,
   },
 };
-use crate::{Color, Font, Layout, MouseButton, MouseEvent, Render, RenderStore, TextLayout, icon};
+use crate::{
+  Color, Font, Layout, MouseButton, MouseEvent, Render, RenderStore, TextLayout, icon,
+  spinner::Spinner,
+};
 
 /// Padding to the right of the text.
 const PAD_X: f64 = 8.0;
@@ -53,6 +56,14 @@ const PAD_X: f64 = 8.0;
 const GUTTER_CELLS: f64 = 1.5;
 /// Vertical padding inside the tooltip.
 const TIP_PAD_Y: f64 = 4.0;
+/// How far a pill reaches past the cells of its text, in cells. This is under
+/// half a cell so that pills one cell apart never touch, and it only adds
+/// room around the text: it never moves a cell.
+const PILL_PAD_X: f64 = 0.35;
+/// The space above and below a pill inside its row, in pixels.
+const PILL_INSET_Y: f64 = 2.0;
+/// How opaque the tinted background of a pill is.
+const PILL_ALPHA: f32 = 0.18;
 /// Lines of `history` shown.
 const HISTORY_LINES: usize = 20;
 
@@ -95,6 +106,8 @@ pub struct ShellView {
   mouse_pos: Option<Point>,
   drag:      Option<Selection>,
   selection: Option<Selection>,
+
+  spinner: Spinner,
 }
 
 /// What `layout` measured, for `draw` and the mouse.
@@ -273,6 +286,14 @@ fn output_rows(job: &Job) -> usize {
   rows
 }
 
+/// How a job's prompt shows its outcome.
+fn job_result(job: &Job) -> BlockResult {
+  match job.state {
+    JobState::Running => BlockResult::Running,
+    JobState::Done { exit } => BlockResult::Done { exit, duration: job.elapsed() },
+  }
+}
+
 fn ui_text(render: &mut Render, text: &str, color: Color) -> TextLayout {
   render.layout_text(Font::Ui, text, color)
 }
@@ -302,8 +323,13 @@ impl ShellView {
       mouse_pos: None,
       drag: None,
       selection: None,
+      spinner: Spinner::new(),
     })
   }
+
+  /// Whether something is spinning, so the view must keep redrawing. Only a
+  /// running job spins.
+  pub fn animated(&self) -> bool { self.running().is_some() }
 
   pub fn mode(&self) -> Mode {
     if self.running().is_some() || self.mode == ShellMode::Input {
@@ -738,7 +764,7 @@ impl ShellView {
       let (output_rows, header, height) = match &block.kind {
         BlockKind::Job(id) => match self.shell.job(*id) {
           Some(job) => {
-            let header = header_rows_for(&job.context, &job.line, grid.cols);
+            let header = header_rows_for(&job.line, grid.cols);
             let rows = output_rows(job);
             // A collapsed block keeps one row for its `+N lines` hint.
             let shown = if block.collapsed { rows.min(1) } else { rows };
@@ -755,7 +781,7 @@ impl ShellView {
     let prompt_height = if self.running().is_some() {
       0.0
     } else {
-      header_rows_for(&self.prompt, self.input.text(), grid.cols) as f64 * char_size.height
+      header_rows_for(self.input.text(), grid.cols) as f64 * char_size.height
     };
     heights.push((PROMPT_KEY, prompt_height));
 
@@ -808,7 +834,7 @@ impl ShellView {
           let over = hover.is_some_and(|(j, _)| j == i);
           let over_header = hover.is_some_and(|(j, rel)| j == i && self.in_header(i, rel));
 
-          self.draw_prompt(render, y, &job.context, &job.line, None);
+          self.draw_prompt(render, y, &job.context, &job.line, job_result(job), None);
           let hot = focused || over;
           self.draw_chevron(render, y, block.collapsed, hot);
           if over_header {
@@ -854,6 +880,7 @@ impl ShellView {
         prompt.top - offset,
         &self.prompt,
         self.input.text(),
+        BlockResult::Live,
         Some((self.input.cursor(), focused)),
       );
     }
@@ -898,21 +925,29 @@ impl ShellView {
     y: f64,
     ctx: &PromptContext,
     command: &str,
+    result: BlockResult,
     cursor: Option<(usize, bool)>,
   ) {
     let ch = self.geom.char_size;
     let x = self.geom.text_left;
-    let rows = prompt_rows(ctx);
 
-    let info = styled_line(render, &spans(&rows.info));
-    let right = render.size().width - PAD_X;
-    render.clipped(Rect::new(x, y + ch.height, right, y + 2.0 * ch.height), |render| {
-      render.draw_text(&info, (x, y + ch.height));
+    let info_y = y + ch.height;
+    let width = render.size().width;
+    let elements = prompt_elements(ctx, &result, self.geom.cols);
+    render.clipped(Rect::new(0.0, info_y, width, info_y + ch.height), |render| {
+      for e in &elements {
+        self.draw_element(render, e, info_y);
+      }
     });
 
-    let wrapped = Wrapped::new(prefix_cols(&rows), command, self.geom.cols);
+    let sym = symbol(ctx);
+    let wrapped = Wrapped::new(SYMBOL_COLS, command, self.geom.cols);
     for (i, text) in wrapped.rows.iter().enumerate() {
-      let mut line = if i == 0 { spans(&rows.symbol) } else { vec![] };
+      let mut line = vec![];
+      if i == 0 {
+        line.push(Span { text: sym, color: symbol_color(&result).color(), bold: true });
+        line.push(Span { text: " ", color: None, bold: false });
+      }
       line.push(Span { text, color: None, bold: false });
       let layout = styled_line(render, &line);
       render.draw_text(&layout, (x, y + (2 + i) as f64 * ch.height));
@@ -941,6 +976,43 @@ impl ShellView {
     }
   }
 
+  /// Draws one element of the info line, whose row starts at `y`. The text
+  /// sits exactly on its cells; a pill's background reaches a little past
+  /// them, into the gap to its neighbours.
+  fn draw_element(&self, render: &mut Render, e: &Element, y: f64) {
+    let ch = self.geom.char_size;
+    let x = self.geom.text_left + e.col_start as f64 * ch.width;
+    let w = e.col_len as f64 * ch.width;
+    let fg = e.color.color().unwrap_or(render.theme().text);
+
+    if e.kind == Kind::Spinner {
+      self.spinner.draw_sized(
+        render,
+        Point::new(x + w / 2.0, y + ch.height / 2.0),
+        (ch.height * 0.6).round(),
+      );
+      return;
+    }
+    if e.kind.is_pill() {
+      let pad = PILL_PAD_X * ch.width;
+      let rect = Rect::new(x - pad, y + PILL_INSET_Y, x + w + pad, y + ch.height - PILL_INSET_Y);
+      render.fill(&rect.to_rounded_rect(rect.height() / 2.0), fg.multiply_alpha(PILL_ALPHA));
+    }
+
+    let bold = e.kind == Kind::Cwd;
+    let mut spans = vec![];
+    match e.tail {
+      Some((chars, tail)) => {
+        let at = e.text.char_indices().nth(chars).map_or(e.text.len(), |(i, _)| i);
+        spans.push(Span { text: &e.text[..at], color: Some(fg), bold });
+        spans.push(Span { text: &e.text[at..], color: tail.color(), bold });
+      }
+      None => spans.push(Span { text: &e.text, color: Some(fg), bold }),
+    }
+    let layout = styled_line(render, &spans);
+    render.draw_text(&layout, (x, y));
+  }
+
   /// Full details of a job, near the mouse.
   fn draw_tooltip(&self, render: &mut Render, job: &Job, pos: Point) {
     let size = render.size();
@@ -957,7 +1029,7 @@ impl ShellView {
       "took {}",
       format_duration(job.elapsed()).unwrap_or_else(|| "under 1s".to_string())
     ));
-    lines.push(format!("started {}", format_ago(job.started.elapsed())));
+    lines.push(format!("started {}", format_local_time(job.started_at)));
     if let Ok(since) = SystemTime::now().duration_since(job.context.time)
       && since > Duration::from_secs(60 * 60 * 24)
     {
@@ -992,15 +1064,8 @@ impl ShellView {
 
 /// Rows of a prompt with `command` typed after it: the blank row, the info
 /// line, and the rows of the command.
-fn header_rows_for(ctx: &PromptContext, command: &str, cols: usize) -> usize {
-  2 + Wrapped::new(prefix_cols(&prompt_rows(ctx)), command, cols).height()
-}
-
-/// The columns the symbol line takes before the command.
-fn prefix_cols(rows: &PromptRows) -> usize { plain(&rows.symbol).chars().count() }
-
-fn spans(runs: &[Run]) -> Vec<Span<'_>> {
-  runs.iter().map(|r| Span { text: &r.text, color: r.color.color(), bold: r.bold }).collect()
+fn header_rows_for(command: &str, cols: usize) -> usize {
+  2 + Wrapped::new(SYMBOL_COLS, command, cols).height()
 }
 
 /// Draws the visible part of a job's output, which starts at `top`.

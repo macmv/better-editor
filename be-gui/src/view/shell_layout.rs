@@ -2,8 +2,6 @@
 //! collapsed, and where they sit in the scrolled list. Nothing here touches
 //! rendering.
 
-use std::time::Duration;
-
 use be_shell::JobId;
 
 /// The key of the live prompt at the bottom of the list, which isn't a block.
@@ -205,17 +203,6 @@ impl ScrollState {
   }
 }
 
-/// `just now`, `12s ago`, `3m ago`, `5h ago`.
-pub fn format_ago(d: Duration) -> String {
-  let s = d.as_secs();
-  match s {
-    0..=1 => "just now".to_string(),
-    2..=59 => format!("{s}s ago"),
-    60..=3599 => format!("{}m ago", s / 60),
-    _ => format!("{}h ago", s / 3600),
-  }
-}
-
 /// A command for display in a one-line header.
 pub fn header_command(line: &str) -> String {
   line.lines().map(str::trim).filter(|l| !l.is_empty()).collect::<Vec<_>>().join(" ")
@@ -353,14 +340,6 @@ mod tests {
 
     blocks.clear();
     assert_eq!(blocks.focus(), None);
-  }
-
-  #[test]
-  fn formats_ago() {
-    assert_eq!(format_ago(Duration::from_secs(0)), "just now");
-    assert_eq!(format_ago(Duration::from_secs(12)), "12s ago");
-    assert_eq!(format_ago(Duration::from_secs(300)), "5m ago");
-    assert_eq!(format_ago(Duration::from_secs(7300)), "2h ago");
   }
 
   #[test]
