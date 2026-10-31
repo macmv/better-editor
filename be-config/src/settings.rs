@@ -7,6 +7,7 @@ pub struct Settings {
   pub editor:   EditorSettings,
   pub ui:       UiSettings,
   pub terminal: TerminalSettings,
+  pub shell:    ShellSettings,
   pub layout:   LayoutSettings,
   pub keybinds: Keybinds,
 }
@@ -29,6 +30,13 @@ pub struct TerminalSettings {
 }
 
 #[derive(Default, Config, Clone)]
+pub struct ShellSettings {
+  /// Collapse a command's output when it finishes with more than this many
+  /// lines. 0 turns this off.
+  pub auto_collapse_lines: u32,
+}
+
+#[derive(Default, Config, Clone)]
 pub struct FontSettings {
   pub family: String,
   pub size:   f64,
@@ -48,6 +56,7 @@ pub enum TabSettings {
   Editor,
   #[default]
   Terminal,
+  Shell,
 }
 
 #[derive(Default, Clone, Config, serde::Deserialize)]

@@ -7,6 +7,10 @@ mod command;
 mod editor;
 mod file_tree;
 mod search;
+mod shell;
+mod shell_input;
+mod shell_layout;
+mod shell_prompt;
 mod symbol_search;
 mod terminal;
 mod terminal_paint;
@@ -15,6 +19,7 @@ pub use command::CommandView;
 pub use editor::EditorView;
 pub use file_tree::FileTree;
 pub use search::Search;
+pub use shell::ShellView;
 pub use symbol_search::SymbolSearch;
 pub use terminal::TerminalView;
 
@@ -39,6 +44,10 @@ impl From<TerminalView> for ViewContent {
   fn from(value: TerminalView) -> Self { ViewContent::Terminal(value) }
 }
 
+impl From<ShellView> for ViewContent {
+  fn from(value: ShellView) -> Self { ViewContent::Shell(value) }
+}
+
 impl<T: Into<ViewContent>> From<T> for View {
   fn from(value: T) -> Self { View::new(value) }
 }
@@ -47,6 +56,7 @@ pub enum ViewContent {
   Editor(EditorView),
   FileTree(FileTree),
   Terminal(TerminalView),
+  Shell(ShellView),
 }
 
 pub enum Popup {
@@ -66,7 +76,7 @@ impl View {
     match &self.content {
       ViewContent::Editor(editor) => editor.animated(),
       ViewContent::FileTree(tree) => tree.animated(),
-      ViewContent::Terminal(_) => false,
+      ViewContent::Terminal(_) | ViewContent::Shell(_) => false,
     }
   }
 
@@ -75,6 +85,7 @@ impl View {
       ViewContent::Editor(editor) => editor.layout(layout),
       ViewContent::FileTree(tree) => tree.layout(layout),
       ViewContent::Terminal(terminal) => terminal.layout(layout),
+      ViewContent::Shell(shell) => shell.layout(layout),
     }
   }
 
@@ -87,6 +98,7 @@ impl View {
       ViewContent::Editor(editor) => editor.draw(render),
       ViewContent::FileTree(file_tree) => file_tree.draw(render),
       ViewContent::Terminal(terminal) => terminal.draw(render),
+      ViewContent::Shell(shell) => shell.draw(render),
     }
   }
 
@@ -95,6 +107,7 @@ impl View {
       ViewContent::Editor(editor) => editor.editor.mode(),
       ViewContent::FileTree(_) => Mode::Normal,
       ViewContent::Terminal(_) => Mode::Insert,
+      ViewContent::Shell(shell) => shell.mode(),
     }
   }
 
@@ -103,6 +116,7 @@ impl View {
       ViewContent::Editor(editor) => editor.perform_action(action),
       ViewContent::FileTree(file_tree) => file_tree.perform_action(action),
       ViewContent::Terminal(terminal) => terminal.perform_action(action),
+      ViewContent::Shell(shell) => shell.perform_action(action),
     }
   }
 
@@ -117,6 +131,7 @@ impl View {
       ViewContent::Editor(editor) => editor.on_focus(focus),
       ViewContent::FileTree(file_tree) => file_tree.on_focus(focus),
       ViewContent::Terminal(terminal) => terminal.on_focus(focus),
+      ViewContent::Shell(shell) => shell.on_focus(focus),
     }
   }
 
@@ -130,6 +145,7 @@ impl View {
       ViewContent::Editor(editor) => Some(editor.on_mouse(ev, size, store)),
       ViewContent::FileTree(_) => None,
       ViewContent::Terminal(terminal) => Some(terminal.on_mouse(ev, size, store)),
+      ViewContent::Shell(shell) => Some(shell.on_mouse(ev, size, store)),
     }
   }
 }

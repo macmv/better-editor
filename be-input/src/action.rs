@@ -41,6 +41,8 @@ pub enum Navigation {
   Tab(u8),
   /// Open a new tab containing a terminal, and switch to it.
   NewTerminal,
+  /// Open a new tab containing a shell view, and switch to it.
+  NewShell,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

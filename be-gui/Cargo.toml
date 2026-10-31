@@ -22,6 +22,7 @@ be-input = { path = "../be-input" }
 be-lsp = { path = "../be-lsp" }
 be-editor = { path = "../be-editor" }
 be-terminal = { path = "../be-terminal" }
+be-shell = { path = "../be-shell" }
 be-animation = { path = "../be-animation" }
 be-workspace = { path = "../be-workspace" }
 be-remote = { path = "../be-remote" }
@@ -55,3 +56,6 @@ objc2-foundation = { version = "0.3.2", features = ["NSString"] }
 
 [build-dependencies]
 be-icon-importer = { version = "0.1.0", path = "../be-icon-importer" }
+
+[dev-dependencies]
+expect-test.workspace = true

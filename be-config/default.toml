@@ -10,10 +10,18 @@ family = "monospace"
 size = 16
 family = "monospace"
 
+[shell]
+# Collapse a command's output once it finishes with more than this many lines.
+# 0 turns this off.
+auto-collapse-lines = 0
+
 [ui.font]
 size = 13
 family = "sans-serif"
 
+# Panes are "terminal", "editor", "file-tree", "split", and "shell" (a block
+# based shell view, which is opt-in: use `pane = "shell"` in a tab, or bind
+# `nav = "new_shell"` below).
 [[layout.tab]]
 pane = "terminal"
 
@@ -82,6 +90,8 @@ navigate = "\\"
 "o" = { action = "navigate", nav = "open_workspace" }
 ":" = { action = "set_mode", mode = "command" }
 "c" = { action = "navigate", nav = "new_terminal" }
+# Opens a new tab with a shell view. Not bound by default, for example:
+# "b" = { action = "navigate", nav = "new_shell" }
 # A literal backslash, as the prefix would otherwise swallow it.
 "\\" = { edit = "insert", char = "\\" }
 "0" = { action = "navigate", nav = { nav = "tab", tab = 0 } }

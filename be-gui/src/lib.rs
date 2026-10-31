@@ -567,6 +567,17 @@ impl State {
       }
     }
 
+    // The shell view's block mode handles its own keys, unless a bind is
+    // half typed (so the navigation prefix still works).
+    if self.keys.is_empty()
+      && let AppView::Workspace(w) = &mut self.active
+      && let ViewContent::Shell(shell) =
+        &mut self.workspaces.get_mut(w).unwrap().active_view_mut().content
+      && shell.on_raw_key(&key)
+    {
+      return;
+    }
+
     self.keys.push(key);
     self.keys_at = None;
 
@@ -903,18 +914,12 @@ impl WorkspaceLayout {
           })
         }
         be_config::TabSettings::Terminal => {
-          let clipboard = &state.workspace.clipboard;
-          let root = state.workspace.root.as_path();
-          let terminal = match &mut state.remote {
-            Some(remote) => {
-              let size = be_terminal::Size { rows: 40, cols: 80 };
-              let pty = remote.new_pty(size, root.to_string_lossy().into_owned());
-              let terminal = be_terminal::Terminal::with_host(size, Box::new(pty));
-              view::TerminalView::from_handle(clipboard, SharedHandle::new(terminal))
-            }
-            None => view::TerminalView::new(clipboard, root),
-          };
+          let terminal = state.terminal_view();
           Pane::View(state.views.new_view(terminal))
+        }
+        be_config::TabSettings::Shell => {
+          let shell = state.shell_content();
+          Pane::View(state.views.new_view(shell))
         }
         be_config::TabSettings::Editor => {
           Pane::View(state.views.new_view(view::EditorView::new(&mut state.workspace)))
@@ -929,6 +934,7 @@ impl WorkspaceLayout {
       match tab {
         be_config::TabSettings::Split(split) => split.children.iter().find_map(|t| tab_title(t)),
         be_config::TabSettings::Terminal => Some("terminal".into()),
+        be_config::TabSettings::Shell => Some("shell".into()),
         be_config::TabSettings::Editor => Some("editor".into()),
         be_config::TabSettings::FileTree => None,
       }
@@ -1319,6 +1325,19 @@ impl WorkspaceLayout {
         let index = self.tabs.len() - 1;
         self.perform_action(Action::Navigate { nav: Navigation::Tab(index as u8) }, store);
       }
+      Action::Navigate { nav: Navigation::NewShell } => {
+        let content = self.shell_content();
+        let view = self.views.new_view(content);
+        self.tabs.push(Tab {
+          title:   "shell".into(),
+          content: Pane::View(view),
+          popup:   None,
+          last:    None,
+          zoomed:  None,
+        });
+        let index = self.tabs.len() - 1;
+        self.perform_action(Action::Navigate { nav: Navigation::Tab(index as u8) }, store);
+      }
       Action::Navigate { nav: Navigation::Direction(dir) } => {
         self.active_tab_mut().zoomed = None;
         let prev_focus = self.active_tab().content.active();
@@ -1602,6 +1621,42 @@ impl WorkspaceLayout {
         &self.workspace.clipboard,
         self.workspace.root.as_path(),
       )),
+      ViewContent::Shell(_) => {
+        let content = self.shell_content();
+        self.views.new_view(content)
+      }
+    }
+  }
+
+  /// A terminal in the workspace root, on the host for a remote workspace.
+  fn terminal_view(&mut self) -> view::TerminalView {
+    let clipboard = &self.workspace.clipboard;
+    let root = self.workspace.root.as_path();
+    match &mut self.remote {
+      Some(remote) => {
+        let size = be_terminal::Size { rows: 40, cols: 80 };
+        let pty = remote.new_pty(size, root.to_string_lossy().into_owned());
+        let terminal = be_terminal::Terminal::with_host(size, Box::new(pty));
+        view::TerminalView::from_handle(clipboard, SharedHandle::new(terminal))
+      }
+      None => view::TerminalView::new(clipboard, root),
+    }
+  }
+
+  /// A shell view in the workspace root. Remote workspaces don't have one yet,
+  /// so they get a plain terminal, as does a shell that fails to start.
+  fn shell_content(&mut self) -> ViewContent {
+    if self.remote.is_some() {
+      warn!("the shell view is not available in remote workspaces yet, opening a terminal");
+      return self.terminal_view().into();
+    }
+
+    match view::ShellView::new(&self.workspace.clipboard, self.workspace.root.as_path()) {
+      Ok(shell) => shell.into(),
+      Err(e) => {
+        warn!("failed to start the shell view, opening a terminal: {e}");
+        self.terminal_view().into()
+      }
     }
   }
 }

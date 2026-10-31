@@ -1,0 +1,1120 @@
+//! A shell made of blocks that reads like a terminal. Every command line is a
+//! block: the prompt as it was when the line was typed (frozen, with the
+//! command after it), then the output. A live prompt in the same style sits
+//! below the blocks.
+//!
+//! Every row of the view has a gutter on the left, which holds the chevron
+//! that collapses a block and the focus bar, so text never shifts when they
+//! appear. Rows are all one terminal cell tall:
+//!
+//! ```text
+//! blank row                 \
+//! info line (chevron here)   | the header of a block, `header_rows` rows
+//! symbol line + command      | (more if the command wraps or has newlines)
+//! (continuation rows)       /
+//! output rows (or a `+N lines` hint row when collapsed)
+//! ```
+//!
+//! The pure pieces live in `shell_layout` (blocks, scrolling), `shell_prompt`
+//! (the prompt text) and `shell_input` (the command line), and the output of
+//! each block is drawn by a `TerminalPainter` over that job's emulator.
+
+use std::{
+  collections::HashMap,
+  io,
+  path::Path,
+  time::{Duration, SystemTime},
+};
+
+use be_input::{Action, Clipboard, Direction, Edit, KeyStroke, Mode, Move};
+use be_shared::SharedHandle;
+use be_shell::{
+  GitHead, Job, JobId, JobState, PromptContext, Shell, ShellEvent, SubmitResult, UiCommand,
+  format_duration,
+};
+use be_terminal::{Arrow, InputModes, Position, keys};
+use kurbo::{Point, Rect, RoundedRect, Size, Stroke};
+
+use super::{
+  shell_input::{HistoryNav, InputLine},
+  shell_layout::{
+    BlockKind, Blocks, Item, PROMPT_KEY, ScrollState, format_ago, header_command, stack,
+  },
+  shell_prompt::{PromptRows, Run, Wrapped, plain, prompt_rows},
+  terminal_paint::{
+    CursorDraw, DrawOptions, Span, TerminalPainter, character_size, grid_size, styled_line,
+  },
+};
+use crate::{Color, Font, Layout, MouseButton, MouseEvent, Render, RenderStore, TextLayout, icon};
+
+/// Padding to the right of the text.
+const PAD_X: f64 = 8.0;
+/// The width of the gutter on the left, in cells.
+const GUTTER_CELLS: f64 = 1.5;
+/// Vertical padding inside the tooltip.
+const TIP_PAD_Y: f64 = 4.0;
+/// Lines of `history` shown.
+const HISTORY_LINES: usize = 20;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ShellMode {
+  /// Keys edit the command line (or go to the running job).
+  Input,
+  /// Keys move between blocks and collapse them.
+  Blocks,
+}
+
+pub struct ShellView {
+  shell:     Shell,
+  clipboard: SharedHandle<Clipboard>,
+
+  blocks:    Blocks,
+  scroll:    ScrollState,
+  input:     InputLine,
+  history:   HistoryNav,
+  /// Captured when the shell state changes, as capturing it spawns a git
+  /// status.
+  prompt:    PromptContext,
+  mode:      ShellMode,
+  /// `z` was pressed in block mode, and a second key is expected.
+  pending_z: bool,
+  /// Block to scroll into view on the next layout.
+  reveal:    Option<u64>,
+
+  focused:       bool,
+  set_waker:     bool,
+  should_close:  bool,
+  auto_collapse: usize,
+
+  geom:     Geometry,
+  /// The size of the pty given to new jobs, and kept up to date for running
+  /// ones.
+  grid:     be_terminal::Size,
+  painters: HashMap<JobId, TerminalPainter>,
+
+  mouse_pos: Option<Point>,
+  drag:      Option<Selection>,
+  selection: Option<Selection>,
+}
+
+/// What `layout` measured, for `draw` and the mouse.
+#[derive(Default)]
+struct Geometry {
+  items:       Vec<Item>,
+  total:       f64,
+  /// Rows of output of each block, in the order of `Blocks::list`.
+  rows:        Vec<usize>,
+  size:        Size,
+  char_size:   Size,
+  ui_line:     f64,
+  /// The x of the text, after the gutter.
+  text_left:   f64,
+  /// Columns of text.
+  cols:        usize,
+  /// Rows of each block's header (zero for notices), in the order of
+  /// `Blocks::list`.
+  header_rows: Vec<usize>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Selection {
+  key:    u64,
+  anchor: Position,
+  head:   Position,
+}
+
+impl Selection {
+  /// The selected cells in reading order.
+  fn range(&self) -> (Position, Position) { ordered(self.anchor, self.head) }
+}
+
+fn ordered(a: Position, b: Position) -> (Position, Position) {
+  if a.row == b.row {
+    let (min, max) = (a.col.min(b.col), a.col.max(b.col));
+    (Position { row: a.row, col: min }, Position { row: a.row, col: max })
+  } else if a.row < b.row {
+    (a, b)
+  } else {
+    (b, a)
+  }
+}
+
+/// What the view has to do after the command line handled an action.
+#[derive(Debug, PartialEq, Eq)]
+enum LineCmd {
+  None,
+  /// The line changed.
+  Edited,
+  Submit,
+  HistoryPrev,
+  HistoryNext,
+  ClearScreen,
+  /// Leave the command line for the blocks.
+  Blocks,
+  Paste,
+}
+
+/// Applies an editing action to the command line.
+fn edit_line(line: &mut InputLine, action: &Action) -> LineCmd {
+  match action {
+    Action::Edit { e: Edit::Insert('\n'), .. } => LineCmd::Submit,
+    Action::Edit { e: Edit::Insert(c), .. } => {
+      line.insert(*c);
+      LineCmd::Edited
+    }
+    Action::Edit { e: Edit::Backspace, .. } => {
+      line.backspace();
+      LineCmd::Edited
+    }
+    Action::Edit { e: Edit::Delete(_), .. } => {
+      line.delete();
+      LineCmd::Edited
+    }
+    Action::Move { m: Move::Single(Direction::Left), .. } => {
+      line.left();
+      LineCmd::None
+    }
+    Action::Move { m: Move::Single(Direction::Right), .. } => {
+      line.right();
+      LineCmd::None
+    }
+    Action::Move { m: Move::Single(Direction::Up), .. } => LineCmd::HistoryPrev,
+    Action::Move { m: Move::Single(Direction::Down), .. } => LineCmd::HistoryNext,
+    Action::MoveCompletion { next: false } => LineCmd::HistoryPrev,
+    Action::MoveCompletion { next: true } => LineCmd::HistoryNext,
+    Action::Control { char } => match char {
+      'a' => {
+        line.home();
+        LineCmd::None
+      }
+      'e' => {
+        line.end();
+        LineCmd::None
+      }
+      'b' => {
+        line.left();
+        LineCmd::None
+      }
+      'f' => {
+        line.right();
+        LineCmd::None
+      }
+      'u' => {
+        line.kill_to_start();
+        LineCmd::Edited
+      }
+      'k' => {
+        line.kill_to_end();
+        LineCmd::Edited
+      }
+      'w' => {
+        line.kill_word_back();
+        LineCmd::Edited
+      }
+      // Like a terminal, Ctrl-C abandons the line.
+      'c' => {
+        line.clear();
+        LineCmd::Edited
+      }
+      'l' => LineCmd::ClearScreen,
+      '\n' => LineCmd::Submit,
+      _ => LineCmd::None,
+    },
+    Action::SetMode { mode: Mode::Normal, .. } => LineCmd::Blocks,
+    Action::ClipboardPaste => LineCmd::Paste,
+    _ => LineCmd::None,
+  }
+}
+
+/// The bytes a running job should receive for `action`, if it is a key.
+/// Pasting is handled separately, as it needs the clipboard.
+fn encode_action(action: &Action, modes: InputModes) -> Option<Vec<u8>> {
+  Some(match action {
+    Action::Move { m: Move::Single(dir), .. } => keys::arrow(
+      match dir {
+        Direction::Up => Arrow::Up,
+        Direction::Down => Arrow::Down,
+        Direction::Left => Arrow::Left,
+        Direction::Right => Arrow::Right,
+      },
+      modes,
+    ),
+    Action::Edit { e: Edit::Insert('\n'), .. } => keys::input('\r'),
+    Action::Edit { e: Edit::Insert(c), .. } => keys::input(*c),
+    Action::Edit { e: Edit::Backspace, .. } => keys::backspace(),
+    Action::Edit { e: Edit::Delete(_), .. } => keys::delete(),
+    Action::Control { char: '\n' } => keys::ctrl_enter(modes),
+    Action::Control { char: c @ 'a'..='z' } => keys::control(*c as u8 - b'a' + 1),
+    Action::Control { char: c @ ('[' | '\\' | ']' | '^' | '_') } => keys::control(*c as u8 & 0x1f),
+    // We are in insert mode, so escape arrives as this.
+    Action::SetMode { mode: Mode::Normal, .. } => keys::escape(),
+    Action::Tab { shift: false } => keys::tab(),
+    Action::Tab { shift: true } => keys::shift_tab(),
+    _ => return None,
+  })
+}
+
+/// The rows of a job's output worth showing: all of scrollback and screen,
+/// minus blank rows at the end. A running job keeps the row its cursor is on
+/// once it has printed something.
+fn output_rows(job: &Job) -> usize {
+  let emulator = &job.emulator;
+  let state = emulator.state();
+  let used = emulator.used_rows();
+
+  let mut rows = used;
+  while rows > 0 && state.absolute_line(rows - 1).is_none_or(|l| l.to_string().trim().is_empty()) {
+    rows -= 1;
+  }
+
+  if rows > 0 && job.is_running() {
+    rows = rows.max(state.scrollback_len() + state.cursor.pos.row + 1).min(used);
+  }
+  rows
+}
+
+fn ui_text(render: &mut Render, text: &str, color: Color) -> TextLayout {
+  render.layout_text(Font::Ui, text, color)
+}
+
+impl ShellView {
+  pub fn new(clipboard: &SharedHandle<Clipboard>, path: &Path) -> io::Result<Self> {
+    let shell = Shell::new(path)?;
+    let prompt = shell.prompt();
+    Ok(ShellView {
+      shell,
+      clipboard: clipboard.clone(),
+      blocks: Blocks::default(),
+      scroll: ScrollState::default(),
+      input: InputLine::default(),
+      history: HistoryNav::default(),
+      prompt,
+      mode: ShellMode::Input,
+      pending_z: false,
+      reveal: None,
+      focused: false,
+      set_waker: false,
+      should_close: false,
+      auto_collapse: 0,
+      geom: Geometry::default(),
+      grid: be_terminal::Size { rows: 24, cols: 80 },
+      painters: HashMap::new(),
+      mouse_pos: None,
+      drag: None,
+      selection: None,
+    })
+  }
+
+  pub fn mode(&self) -> Mode {
+    if self.running().is_some() || self.mode == ShellMode::Input {
+      Mode::Insert
+    } else {
+      Mode::Normal
+    }
+  }
+
+  pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
+
+  fn running(&self) -> Option<&Job> { self.shell.jobs().iter().find(|j| j.is_running()) }
+
+  // Events and input.
+
+  fn handle_event(&mut self, event: ShellEvent) {
+    match event {
+      ShellEvent::Output(_) => {}
+      ShellEvent::Finished(id, _) => {
+        self.prompt = self.shell.prompt();
+        if self.auto_collapse > 0
+          && let Some(job) = self.shell.job(id)
+          && output_rows(job) > self.auto_collapse
+          && let Some(block) = self.blocks.job_block(id)
+        {
+          let key = block.key;
+          self.blocks.set_collapsed(key, true);
+        }
+      }
+      ShellEvent::StateChanged => self.prompt = self.shell.prompt(),
+      ShellEvent::Exit => self.should_close = true,
+      ShellEvent::Clear => {
+        self.blocks.clear();
+        self.selection = None;
+        self.mode = ShellMode::Input;
+      }
+      ShellEvent::History => {
+        let entries = self.shell.history().entries();
+        let start = entries.len().saturating_sub(HISTORY_LINES);
+        let lines = entries[start..]
+          .iter()
+          .enumerate()
+          .map(|(i, e)| format!("{:>5}  {}", start + i + 1, header_command(&e.command)))
+          .collect();
+        self.blocks.push(BlockKind::Notice(lines));
+      }
+      ShellEvent::Unsupported(cmd) => {
+        let name = match cmd {
+          UiCommand::Jobs => "jobs",
+          UiCommand::Fg(_) => "fg",
+          UiCommand::Bg(_) => "bg",
+          UiCommand::Kill { .. } => "kill",
+          UiCommand::Exit => "exit",
+          UiCommand::Clear => "clear",
+          UiCommand::History => "history",
+        };
+        self.blocks.push(BlockKind::Notice(vec![format!("{name}: not supported yet")]));
+      }
+    }
+  }
+
+  fn submit(&mut self) {
+    let line = self.input.take();
+    self.history.reset();
+    if line.trim().is_empty() {
+      return;
+    }
+
+    self.scroll.follow_bottom();
+    self.selection = None;
+    match self.shell.submit_with(&line, self.grid, Some(self.prompt.clone())) {
+      SubmitResult::Started(id) => {
+        self.blocks.push(BlockKind::Job(id));
+      }
+      SubmitResult::Event(event) => self.handle_event(event),
+      SubmitResult::Failed(msg) => {
+        self.blocks.push(BlockKind::Notice(vec![msg]));
+      }
+    }
+  }
+
+  pub fn perform_action(&mut self, action: Action) {
+    if let Some(job) = self.running() {
+      let id = job.id;
+      let modes = job.emulator.input_modes();
+
+      let bytes = match &action {
+        Action::ClipboardCopy => {
+          self.copy();
+          return; // Don't clear the selection.
+        }
+        Action::ClipboardPaste => Some(keys::paste(&self.clipboard.paste(), modes)),
+        other => encode_action(other, modes),
+      };
+      if let Some(bytes) = bytes {
+        self.selection = None;
+        self.scroll.follow_bottom();
+        self.shell.send_input(id, &bytes);
+      }
+      return;
+    }
+
+    match self.mode {
+      ShellMode::Input => self.perform_input_action(action),
+      ShellMode::Blocks => {
+        if let Action::SetMode { mode: Mode::Insert, .. } = action {
+          self.enter_input();
+        }
+      }
+    }
+  }
+
+  fn perform_input_action(&mut self, action: Action) {
+    if let Action::ClipboardCopy = action {
+      self.copy();
+      return; // Don't clear the selection.
+    }
+
+    self.selection = None;
+    match edit_line(&mut self.input, &action) {
+      LineCmd::None => {}
+      LineCmd::Edited => self.history.reset(),
+      LineCmd::Submit => self.submit(),
+      LineCmd::HistoryPrev => {
+        let shell = &self.shell;
+        let next = self
+          .history
+          .prev(self.input.text(), |prefix| {
+            shell.history().search_prefix(prefix, true).iter().map(|e| e.command.clone()).collect()
+          })
+          .map(str::to_string);
+        if let Some(next) = next {
+          self.input.set(&next);
+        }
+      }
+      LineCmd::HistoryNext => {
+        if let Some(next) = self.history.next().map(str::to_string) {
+          self.input.set(&next);
+        }
+      }
+      LineCmd::ClearScreen => {
+        self.blocks.clear();
+        self.scroll.follow_bottom();
+      }
+      LineCmd::Blocks => self.enter_blocks(),
+      LineCmd::Paste => {
+        self.input.insert_str(&self.clipboard.paste());
+        self.history.reset();
+      }
+    }
+    // Typing brings the prompt back into view.
+    if !matches!(action, Action::Move { .. }) {
+      self.scroll.follow_bottom();
+    }
+  }
+
+  fn enter_blocks(&mut self) {
+    if self.blocks.list().is_empty() {
+      return;
+    }
+    self.mode = ShellMode::Blocks;
+    self.pending_z = false;
+    self.blocks.ensure_focus();
+    self.reveal = self.blocks.focus();
+  }
+
+  fn enter_input(&mut self) {
+    self.mode = ShellMode::Input;
+    self.pending_z = false;
+    self.scroll.follow_bottom();
+  }
+
+  /// Keys in block mode, which don't go through the keybinds. Returns whether
+  /// the key was used.
+  pub fn on_raw_key(&mut self, key: &KeyStroke) -> bool {
+    use be_input::Key;
+
+    if self.mode != ShellMode::Blocks || self.running().is_some() || key.alt || key.sup {
+      return false;
+    }
+
+    if std::mem::take(&mut self.pending_z) {
+      let focus = self.blocks.focus();
+      match key.key {
+        Key::Char('a') => {
+          if let Some(f) = focus {
+            self.blocks.toggle(f);
+          }
+        }
+        Key::Char('o') => {
+          if let Some(f) = focus {
+            self.blocks.set_collapsed(f, false);
+          }
+        }
+        Key::Char('c') => {
+          if let Some(f) = focus {
+            self.blocks.set_collapsed(f, true);
+          }
+        }
+        Key::Char('M') => self.blocks.set_all_collapsed(true),
+        Key::Char('R') => self.blocks.set_all_collapsed(false),
+        _ => {}
+      }
+      self.reveal = self.blocks.focus();
+      return true;
+    }
+
+    if key.control {
+      let half = self.geom.size.height / 2.0;
+      return match key.key {
+        Key::Char('d') => {
+          self.scroll_by(half);
+          true
+        }
+        Key::Char('u') => {
+          self.scroll_by(-half);
+          true
+        }
+        _ => false,
+      };
+    }
+
+    match key.key {
+      Key::Char('j') | Key::ArrowDown => {
+        self.blocks.move_focus(1);
+        self.reveal = self.blocks.focus();
+      }
+      Key::Char('k') | Key::ArrowUp => {
+        self.blocks.move_focus(-1);
+        self.reveal = self.blocks.focus();
+      }
+      Key::Char('G') => {
+        self.blocks.move_focus(isize::MAX / 2);
+        self.reveal = self.blocks.focus();
+      }
+      Key::Char('\n') => {
+        if let Some(f) = self.blocks.focus() {
+          self.blocks.toggle(f);
+          self.reveal = Some(f);
+        }
+      }
+      Key::Char('z') => self.pending_z = true,
+      Key::Char('i' | 'a') | Key::Escape => self.enter_input(),
+      _ => return false,
+    }
+    true
+  }
+
+  fn scroll_by(&mut self, dy: f64) {
+    self.scroll.scroll_by(dy, &self.geom.items, self.geom.total, self.geom.size.height);
+  }
+
+  // Mouse.
+
+  /// The block under a point in view coordinates, and the point's position
+  /// relative to it.
+  fn block_at(&self, pos: Point) -> Option<(usize, Point)> {
+    let y = pos.y + self.scroll.offset();
+    let i = self.geom.items.iter().position(|i| y >= i.top && y < i.top + i.height)?;
+    let item = self.geom.items[i];
+    (item.key != PROMPT_KEY).then(|| (i, Point::new(pos.x, y - item.top)))
+  }
+
+  /// The height of the header of the block at index `i`.
+  fn header_height(&self, i: usize) -> f64 {
+    self.geom.header_rows.get(i).copied().unwrap_or(0) as f64 * self.geom.char_size.height
+  }
+
+  /// The cell of a block's output at `rel`, clamped to its rows.
+  fn output_cell(&self, i: usize, rel: Point) -> Position {
+    let rows = self.geom.rows[i];
+    let ch = self.geom.char_size;
+    let row = ((rel.y - self.header_height(i)) / ch.height).floor().max(0.0) as usize;
+    Position {
+      row: row.min(rows.saturating_sub(1)),
+      col: ((rel.x - self.geom.text_left) / ch.width).round().max(0.0) as usize,
+    }
+  }
+
+  /// Whether `rel` (relative to block `i`) is over its header.
+  fn in_header(&self, i: usize, rel: Point) -> bool { rel.y < self.header_height(i) }
+
+  pub fn on_mouse(
+    &mut self,
+    ev: &MouseEvent,
+    _size: Size,
+    _store: &RenderStore,
+  ) -> crate::CursorKind {
+    match *ev {
+      MouseEvent::Move { pos } => {
+        self.mouse_pos = Some(pos);
+
+        if let Some(drag) = self.drag
+          && let Some(i) = self.blocks.list().iter().position(|b| b.key == drag.key)
+        {
+          let top = self.geom.items[i].top - self.scroll.offset();
+          let head = self.output_cell(i, Point::new(pos.x, pos.y - top));
+          self.selection = (head != drag.anchor).then_some(Selection { head, ..drag });
+          return crate::CursorKind::Beam;
+        }
+
+        match self.block_at(pos) {
+          Some((i, rel)) if self.in_header(i, rel) => crate::CursorKind::Pointer,
+          Some((i, _)) if self.geom.rows[i] > 0 => crate::CursorKind::Beam,
+          _ => crate::CursorKind::Default,
+        }
+      }
+
+      MouseEvent::Button { pos, pressed, button: MouseButton::Left } => {
+        if !pressed {
+          self.drag = None;
+          return crate::CursorKind::Default;
+        }
+
+        self.selection = None;
+        let Some((i, rel)) = self.block_at(pos) else { return crate::CursorKind::Default };
+        let key = self.geom.items[i].key;
+        if self.in_header(i, rel) {
+          self.blocks.toggle(key);
+          if self.mode == ShellMode::Blocks {
+            self.blocks.set_focus(Some(key));
+          }
+          return crate::CursorKind::Pointer;
+        }
+
+        let collapsed = self.blocks.list()[i].collapsed;
+        if !collapsed
+          && self.geom.rows[i] > 0
+          && matches!(self.blocks.list()[i].kind, BlockKind::Job(_))
+        {
+          let cell = self.output_cell(i, rel);
+          self.drag = Some(Selection { key, anchor: cell, head: cell });
+        }
+        crate::CursorKind::Beam
+      }
+
+      MouseEvent::Scroll { delta, .. } => {
+        self.scroll_by(-delta.y);
+        crate::CursorKind::Default
+      }
+
+      MouseEvent::Leave => {
+        self.mouse_pos = None;
+        self.drag = None;
+        crate::CursorKind::Default
+      }
+
+      _ => crate::CursorKind::Default,
+    }
+  }
+
+  fn copy(&self) {
+    let Some(selection) = self.selection else { return };
+    let Some(BlockKind::Job(id)) = self.blocks.get(selection.key).map(|b| &b.kind) else { return };
+    let Some(job) = self.shell.job(*id) else { return };
+    let (start, end) = selection.range();
+
+    let state = job.emulator.state();
+    let mut buf = String::new();
+    for row in start.row..=end.row {
+      let Some(line) = state.absolute_line(row) else { continue };
+      let slice = if row == start.row && row == end.row {
+        line.slice_to_string(start.col..end.col)
+      } else if row == start.row {
+        line.slice_to_string(start.col..)
+      } else if row == end.row {
+        line.slice_to_string(..end.col)
+      } else {
+        line.slice_to_string(..)
+      };
+
+      if !buf.is_empty() {
+        buf.push('\n');
+      }
+      buf.push_str(slice.trim_end());
+    }
+
+    self.clipboard.copy(&buf);
+  }
+
+  // Layout.
+
+  pub fn layout(&mut self, layout: &mut Layout) {
+    puffin::profile_function!();
+
+    if !self.set_waker {
+      self.set_waker = true;
+      let waker = layout.notifier();
+      // The host throttles how often this is called.
+      self.shell.set_wake(move || waker.wake());
+      // The first prompt was captured without a wakeup for its git status.
+      self.prompt = self.shell.prompt();
+    }
+
+    let events = self.shell.poll();
+    for event in events {
+      self.handle_event(event);
+    }
+    if self.should_close {
+      layout.close_view();
+      return;
+    }
+
+    self.auto_collapse = layout.store.config.borrow().settings.shell.auto_collapse_lines as usize;
+
+    let size = layout.size();
+    let char_size = character_size(layout.store);
+    let ui_line = layout.store.text.font_metrics(Font::Ui).line_height;
+    let text_left = (GUTTER_CELLS * char_size.width).ceil();
+
+    // The pty is as wide as the text area, and as tall as the view.
+    let grid =
+      grid_size(Size::new((size.width - text_left - PAD_X).max(0.0), size.height), char_size);
+    let grid = be_terminal::Size { rows: grid.rows.max(5), cols: grid.cols.max(10) };
+    if grid != self.grid {
+      self.grid = grid;
+      if let Some(id) = self.running().map(|j| j.id) {
+        self.shell.resize(id, grid);
+      }
+    }
+
+    self.geom.size = size;
+    self.geom.char_size = char_size;
+    self.geom.ui_line = ui_line;
+    self.geom.text_left = text_left;
+    self.geom.cols = grid.cols;
+
+    let mut rows = vec![];
+    let mut header_rows = vec![];
+    let mut heights = vec![];
+    for block in self.blocks.list() {
+      let (output_rows, header, height) = match &block.kind {
+        BlockKind::Job(id) => match self.shell.job(*id) {
+          Some(job) => {
+            let header = header_rows_for(&job.context, &job.line, grid.cols);
+            let rows = output_rows(job);
+            // A collapsed block keeps one row for its `+N lines` hint.
+            let shown = if block.collapsed { rows.min(1) } else { rows };
+            (rows, header, header + shown)
+          }
+          None => (0, 0, 0),
+        },
+        BlockKind::Notice(lines) => (0, 0, lines.len()),
+      };
+      rows.push(output_rows);
+      header_rows.push(header);
+      heights.push((block.key, height as f64 * char_size.height));
+    }
+    let prompt_height = if self.running().is_some() {
+      0.0
+    } else {
+      header_rows_for(&self.prompt, self.input.text(), grid.cols) as f64 * char_size.height
+    };
+    heights.push((PROMPT_KEY, prompt_height));
+
+    let (items, total) = stack(heights);
+    self.geom.items = items;
+    self.geom.total = total;
+    self.geom.rows = rows;
+    self.geom.header_rows = header_rows;
+
+    self.scroll.update(&self.geom.items, total, size.height);
+    if let Some(key) = self.reveal.take() {
+      self.scroll.reveal(key, &self.geom.items, total, size.height);
+    }
+
+    // There is no wakeup for output left in the pty to keep this frame short.
+    if self.shell.needs_poll() {
+      layout.notifier().wake();
+    }
+  }
+
+  // Drawing.
+
+  pub fn draw(&mut self, render: &mut Render) {
+    puffin::profile_function!();
+
+    let size = render.size();
+    render.fill(&Rect::from_origin_size(Point::ZERO, size), render.theme().background);
+
+    let offset = self.scroll.offset();
+    let hover = self.mouse_pos.and_then(|p| self.block_at(p));
+    let mut drawn = vec![];
+    let mut tooltip = None;
+
+    for (i, block) in self.blocks.list().iter().enumerate() {
+      let item = self.geom.items[i];
+      let y = item.top - offset;
+      if y + item.height < 0.0 || y > size.height {
+        continue;
+      }
+
+      let focused = self.mode == ShellMode::Blocks && self.blocks.focus() == Some(block.key);
+      if focused {
+        render.fill(&Rect::new(0.0, y, 2.0, y + item.height), render.theme().mode_normal);
+      }
+
+      match &block.kind {
+        BlockKind::Notice(lines) => self.draw_notice(render, y, lines),
+        BlockKind::Job(id) => {
+          let Some(job) = self.shell.job(*id) else { continue };
+          let over = hover.is_some_and(|(j, _)| j == i);
+          let over_header = hover.is_some_and(|(j, rel)| j == i && self.in_header(i, rel));
+
+          self.draw_prompt(render, y, &job.context, &job.line, None);
+          let hot = focused || over;
+          self.draw_chevron(render, y, block.collapsed, hot);
+          if over_header {
+            tooltip = Some(job);
+          }
+
+          let rows = self.geom.rows[i];
+          let top = y + self.header_height(i);
+          if block.collapsed {
+            if rows > 0 {
+              let hint = if rows == 1 { "+1 line".to_string() } else { format!("+{rows} lines") };
+              let layout = render.layout_text(Font::Terminal, &hint, render.theme().text_dim);
+              render.draw_text(&layout, (self.geom.text_left, top));
+            }
+          } else if rows > 0 {
+            drawn.push(*id);
+            let selection = self.selection.filter(|s| s.key == block.key).map(|s| s.range());
+            let painter = self.painters.entry(*id).or_default();
+            draw_output(
+              render,
+              painter,
+              job,
+              top,
+              rows,
+              selection,
+              self.focused,
+              self.geom.char_size,
+              self.geom.text_left,
+            );
+          }
+        }
+      }
+    }
+    // Painters keep layouts for every line they drew, so forget the ones that
+    // are off screen.
+    self.painters.retain(|id, _| drawn.contains(id));
+
+    let prompt = *self.geom.items.last().unwrap();
+    if prompt.height > 0.0 {
+      let focused = self.focused && self.mode == ShellMode::Input;
+      self.draw_prompt(
+        render,
+        prompt.top - offset,
+        &self.prompt,
+        self.input.text(),
+        Some((self.input.cursor(), focused)),
+      );
+    }
+
+    if let (Some(job), Some(pos)) = (tooltip, self.mouse_pos) {
+      self.draw_tooltip(render, job, pos);
+    }
+  }
+
+  fn draw_notice(&self, render: &mut Render, y: f64, lines: &[String]) {
+    let dim = render.theme().text_dim;
+    for (i, line) in lines.iter().enumerate() {
+      let layout = render.layout_text(Font::Terminal, line, dim);
+      render.draw_text(&layout, (self.geom.text_left, y + i as f64 * self.geom.char_size.height));
+    }
+  }
+
+  /// The chevron in the gutter, on the info line of the block starting at `y`.
+  fn draw_chevron(&self, render: &mut Render, y: f64, collapsed: bool, hot: bool) {
+    let theme = render.theme();
+    let color = if hot { theme.text } else { theme.text_dim.multiply_alpha(0.5) };
+    let ch = self.geom.char_size;
+    let size = (ch.height * 0.6).round();
+    let icon = if collapsed { &*icon::CHEVRON_RIGHT } else { &*icon::CHEVRON_DOWN };
+    icon.stroke(
+      Point::new(
+        ((self.geom.text_left - size) / 2.0).max(0.0),
+        y + ch.height + (ch.height - size) / 2.0,
+      ),
+      size,
+      color,
+      render,
+    );
+  }
+
+  /// Draws a prompt (blank row, info line, symbol line) with `command` typed
+  /// after it, starting at `y`. A `cursor` is a byte offset into `command`
+  /// and whether it is focused.
+  fn draw_prompt(
+    &self,
+    render: &mut Render,
+    y: f64,
+    ctx: &PromptContext,
+    command: &str,
+    cursor: Option<(usize, bool)>,
+  ) {
+    let ch = self.geom.char_size;
+    let x = self.geom.text_left;
+    let rows = prompt_rows(ctx);
+
+    let info = styled_line(render, &spans(&rows.info));
+    let right = render.size().width - PAD_X;
+    render.clipped(Rect::new(x, y + ch.height, right, y + 2.0 * ch.height), |render| {
+      render.draw_text(&info, (x, y + ch.height));
+    });
+
+    let wrapped = Wrapped::new(prefix_cols(&rows), command, self.geom.cols);
+    for (i, text) in wrapped.rows.iter().enumerate() {
+      let mut line = if i == 0 { spans(&rows.symbol) } else { vec![] };
+      line.push(Span { text, color: None, bold: false });
+      let layout = styled_line(render, &line);
+      render.draw_text(&layout, (x, y + (2 + i) as f64 * ch.height));
+    }
+
+    // The same cursor as the terminal: a filled cell with the character
+    // inverted while focused, an outline otherwise.
+    if let Some((byte, focused)) = cursor {
+      let (row, col) = wrapped.cursor(byte);
+      let cell = Rect::from_origin_size(
+        (x + (col as f64 * ch.width).round(), y + ((2 + row) as f64 * ch.height).round()),
+        (ch.width.ceil(), ch.height.ceil()),
+      );
+      if focused {
+        render.fill(&cell.ceil(), render.theme().text);
+        if let Some(c) = command[byte.min(command.len())..].chars().next()
+          && !c.is_whitespace()
+        {
+          let layout =
+            render.layout_text(Font::Terminal, &c.to_string(), render.theme().background);
+          render.draw_text(&layout, (cell.x0, cell.y0));
+        }
+      } else {
+        render.stroke(&cell.inset(-0.5 * render.scale()), render.theme().text, Stroke::new(1.0));
+      }
+    }
+  }
+
+  /// Full details of a job, near the mouse.
+  fn draw_tooltip(&self, render: &mut Render, job: &Job, pos: Point) {
+    let size = render.size();
+    let theme = render.theme();
+    let (text, dim, bg, outline) =
+      (theme.text, theme.text_dim, theme.background_lower, theme.background_raised_outline);
+
+    let mut lines = vec![];
+    lines.push(match job.state {
+      JobState::Running => "still running".to_string(),
+      JobState::Done { exit } => format!("exit code {exit}"),
+    });
+    lines.push(format!(
+      "took {}",
+      format_duration(job.elapsed()).unwrap_or_else(|| "under 1s".to_string())
+    ));
+    lines.push(format!("started {}", format_ago(job.started.elapsed())));
+    if let Ok(since) = SystemTime::now().duration_since(job.context.time)
+      && since > Duration::from_secs(60 * 60 * 24)
+    {
+      lines.push(format!("prompted {} days ago", since.as_secs() / 86400));
+    }
+    lines.push(job.context.cwd.display().to_string());
+    match &job.context.git {
+      Some(GitHead::Branch(branch)) => lines.push(format!("git branch {branch}")),
+      Some(GitHead::Detached(sha)) => lines.push(format!("git commit {sha}")),
+      None => {}
+    }
+
+    let layouts: Vec<_> = lines
+      .iter()
+      .enumerate()
+      .map(|(i, l)| ui_text(render, l, if i == 0 { text } else { dim }))
+      .collect();
+    let line_height = self.geom.ui_line;
+    let w = layouts.iter().map(|l| l.size().width).fold(0.0, f64::max) + 2.0 * PAD_X;
+    let h = layouts.len() as f64 * line_height + 2.0 * TIP_PAD_Y;
+
+    let x = (pos.x + 12.0).min(size.width - w).max(0.0);
+    let y = if pos.y + 18.0 + h > size.height { (pos.y - h - 4.0).max(0.0) } else { pos.y + 18.0 };
+    let rect = RoundedRect::new(x, y, x + w, y + h, 4.0);
+    render.fill(&rect, bg);
+    render.stroke(&rect, outline, Stroke::new(1.0));
+    for (i, layout) in layouts.iter().enumerate() {
+      render.draw_text(layout, (x + PAD_X, y + TIP_PAD_Y + i as f64 * line_height));
+    }
+  }
+}
+
+/// Rows of a prompt with `command` typed after it: the blank row, the info
+/// line, and the rows of the command.
+fn header_rows_for(ctx: &PromptContext, command: &str, cols: usize) -> usize {
+  2 + Wrapped::new(prefix_cols(&prompt_rows(ctx)), command, cols).height()
+}
+
+/// The columns the symbol line takes before the command.
+fn prefix_cols(rows: &PromptRows) -> usize { plain(&rows.symbol).chars().count() }
+
+fn spans(runs: &[Run]) -> Vec<Span<'_>> {
+  runs.iter().map(|r| Span { text: &r.text, color: r.color.color(), bold: r.bold }).collect()
+}
+
+/// Draws the visible part of a job's output, which starts at `top`.
+#[allow(clippy::too_many_arguments)]
+fn draw_output(
+  render: &mut Render,
+  painter: &mut TerminalPainter,
+  job: &Job,
+  top: f64,
+  rows: usize,
+  selection: Option<(Position, Position)>,
+  focused: bool,
+  char_size: Size,
+  left: f64,
+) {
+  let height = render.size().height;
+  let first = ((-top) / char_size.height).floor().max(0.0) as usize;
+  let last = (((height - top) / char_size.height).ceil().max(0.0) as usize).min(rows);
+  if first >= last {
+    return;
+  }
+
+  let state = job.emulator.state();
+  let cursor = (job.is_running() && state.cursor.visible).then(|| {
+    let row = state.scrollback_len() + state.cursor.pos.row;
+    CursorDraw {
+      pos: Position { row: row.saturating_sub(first), col: state.cursor.pos.col },
+      focused,
+    }
+  });
+  let cursor = cursor.filter(|c| c.pos.row < last - first);
+  let selection = selection.map(|(a, b)| {
+    let shift = |p: Position| Position { row: p.row.saturating_sub(first), col: p.col };
+    // Rows above the first drawn one aren't drawn, so only clip the start.
+    if a.row < first { (Position { row: 0, col: 0 }, shift(b)) } else { (shift(a), shift(b)) }
+  });
+
+  let options = DrawOptions {
+    rect: Rect::from_origin_size(
+      (left, top + first as f64 * char_size.height),
+      (render.size().width, (last - first) as f64 * char_size.height),
+    ),
+    first_row: first,
+    rows: last - first,
+    pixel_offset: 0.0,
+    selection,
+    cursor,
+  };
+  painter.draw(render, state, &options);
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn insert(c: char) -> Action { Action::Edit { count: None, e: Edit::Insert(c) } }
+  fn arrow(dir: Direction) -> Action { Action::Move { count: None, m: Move::Single(dir) } }
+  fn control(c: char) -> Action { Action::Control { char: c } }
+
+  #[test]
+  fn keys_for_a_running_job() {
+    let normal = InputModes::default();
+    let app = InputModes { application_cursor: true, ..normal };
+
+    assert_eq!(encode_action(&insert('x'), normal), Some(b"x".to_vec()));
+    assert_eq!(encode_action(&insert('\n'), normal), Some(b"\r".to_vec()));
+    assert_eq!(encode_action(&control('c'), normal), Some(vec![3]));
+    assert_eq!(encode_action(&control('d'), normal), Some(vec![4]));
+    assert_eq!(encode_action(&control('['), normal), Some(vec![0x1b]));
+    assert_eq!(encode_action(&arrow(Direction::Up), normal), Some(b"\x1b[A".to_vec()));
+    assert_eq!(encode_action(&arrow(Direction::Left), app), Some(b"\x1bOD".to_vec()));
+    assert_eq!(
+      encode_action(&Action::Edit { count: None, e: Edit::Backspace }, normal),
+      Some(vec![0x7f])
+    );
+    assert_eq!(
+      encode_action(&Action::SetMode { mode: Mode::Normal, delta: -1 }, normal),
+      Some(vec![0x1b])
+    );
+    assert_eq!(encode_action(&Action::Tab { shift: false }, normal), Some(vec![b'\t']));
+    assert_eq!(encode_action(&Action::Tab { shift: true }, normal), Some(b"\x1b[Z".to_vec()));
+    assert_eq!(encode_action(&control('\n'), normal), Some(b"\r".to_vec()));
+    assert_eq!(encode_action(&Action::Yank, normal), None);
+  }
+
+  #[test]
+  fn editing_the_line() {
+    let mut line = InputLine::default();
+    for c in "git status".chars() {
+      assert_eq!(edit_line(&mut line, &insert(c)), LineCmd::Edited);
+    }
+    assert_eq!(edit_line(&mut line, &control('w')), LineCmd::Edited);
+    assert_eq!(line.text(), "git ");
+    assert_eq!(edit_line(&mut line, &control('a')), LineCmd::None);
+    assert_eq!(line.cursor(), 0);
+    assert_eq!(edit_line(&mut line, &control('e')), LineCmd::None);
+    assert_eq!(edit_line(&mut line, &arrow(Direction::Up)), LineCmd::HistoryPrev);
+    assert_eq!(edit_line(&mut line, &insert('\n')), LineCmd::Submit);
+    assert_eq!(edit_line(&mut line, &control('l')), LineCmd::ClearScreen);
+    assert_eq!(
+      edit_line(&mut line, &Action::SetMode { mode: Mode::Normal, delta: -1 }),
+      LineCmd::Blocks
+    );
+    assert_eq!(edit_line(&mut line, &control('c')), LineCmd::Edited);
+    assert!(line.is_empty());
+  }
+
+  #[test]
+  fn selections_are_ordered() {
+    let a = Position { row: 3, col: 9 };
+    let b = Position { row: 1, col: 2 };
+    let (min, max) = ordered(a, b);
+    assert_eq!((min.row, min.col, max.row, max.col), (1, 2, 3, 9));
+    let (min, max) = ordered(Position { row: 2, col: 9 }, Position { row: 2, col: 4 });
+    assert_eq!((min.col, max.col), (4, 9));
+  }
+}
