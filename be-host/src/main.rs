@@ -232,12 +232,9 @@ fn main() {
     }
     let conn_fds = fds.len();
     fds.extend(terms.borrow().poll_fds());
+    fds.push(watches.borrow().poll_fd());
 
-    let mut timeout = conn.poll_timeout_ms(Instant::now());
-    if !watches.borrow().is_empty() {
-      timeout = if timeout < 0 { watch::POLL_MS } else { timeout.min(watch::POLL_MS) };
-    }
-    let ready = match sys::poll(&fds, timeout) {
+    let ready = match sys::poll(&fds, conn.poll_timeout_ms(Instant::now())) {
       Ok(r) => r,
       Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
       Err(e) => {
@@ -253,7 +250,8 @@ fn main() {
     if on_conn().any(|(r, f)| r.writable && f.writable) {
       conn.handle_writable();
     }
-    // Pty readiness needs no handling of its own: the next `pump` reads it.
+    // Pty and watcher readiness need no handling of their own: the next `pump`
+    // reads them.
     terms.borrow_mut().flush();
     conn.handle_timeout(now);
     while let Some(event) = conn.poll_event() {
