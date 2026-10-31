@@ -234,7 +234,7 @@ mod tests {
   impl Fs for SlowFs {
 
     fn begin_write(&self, _: &Path, _: Vec<u8>) -> PendingWrite { unimplemented!() }
-    fn read_dir(&self, _: &Path) -> io::Result<Vec<be_fs::DirEntry>> { unimplemented!() }
+    fn begin_read_dir(&self, _: &Path) -> be_fs::PendingReadDir { unimplemented!() }
 
     fn begin_read(&self, _: &Path) -> PendingRead {
       let slot = self.0.clone();

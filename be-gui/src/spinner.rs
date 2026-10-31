@@ -21,11 +21,15 @@ pub struct Spinner {
 impl Spinner {
   pub fn new() -> Self { Spinner { start: Instant::now() } }
 
-  pub fn draw(&self, render: &mut Render, center: Point) {
-    let radius = (SIZE - THICKNESS) / 2.0;
+  pub fn draw(&self, render: &mut Render, center: Point) { self.draw_sized(render, center, SIZE); }
+
+  /// `draw`, with a different diameter. The stroke scales with it.
+  pub fn draw_sized(&self, render: &mut Render, center: Point, size: f64) {
+    let thickness = THICKNESS * size / SIZE;
+    let radius = (size - thickness) / 2.0;
     let angle = (render.now() - self.start).as_secs_f64() * SPEED * TAU;
 
     let arc = Arc::new(center, Vec2::new(radius, radius), angle, SWEEP, 0.0);
-    render.stroke(&arc, render.theme().text, Stroke::new(THICKNESS).with_caps(Cap::Round));
+    render.stroke(&arc, render.theme().text, Stroke::new(thickness).with_caps(Cap::Round));
   }
 }

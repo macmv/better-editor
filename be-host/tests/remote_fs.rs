@@ -67,7 +67,14 @@ fn fs_round_trip() {
   assert!(written.mtime >= written.prev_mtime);
   assert_eq!(std::fs::read(dir.join("a.txt")).unwrap(), b"bye\n");
 
-  let mut names: Vec<_> = fs.read_dir(&dir).unwrap().into_iter().map(|e| e.name).collect();
+  let mut list = fs.begin_read_dir(&dir);
+  let entries = loop {
+    if let Some(res) = list.poll() {
+      break res.unwrap();
+    }
+    s.host.borrow().pump(50);
+  };
+  let mut names: Vec<_> = entries.into_iter().map(|e| e.name).collect();
   names.sort();
   assert_eq!(names, ["a.txt", "sub"]);
 

@@ -26,26 +26,36 @@ pub struct FileData {
   pub data:  Vec<u8>,
 }
 
-/// A read that may not have finished. Polling it never blocks.
-pub struct PendingRead {
-  poll: Box<dyn FnMut() -> Option<io::Result<FileData>>>,
+/// An I/O call that may not have finished. Polling it never blocks.
+pub struct Pending<T> {
+  poll: Box<dyn FnMut() -> Option<io::Result<T>>>,
 }
 
-impl PendingRead {
-  /// A read that finishes when `poll` returns `Some`.
-  pub fn new(poll: impl FnMut() -> Option<io::Result<FileData>> + 'static) -> PendingRead {
-    PendingRead { poll: Box::new(poll) }
+impl<T: 'static> Pending<T> {
+  /// A call that finishes when `poll` returns `Some`.
+  pub fn new(poll: impl FnMut() -> Option<io::Result<T>> + 'static) -> Pending<T> {
+    Pending { poll: Box::new(poll) }
   }
 
-  /// A read that has already finished.
-  pub fn ready(result: io::Result<FileData>) -> PendingRead {
+  /// A call that has already finished.
+  pub fn ready(result: io::Result<T>) -> Pending<T> {
     let mut result = Some(result);
-    PendingRead::new(move || result.take())
+    Pending::new(move || result.take())
   }
 
   /// The result, once there is one. After that, this returns `None` forever.
-  pub fn poll(&mut self) -> Option<io::Result<FileData>> { (self.poll)() }
+  pub fn poll(&mut self) -> Option<io::Result<T>> { (self.poll)() }
 }
+
+impl<T> std::fmt::Debug for Pending<T> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("Pending").finish_non_exhaustive()
+  }
+}
+
+pub type PendingRead = Pending<FileData>;
+pub type PendingWrite = Pending<WriteResult>;
+pub type PendingReadDir = Pending<Vec<DirEntry>>;
 
 /// What a finished write reports.
 #[derive(Debug, Clone, Copy)]
@@ -57,31 +67,11 @@ pub struct WriteResult {
   pub mtime:      i64,
 }
 
-/// A write that may not have finished. Polling it never blocks.
-pub struct PendingWrite {
-  poll: Box<dyn FnMut() -> Option<io::Result<WriteResult>>>,
-}
-
-impl PendingWrite {
-  /// A write that finishes when `poll` returns `Some`.
-  pub fn new(poll: impl FnMut() -> Option<io::Result<WriteResult>> + 'static) -> PendingWrite {
-    PendingWrite { poll: Box::new(poll) }
-  }
-
-  /// A write that has already finished.
-  pub fn ready(result: io::Result<WriteResult>) -> PendingWrite {
-    let mut result = Some(result);
-    PendingWrite::new(move || result.take())
-  }
-
-  /// The result, once there is one. After that, this returns `None` forever.
-  pub fn poll(&mut self) -> Option<io::Result<WriteResult>> { (self.poll)() }
-}
-
 /// The file operations the editor needs from whichever machine holds the
 /// workspace. `LocalFs` goes straight to disk.
 pub trait Fs {
-  fn read_dir(&self, path: &Path) -> io::Result<Vec<DirEntry>>;
+  /// Starts listing the entries of the directory at `path`.
+  fn begin_read_dir(&self, path: &Path) -> PendingReadDir;
 
   /// False if every call here waits on another machine, which makes the cheap
   /// ones (like resolving symlinks) worth avoiding on the UI thread.
@@ -131,17 +121,19 @@ impl Fs for LocalFs {
     })())
   }
 
-  fn read_dir(&self, path: &Path) -> io::Result<Vec<DirEntry>> {
-    let mut entries = vec![];
-    for entry in std::fs::read_dir(path)? {
-      let entry = entry?;
-      // `metadata` follows symlinks, like the file tree always has.
-      let meta = entry.metadata()?;
-      entries.push(DirEntry {
-        name: entry.file_name().to_string_lossy().into_owned(),
-        kind: kind(meta.file_type()),
-      });
-    }
-    Ok(entries)
+  fn begin_read_dir(&self, path: &Path) -> PendingReadDir {
+    PendingReadDir::ready((|| {
+      let mut entries = vec![];
+      for entry in std::fs::read_dir(path)? {
+        let entry = entry?;
+        // `metadata` follows symlinks, like the file tree always has.
+        let meta = entry.metadata()?;
+        entries.push(DirEntry {
+          name: entry.file_name().to_string_lossy().into_owned(),
+          kind: kind(meta.file_type()),
+        });
+      }
+      Ok(entries)
+    })())
   }
 }

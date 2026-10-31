@@ -61,7 +61,7 @@ impl View {
   pub fn animated(&self) -> bool {
     match &self.content {
       ViewContent::Editor(editor) => editor.animated(),
-      ViewContent::FileTree(_) => false,
+      ViewContent::FileTree(tree) => tree.animated(),
       ViewContent::Terminal(_) => false,
     }
   }

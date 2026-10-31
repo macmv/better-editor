@@ -3,7 +3,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use be_fs::{DirEntry, FileData, FileKind, Fs, PendingRead, PendingWrite, WriteResult};
+use be_fs::{DirEntry, FileData, FileKind, Fs, PendingRead, PendingReadDir, PendingWrite, WriteResult};
 use lode::Bytes;
 
 use crate::{DirKind, Host, Transport, transport};
@@ -56,9 +56,18 @@ impl Fs for RemoteFs {
     })
   }
 
-  fn read_dir(&self, path: &Path) -> io::Result<Vec<DirEntry>> {
-    let entries = self.t.wait(self.t.local().proxy::<Host>().list_dir(path_str(path)))?;
-    Ok(entries.into_iter().map(|e| DirEntry { name: e.name, kind: kind(e.kind) }).collect())
+  fn begin_read_dir(&self, path: &Path) -> PendingReadDir {
+    let mut call = self.t.local().proxy::<Host>().list_dir(path_str(path));
+    self.t.io_done();
+    PendingReadDir::new(move || {
+      Some(match call.try_take()? {
+        Ok(entries) => {
+          Ok(entries.into_iter().map(|e| DirEntry { name: e.name, kind: kind(e.kind) }).collect())
+        }
+        Err(lode_local::CallError::App(e)) => Err(transport::io_error(e)),
+        Err(lode_local::CallError::Rpc(e)) => Err(transport::rpc_error(e)),
+      })
+    })
   }
 }
 

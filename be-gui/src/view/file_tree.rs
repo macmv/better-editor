@@ -4,7 +4,9 @@ use std::{
   sync::LazyLock,
 };
 
-use be_fs::{FileKind, Fs, WatcherHandle, WorkspacePath, WorkspacePathBuf, WorkspaceRoot};
+use be_fs::{
+  FileKind, Fs, PendingReadDir, WatcherHandle, WorkspacePath, WorkspacePathBuf, WorkspaceRoot,
+};
 use be_git::Repo;
 use be_input::{Action, ChangeDirection, Direction, Mode, Move};
 use be_shared::SharedHandle;
@@ -14,6 +16,7 @@ use crate::{
   Color, Layout, Notify, Render,
   icon::{self, Icon},
   theme::Theme,
+  spinner::Spinner,
   view::Scroll,
 };
 
@@ -22,6 +25,10 @@ pub struct FileTree {
   focused: bool,
   active:  usize,
   scroll:  Scroll,
+  spinner: Spinner,
+  /// A path that `open` couldn't reach yet, because a directory on the way is
+  /// still loading.
+  reveal:  Option<WorkspacePathBuf>,
 
   notify:  Notify,
   watcher: WatcherHandle,
@@ -46,11 +53,13 @@ enum ItemMut<'a> {
   File(&'a mut File),
 }
 
-#[derive(Debug, Eq)]
+#[derive(Debug)]
 struct Directory {
   path:     WorkspacePathBuf,
   items:    Option<Vec<Item>>,
   expanded: bool,
+  /// The listing of this directory, while the filesystem is still answering.
+  loading:  Option<PendingReadDir>,
 
   status: Option<FileStatus>,
 }
@@ -125,6 +134,8 @@ impl PartialEq for Directory {
   fn eq(&self, other: &Self) -> bool { self.name() == other.name() }
 }
 
+impl Eq for Directory {}
+
 impl PartialOrd for Directory {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
 }
@@ -143,6 +154,8 @@ impl FileTree {
       focused: false,
       active: 0,
       scroll: Scroll::new(0.0),
+      spinner: Spinner::new(),
+      reveal: None,
       notify,
       watcher: workspace.fs.add_handle(),
       root: workspace.root.clone(),
@@ -187,6 +200,8 @@ impl FileTree {
   }
 
   pub fn open(&mut self, path: &WorkspacePath) {
+    self.reveal = None;
+
     let mut curr = &mut self.tree;
     let mut new_active = 0;
 
@@ -195,7 +210,14 @@ impl FileTree {
     while let Some(component) = components.next() {
       match component {
         be_fs::Component::Normal(name) => {
-          let Some(items) = curr.items.as_mut() else { return };
+          let Some(items) = curr.items.as_mut() else {
+            // The directory is still being listed; `layout` tries again when it
+            // arrives.
+            if curr.loading.is_some() {
+              self.reveal = Some(path.to_path_buf());
+            }
+            return;
+          };
 
           match items.iter_mut().find(|it| {
             let found = *it.name() == *name;
@@ -209,7 +231,9 @@ impl FileTree {
             Some(Item::Directory(dir)) => {
               curr = dir;
               curr.expand();
-              curr.populate(&self.root, &*self.fs);
+              if curr.items.is_none() && curr.loading.is_none() {
+                curr.populate(&self.root, &*self.fs);
+              }
             }
             Some(Item::File(_)) => {
               // If we're done with the path, then break and update `active`.
@@ -301,10 +325,19 @@ impl FileTree {
 
 impl Directory {
   fn new(path: WorkspacePathBuf) -> Self {
-    Directory { path, items: None, expanded: false, status: None }
+    Directory { path, items: None, expanded: false, loading: None, status: None }
   }
 
   fn name(&self) -> &str { self.path.file_name().unwrap_or("") }
+
+  fn any_loading(&self) -> bool {
+    self.expanded
+      && (self.is_loading()
+        || self.items.iter().flatten().any(|it| match it {
+          Item::Directory(d) => d.any_loading(),
+          Item::File(_) => false,
+        }))
+  }
 
   fn len_visible(&self) -> usize {
     if self.expanded {
@@ -324,11 +357,27 @@ impl Directory {
 
   fn expand(&mut self) { self.expanded = true; }
 
+  /// Starts listing this directory. A local one is done by the time this
+  /// returns; one on another machine is picked up by `poll`.
   fn populate(&mut self, root: &WorkspaceRoot, fs: &dyn Fs) {
+    // Replacing an older listing drops it, which cancels its result.
+    self.loading = Some(fs.begin_read_dir(&root.resolve_path(&self.path)));
+    self.poll();
+  }
+
+  /// True while the first listing of this directory is on its way.
+  fn is_loading(&self) -> bool { self.items.is_none() && self.loading.is_some() }
+
+  /// Applies a finished listing, if there is one.
+  fn poll(&mut self) {
+    let Some(loading) = &mut self.loading else { return };
+    let Some(res) = loading.poll() else { return };
+    self.loading = None;
+
     let mut items = vec![];
 
     // TODO: Show an error in the tree if the directory can't be read.
-    for entry in fs.read_dir(&root.resolve_path(&self.path)).unwrap_or_default() {
+    for entry in res.unwrap_or_default() {
       let path = self.path.join(&entry.name);
       if entry.kind == FileKind::Dir {
         items.push(Item::Directory(Directory::new(path)));
@@ -415,6 +464,7 @@ impl FileTree {
     );
 
     TreeDraw {
+      spinner:      &self.spinner,
       line:         0,
       indent:       0,
       indent_width: 12.0,
@@ -449,12 +499,20 @@ impl FileTree {
     if let Some(repo) = &*self.repo {
       node.layout(&mut self.watcher, &self.root, &*self.fs, &repo);
     }
+
+    if let Some(path) = self.reveal.take() {
+      self.open(&path);
+    }
   }
+
+  /// True while a directory is spinning.
+  pub fn animated(&self) -> bool { self.tree.any_loading() }
 
   pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
 }
 
-struct TreeDraw {
+struct TreeDraw<'a> {
+  spinner: &'a Spinner,
   line:   usize,
   indent: usize,
 
@@ -492,7 +550,8 @@ impl ItemMut<'_> {
   ) {
     match self {
       ItemMut::Directory(dir) => {
-        if dir.expanded && dir.items.is_none() {
+        dir.poll();
+        if dir.expanded && dir.items.is_none() && dir.loading.is_none() {
           dir.populate(root, fs);
         }
 
@@ -540,6 +599,7 @@ impl ItemMut<'_> {
           }
         } else {
           d.items = None;
+          d.loading = None;
         }
       }
       ItemMut::File(f) => {
@@ -574,7 +634,7 @@ impl File {
   }
 }
 
-impl TreeDraw {
+impl TreeDraw<'_> {
   fn pos(&self) -> Point {
     Point::new(
       self.indent as f64 * self.indent_width,
@@ -627,6 +687,19 @@ impl TreeDraw {
       self.pos()
         + Vec2::new(self.indent_width + 16.0, self.line_height / 2.0 - text.size().height / 2.0),
     );
+
+    if dir.is_loading() {
+      let size = 10.0;
+      self.spinner.draw_sized(
+        render,
+        self.pos()
+          + Vec2::new(
+            self.indent_width + 16.0 + text.size().width + 4.0 + size / 2.0,
+            self.line_height / 2.0,
+          ),
+        size,
+      );
+    }
 
     if let Some(status) = dir.status
       && let Some(icon) = status.icon()
@@ -763,4 +836,52 @@ impl BitOr for FileStatus {
 
 impl BitOrAssign for FileStatus {
   fn bitor_assign(&mut self, rhs: Self) { *self = *self | rhs; }
+}
+
+#[cfg(test)]
+mod tests {
+  use std::{cell::RefCell, io, path::Path};
+
+  use be_fs::{DirEntry, PendingRead, PendingWrite};
+
+  use super::*;
+
+  /// An `Fs` whose directory listings finish only when told to.
+  struct SlowFs(Rc<RefCell<Option<io::Result<Vec<DirEntry>>>>>);
+
+  impl Fs for SlowFs {
+    fn begin_read(&self, _: &Path) -> PendingRead { unimplemented!() }
+    fn begin_write(&self, _: &Path, _: Vec<u8>) -> PendingWrite { unimplemented!() }
+
+    fn begin_read_dir(&self, _: &Path) -> PendingReadDir {
+      let slot = self.0.clone();
+      PendingReadDir::new(move || slot.borrow_mut().take())
+    }
+  }
+
+  #[test]
+  fn directory_loads_when_the_listing_arrives() {
+    let slot = Rc::new(RefCell::new(None));
+    let fs = SlowFs(slot.clone());
+    let root = WorkspaceRoot::from_path("/work".into());
+
+    let mut dir = Directory::new(WorkspacePathBuf::from("sub"));
+    dir.expand();
+    dir.populate(&root, &fs);
+    assert!(dir.is_loading());
+    assert!(dir.any_loading());
+    assert_eq!(dir.len_visible(), 1);
+
+    dir.poll();
+    assert!(dir.is_loading());
+
+    *slot.borrow_mut() = Some(Ok(vec![
+      DirEntry { name: "b.txt".into(), kind: FileKind::File },
+      DirEntry { name: "a".into(), kind: FileKind::Dir },
+    ]));
+    dir.poll();
+    assert!(!dir.is_loading());
+    assert!(!dir.any_loading());
+    assert_eq!(dir.len_visible(), 3);
+  }
 }
