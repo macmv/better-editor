@@ -74,7 +74,11 @@ struct State {
   /// The workspace `AppView::Loading` is waiting on.
   loading: Option<Loading>,
 
-  remote: Option<remote::RemoteSession>,
+  /// The connection the terminal's shell runs on, with `--remote`. Remote
+  /// workspaces open their own connections.
+  remote:       Option<remote::RemoteSession>,
+  /// The id of the next remote session. The terminal's is 0.
+  next_session: u64,
 }
 
 enum AppView {
@@ -89,6 +93,8 @@ struct Loading {
   path:    PathBuf,
   /// `None` once it has finished badly.
   opening: Option<remote::OpeningWorkspace>,
+  /// The workspace's own connection. Moves into the workspace once it opens.
+  session: Option<remote::RemoteSession>,
   error:   Option<String>,
   spinner: spinner::Spinner,
   /// Frames drawn so far. A load that finishes at once never shows the
@@ -101,8 +107,9 @@ const BLANK_FRAMES: u32 = 3;
 
 struct WorkspaceLayout {
   workspace: Workspace,
-  /// Set if the workspace's files are on another machine.
-  remote:    Option<remote::RemoteHandle>,
+  /// Set if the workspace's files are on another machine. The workspace owns
+  /// the connection, so closing it drops the connection.
+  remote:    Option<remote::RemoteSession>,
 
   active:        usize,
   tabs:          Vec<Tab>,
@@ -215,9 +222,10 @@ impl State {
       let host_cmd = args.remote_host_cmd.as_deref().unwrap_or("be-host");
       let notify = store.notifier();
       match remote::RemoteSession::connect(
+        0,
         remote::RemoteTarget::parse(target),
         host_cmd,
-        move |wake| notify.remote_wake(wake),
+        move |wake| notify.remote_wake(0, wake),
       ) {
         Ok(session) => remote = Some(session),
         Err(e) => error!("failed to connect to {target}: {e}"),
@@ -250,6 +258,7 @@ impl State {
       active: AppView::Terminal,
       loading: None,
       remote,
+      next_session: 1,
     };
 
     if let Some(root) = args.editor {
@@ -261,7 +270,7 @@ impl State {
             Some(base) if root.is_relative() => Path::new(base).join(&root),
             _ => root.clone(),
           };
-          state.start_remote_workspace(handle.open_workspace(&path), path);
+          state.start_remote_workspace(store, &handle, None, path);
           None
         }
         None => {
@@ -283,13 +292,43 @@ impl State {
     state
   }
 
-  /// Starts opening the workspace at `path` on the remote host, and shows a
-  /// loading screen until the host answers.
-  fn start_remote_workspace(&mut self, opening: remote::OpeningWorkspace, path: PathBuf) {
+  /// Starts opening the workspace at `path` on the host `from` is connected
+  /// to, over a new connection, and shows a loading screen until the host
+  /// answers. With `terminal`, the workspace is the directory that terminal
+  /// of `from`'s is in, instead of `path`.
+  fn start_remote_workspace(
+    &mut self,
+    store: &RenderStore,
+    from: &remote::RemoteHandle,
+    terminal: Option<u64>,
+    path: PathBuf,
+  ) {
+    let id = self.next_session;
+    self.next_session += 1;
+
+    let notify = store.notifier();
+    let (session, opening, error) =
+      match remote::RemoteSession::connect_like(id, from, move |wake| notify.remote_wake(id, wake))
+      {
+        Ok(session) => {
+          let handle = session.handle();
+          let opening = match terminal {
+            Some(term) => from.open_terminal_workspace(term, &handle),
+            None => handle.open_workspace(&path),
+          };
+          (Some(session), Some(opening), None)
+        }
+        Err(e) => {
+          error!("failed to connect to {}: {e}", from.target());
+          (None, None, Some(e.to_string()))
+        }
+      };
+
     self.loading = Some(Loading {
       path,
-      opening: Some(opening),
-      error: None,
+      opening,
+      session,
+      error,
       spinner: spinner::Spinner::new(),
       frames: Cell::new(0),
     });
@@ -305,12 +344,14 @@ impl State {
 
     match res {
       Ok((path, backend)) => {
-        let handle = opening.handle().clone();
-        let root = WorkspaceRoot::remote(handle.target().to_string(), path);
+        let session = loading.session.take().expect("a session while opening");
+        let root = WorkspaceRoot::remote(session.handle().target().to_string(), path);
+        // If the workspace is already open, it keeps its own connection, and
+        // this one closes.
         if !self.workspaces.contains_key(&root) {
           self.workspaces.insert(
             root.clone(),
-            WorkspaceLayout::new(root.clone(), store, Some((handle, backend))),
+            WorkspaceLayout::new(root.clone(), store, Some((session, backend))),
           );
         }
         self.loading = None;
@@ -320,8 +361,16 @@ impl State {
         error!("cannot open {} on the remote host: {e}", loading.path.display());
         loading.error = Some(e.to_string());
         loading.opening = None;
+        loading.session = None;
       }
     }
+  }
+
+  /// The remote session named `id`, wherever it lives.
+  fn session_mut(&mut self, id: u64) -> Option<&mut remote::RemoteSession> {
+    let loading = self.loading.as_mut().and_then(|l| l.session.as_mut());
+    let workspaces = self.workspaces.values_mut().filter_map(|w| w.remote.as_mut());
+    self.remote.as_mut().into_iter().chain(loading).chain(workspaces).find(|s| s.id() == id)
   }
 
   fn mode(&self) -> Mode {
@@ -442,9 +491,9 @@ impl State {
   }
   /// Handles an event. Returns `true` if the app should close.
   pub fn on_event(&mut self, event: Event, store: &mut RenderStore) -> bool {
-    if let Event::Remote(wake) = event {
-      if let Some(remote) = &mut self.remote {
-        remote.on_wake(wake);
+    if let Event::Remote(id, wake) = event {
+      if let Some(session) = self.session_mut(id) {
+        session.on_wake(wake);
       }
       self.poll_loading(store);
       return false;
@@ -462,7 +511,7 @@ impl State {
         if matches!(self.active, AppView::Terminal) {
           let path = if let Some(id) = self.terminal_remote_id {
             let Some(handle) = self.remote.as_ref().map(|r| r.handle()) else { return };
-            self.start_remote_workspace(handle.open_terminal_workspace(id), PathBuf::from("."));
+            self.start_remote_workspace(store, &handle, Some(id), PathBuf::from("."));
             return;
           } else {
             let path = WorkspaceRoot::from_path(self.terminal.current_dir());
@@ -509,11 +558,11 @@ impl WorkspaceLayout {
   pub fn new(
     root: WorkspaceRoot,
     store: &mut RenderStore,
-    remote: Option<(remote::RemoteHandle, be_workspace::Backend)>,
+    remote: Option<(remote::RemoteSession, be_workspace::Backend)>,
   ) -> Self {
     let (remote, mut workspace) = match remote {
-      Some((handle, backend)) => {
-        (Some(handle), Workspace::with_backend(root, store.config.clone(), backend))
+      Some((session, backend)) => {
+        (Some(session), Workspace::with_backend(root, store.config.clone(), backend))
       }
       None => (None, Workspace::new(root, store.config.clone())),
     };
@@ -568,7 +617,7 @@ impl WorkspaceLayout {
         be_config::TabSettings::Terminal => {
           let clipboard = &state.workspace.clipboard;
           let root = state.workspace.root.as_path();
-          let terminal = match &state.remote {
+          let terminal = match &mut state.remote {
             Some(remote) => {
               let size = be_terminal::Size { rows: 40, cols: 80 };
               let pty = remote.new_pty(size, root.to_string_lossy().into_owned());
@@ -1030,7 +1079,7 @@ impl WorkspaceLayout {
         // The files of a remote workspace come from the host, so the popup
         // opens empty and fills in when they arrive.
         let listed =
-          self.remote.as_ref().map(|r| r.begin_list_files(self.workspace.root.as_path()));
+          self.remote.as_ref().map(|r| r.handle().begin_list_files(self.workspace.root.as_path()));
         self.active_tab_mut().popup = Some(view::Popup::Search(view::Search::new(
           self.workspace.root.clone(),
           self.notify.clone(),
@@ -1236,7 +1285,7 @@ impl WorkspaceLayout {
       }
       Event::Exit => return true,
       // Handled by `State`.
-      Event::Remote(_) => {}
+      Event::Remote(..) => {}
     }
 
     false

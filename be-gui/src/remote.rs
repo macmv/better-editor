@@ -201,13 +201,15 @@ enum Stage {
 /// poller too.
 struct Link {
   // Drops first: the thread must stop polling before the fds close.
-  poller:  Poller,
-  host:    RefCell<RemoteHost>,
+  poller:   Poller,
+  host:     RefCell<RemoteHost>,
   /// What `ssh` was told to connect to, for starting other things on the same
   /// machine.
-  target:  String,
+  target:   String,
+  /// The command that runs `be-host` there.
+  host_cmd: String,
   /// Names this connection's terminals and watches.
-  next_id: Cell<u64>,
+  next_id:  Cell<u64>,
 }
 
 impl Link {
@@ -225,6 +227,8 @@ impl Link {
 
 /// A live connection to a host, and what the editor is asking of it.
 pub struct RemoteSession {
+  /// Names the session in the wakes its poller posts.
+  id:       u64,
   link:     Rc<Link>,
   host_cmd: String,
   path:     Option<String>,
@@ -279,11 +283,12 @@ impl RemoteHandle {
   }
 
   /// Starts opening the workspace at the directory terminal `id`'s shell is in
-  /// now.
-  pub fn open_terminal_workspace(&self, id: u64) -> OpeningWorkspace {
+  /// now. The directory is asked of this connection, and the workspace is
+  /// opened on `into`.
+  pub fn open_terminal_workspace(&self, id: u64, into: &RemoteHandle) -> OpeningWorkspace {
     let call = self.link.host.borrow().terminal_cwd(id);
     self.link.rearm();
-    OpeningWorkspace { handle: self.clone(), stage: OpenStage::TerminalCwd(call) }
+    OpeningWorkspace { handle: into.clone(), stage: OpenStage::TerminalCwd(call) }
   }
 
   /// The pieces of a workspace rooted at `root` on the host. `root` must
@@ -321,8 +326,6 @@ pub struct OpeningWorkspace {
 }
 
 impl OpeningWorkspace {
-  pub fn handle(&self) -> &RemoteHandle { &self.handle }
-
   /// The canonical path and the workspace's pieces, once the host has
   /// answered. Never blocks.
   pub fn poll(&mut self) -> Option<io::Result<(PathBuf, Backend)>> {
@@ -374,12 +377,23 @@ fn call_error(e: CallError<HostError>) -> io::Error {
 
 impl RemoteSession {
   pub fn connect(
+    id: u64,
     target: RemoteTarget,
     host_cmd: &str,
     on_wake: impl Fn(RemoteWake) + Send + 'static,
   ) -> io::Result<RemoteSession> {
     let host = RemoteHost::connect_ssh(&target.host, host_cmd, Instant::now())?;
-    RemoteSession::new(host, target.host, host_cmd.into(), target.path, on_wake)
+    RemoteSession::new(id, host, target.host, host_cmd.into(), target.path, on_wake)
+  }
+
+  /// A new connection to the machine `handle` is connected to.
+  pub fn connect_like(
+    id: u64,
+    handle: &RemoteHandle,
+    on_wake: impl Fn(RemoteWake) + Send + 'static,
+  ) -> io::Result<RemoteSession> {
+    let target = RemoteTarget { host: handle.target().into(), path: None };
+    RemoteSession::connect(id, target, &handle.link.host_cmd, on_wake)
   }
 
   /// `Command` form of `connect`, for tests and unusual transports.
@@ -389,6 +403,7 @@ impl RemoteSession {
     on_wake: impl Fn(RemoteWake) + Send + 'static,
   ) -> io::Result<RemoteSession> {
     RemoteSession::new(
+      0,
       RemoteHost::spawn(cmd, Instant::now())?,
       String::new(),
       String::new(),
@@ -398,6 +413,7 @@ impl RemoteSession {
   }
 
   fn new(
+    id: u64,
     host: RemoteHost,
     target: String,
     host_cmd: String,
@@ -409,11 +425,14 @@ impl RemoteSession {
       poller: Poller::new(on_wake)?,
       host: RefCell::new(host),
       target,
+      host_cmd: host_cmd.clone(),
       next_id: Cell::new(1),
     });
     link.rearm();
-    Ok(RemoteSession { link, host_cmd, path, stage, reported: false })
+    Ok(RemoteSession { id, link, host_cmd, path, stage, reported: false })
   }
+
+  pub fn id(&self) -> u64 { self.id }
 
   /// The directory the session was pointed at, if it was given one.
   pub fn path(&self) -> Option<&str> { self.path.as_deref() }
