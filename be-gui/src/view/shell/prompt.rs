@@ -20,9 +20,7 @@ use std::{path::Path, time::Duration};
 use be_shell::{GitHead, GitStatus, PromptContext, format_duration};
 use be_terminal::BuiltinColor;
 
-use crate::Color;
-
-use super::terminal_paint::ansi_color;
+use crate::{Color, view::terminal_paint::ansi_color};
 
 /// Columns left empty between two elements.
 const GAP: usize = 1;

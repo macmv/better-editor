@@ -6,7 +6,7 @@ use be_shell::JobId;
 use be_terminal::Emulator;
 use kurbo::{Point, Size};
 
-use super::terminal_paint::grid_size;
+use crate::view::terminal_paint::grid_size;
 
 /// The key of the live prompt at the bottom of the list, which isn't a block.
 pub const PROMPT_KEY: u64 = u64::MAX;

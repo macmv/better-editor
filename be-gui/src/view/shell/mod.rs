@@ -20,6 +20,10 @@
 //! (the prompt text) and `shell_input` (the command line), and the output of
 //! each block is drawn by a `TerminalPainter` over that job's emulator.
 
+mod input;
+mod layout;
+mod prompt;
+
 use std::{
   collections::HashMap,
   io,
@@ -36,21 +40,20 @@ use be_shell::{
 use be_terminal::{Arrow, InputModes, Position, keys, mouse};
 use kurbo::{Point, Rect, RoundedRect, Size, Stroke};
 
-use super::{
-  shell_input::{HistoryNav, InputLine},
-  shell_layout::{
-    BlockKind, Blocks, Item, PROMPT_KEY, ScrollState, header_command, is_fullscreen, mouse_cell,
-    pty_grid, stack,
-  },
-  shell_prompt::{
-    BlockResult, Chevron, Element, Kind, SYMBOL_COLS, Wrapped, prompt_elements, symbol,
-    symbol_color,
-  },
-  terminal_paint::{CursorDraw, DrawOptions, Span, TerminalPainter, character_size, styled_line},
+use super::terminal_paint::{
+  CursorDraw, DrawOptions, Span, TerminalPainter, character_size, styled_line,
 };
 use crate::{
   Color, Font, Layout, MouseButton, MouseEvent, Render, RenderStore, TextLayout, icon,
   spinner::Spinner,
+};
+use input::{HistoryNav, InputLine};
+use layout::{
+  BlockKind, Blocks, Item, PROMPT_KEY, ScrollState, header_command, is_fullscreen, mouse_cell,
+  pty_grid, stack,
+};
+use prompt::{
+  BlockResult, Chevron, Element, Kind, SYMBOL_COLS, Wrapped, prompt_elements, symbol, symbol_color,
 };
 
 /// Padding to the right of the text.
