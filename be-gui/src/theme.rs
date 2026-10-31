@@ -91,7 +91,10 @@ impl Theme {
       mode_command:              oklch(0.76, 0.12, 65.0),
 
       syntax: SyntaxTheme::from([
+        ("attribute", oklch(0.8, 0.12, 280.0).into()),
         ("constant", Highlight::from(oklch(0.8, 0.13, 50.0))),
+        ("constructor", oklch(0.8, 0.12, 215.0).into()),
+        ("escape", oklch(0.8, 0.13, 50.0).into()),
         ("function", oklch(0.8, 0.12, 260.0).into()),
         ("function.macro", oklch(0.8, 0.12, 280.0).into()),
         ("keyword", oklch(0.8, 0.14, 295.0).into()),
@@ -202,10 +205,19 @@ impl SyntaxTheme {
       // we only apply `comment.documentation`.
       if keys.iter().any(|k| match (k, key) {
         (HighlightKey::TreeSitter(k), HighlightKey::TreeSitter(key)) => {
-          k.len() > key.len() && k.starts_with(key)
+          k.len() > key.len() && k.starts_with(key) && k.as_bytes()[key.len()] == b'.'
         }
         _ => false,
       }) {
+        continue;
+      }
+
+      // Punctuation inside an attribute (`#[derive(Debug)]`) takes the
+      // attribute color, instead of the dim punctuation color.
+      if let HighlightKey::TreeSitter(k) = key
+        && (*k == "punctuation" || k.starts_with("punctuation."))
+        && keys.contains(&HighlightKey::TreeSitter("attribute"))
+      {
         continue;
       }
 

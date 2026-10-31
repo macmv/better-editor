@@ -174,7 +174,7 @@ impl Highlighter {
     let captures = cursor.captures(&self.highlights_query, tree.root_node(), RopeProvider { doc });
     let captures = unsafe { std::mem::transmute(captures) };
 
-    Some(CapturesIter { query: &self.highlights_query, captures, _cursor: cursor })
+    Some(CapturesIter { query: &self.highlights_query, captures, pending: None, _cursor: cursor })
   }
 }
 
@@ -195,23 +195,56 @@ pub(crate) struct CapturesIter<'a> {
   query:    &'a Query,
   captures: QueryCaptures<'a, 'a, RopeProvider<'a>, &'a str>,
 
+  // The last capture seen, and the index of the pattern that produced it. Held
+  // back until we know no later pattern captures the same node.
+  pending: Option<(Highlight<'a>, usize)>,
+
   // SAFETY: Drop last, `captures` borrows into this cursor.
   _cursor: QueryCursor,
+}
+
+impl<'a> CapturesIter<'a> {
+  fn next_raw(&mut self) -> Option<(Highlight<'a>, usize)> {
+    let (m, index) = self.captures.next()?;
+    let cap = m.captures[*index];
+    let pattern = m.pattern_index;
+
+    let range = cap.node.byte_range();
+    let name = self.query.capture_names().get(cap.index as usize).unwrap();
+
+    Some((
+      Highlight { start: range.start, end: range.end, key: crate::HighlightKey::TreeSitter(name) },
+      pattern,
+    ))
+  }
 }
 
 impl<'a> Iterator for CapturesIter<'a> {
   type Item = Highlight<'a>;
 
   fn next(&mut self) -> Option<Self::Item> {
-    let Some((m, index)) = self.captures.next() else { return None };
-    let cap = m.captures[*index];
+    // When multiple patterns capture the exact same node, only the one defined
+    // last in the query applies. This matches tree-sitter's own highlighter, and
+    // is how queries make specific patterns (`@type`) override generic ones
+    // (`@constructor` on every capitalized identifier).
+    loop {
+      let Some((hl, pattern)) = self.next_raw() else {
+        return self.pending.take().map(|(h, _)| h);
+      };
 
-    let start = cap.node.byte_range().start;
-    let end = cap.node.byte_range().end;
-
-    let name = self.query.capture_names().get(cap.index as usize).unwrap();
-
-    Some(Highlight { start, end, key: crate::HighlightKey::TreeSitter(name) })
+      match self.pending.take() {
+        None => self.pending = Some((hl, pattern)),
+        Some((prev, prev_pattern)) => {
+          if prev.start == hl.start && prev.end == hl.end {
+            self.pending =
+              Some(if pattern >= prev_pattern { (hl, pattern) } else { (prev, prev_pattern) });
+          } else {
+            self.pending = Some((hl, pattern));
+            return Some(prev);
+          }
+        }
+      }
+    }
   }
 }
 
