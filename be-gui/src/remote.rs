@@ -623,11 +623,11 @@ mod tests {
   #[test]
   fn a_remote_workspace_opens_and_saves_files() {
     let Some(host) = be_host() else { return };
-    let (tx, _rx) = mpsc::channel();
+    let (tx, rx) = mpsc::channel();
     let tx = Mutex::new(tx);
     let mut cmd = Command::new(host);
     cmd.arg("--stdio");
-    let session =
+    let mut session =
       RemoteSession::spawn(cmd, move |w| tx.lock().unwrap().send(w).unwrap()).unwrap();
     let handle = session.handle();
 
@@ -647,18 +647,36 @@ mod tests {
     let mut workspace =
       be_workspace::Workspace::with_backend(root, config, handle.backend(&dir));
 
-    // Relative to nothing local: the path only exists on the host.
-    let editor = workspace.open_file(&dir.join("sub/../a.txt")).unwrap();
+    // The path only exists on the host, and the file arrives with a wake.
+    let mut editor = workspace.open_file(&dir.join("sub/../a.txt")).unwrap();
+    assert!(editor.loading());
+    let start = Instant::now();
+    while editor.loading() {
+      assert!(start.elapsed() < WAIT, "the file never arrived");
+      if let Ok(wake) = rx.recv_timeout(Duration::from_millis(50)) {
+        session.on_wake(wake);
+      }
+      editor.layout();
+    }
     assert_eq!(editor.doc().to_string(), "hello\nworld\n");
     assert_eq!(editor.file(), Some(dir.join("a.txt").as_path()));
 
     // Saving writes through the host, over whatever changed there meanwhile.
     std::fs::write(dir.join("a.txt"), "changed\n").unwrap();
-    let mut editor = editor;
     editor.save().unwrap();
     assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "hello\nworld\n");
 
-    assert!(workspace.open_file(&dir.join("missing.txt")).is_err());
+    // A missing file is reported in the status line when the host answers.
+    let mut missing = workspace.open_file(&dir.join("missing.txt")).unwrap();
+    let start = Instant::now();
+    while missing.status().is_none() {
+      assert!(start.elapsed() < WAIT, "no error for a missing file");
+      if let Ok(wake) = rx.recv_timeout(Duration::from_millis(50)) {
+        session.on_wake(wake);
+      }
+      missing.layout();
+    }
+    assert!(!missing.loading());
 
     let _ = std::fs::remove_dir_all(&dir);
   }

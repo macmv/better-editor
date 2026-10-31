@@ -75,6 +75,15 @@ pub enum HostError {
   Io(String),
 }
 
+/// A file, read in one call.
+#[derive(Debug, Clone, PartialEq, lode::Message)]
+pub struct OpenedFile {
+  /// The canonical path.
+  pub path:  String,
+  pub mtime: i64,
+  pub data:  Bytes,
+}
+
 /// What the editor may ask of the machine it connected to.
 #[lode::interface(lock = "host.lock")]
 pub trait Host {
@@ -84,6 +93,8 @@ pub trait Host {
 
   fn stat(&self, path: String) -> Result<FileStat, HostError>;
   fn canonicalize(&self, path: String) -> Result<String, HostError>;
+  /// `canonicalize`, `stat`, and `read_bytes` in one round trip.
+  fn open_file(&self, path: String) -> Result<OpenedFile, HostError>;
   fn read_bytes(&self, path: String) -> Result<Bytes, HostError>;
   /// Replaces the contents of an existing file.
   fn write_bytes(&self, path: String, data: Bytes) -> Result<(), HostError>;

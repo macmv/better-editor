@@ -67,9 +67,15 @@ impl Repo {
 
   pub fn open_file(&mut self, path: &Path) {
     let Ok(path) = self.fs.canonicalize(path) else { return };
+    let Some(current) = self.read_snapshot(&path) else { return };
+    self.open_file_with(&path, current);
+  }
 
+  /// `open_file` for a file that has already been read. `path` must be
+  /// canonical.
+  pub fn open_file_with(&mut self, path: &Path, current: DocumentSnapshot) {
+    let path = path.to_path_buf();
     if let Ok(rel) = path.strip_prefix(&self.root) {
-      let Some(current) = self.read_snapshot(&path) else { return };
       let file = if let Some(git) = &self.git {
         ChangedFile { original: git.lookup_in_head(&path).map(snapshot), current }
       } else {

@@ -78,7 +78,7 @@ pub(crate) fn io_error(e: HostError) -> io::Error {
   }
 }
 
-fn rpc_error(e: RpcError) -> io::Error {
+pub(crate) fn rpc_error(e: RpcError) -> io::Error {
   match e {
     RpcError::Disconnected => io::Error::new(io::ErrorKind::BrokenPipe, "host disconnected"),
     e => io::Error::other(format!("{e:?}")),

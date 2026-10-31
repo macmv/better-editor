@@ -138,16 +138,19 @@ impl Workspace {
   }
 
   pub fn open_file(&mut self, path: &Path) -> io::Result<SharedHandle<EditorState>> {
-    let canon = self.files.canonicalize(path)?;
+    // Resolving symlinks takes a round trip on another machine, so a remote
+    // file is found by the path it was asked for. Opening the same file by two
+    // spellings gives two editors there.
+    let key = if self.files.is_local() { self.files.canonicalize(path)? } else { path.to_path_buf() };
 
-    if let Some(handle) = self.editors_by_path.get(&canon)
+    if let Some(handle) = self.editors_by_path.get(&key)
       && let Some(handle) = handle.upgrade()
     {
       Ok(handle)
     } else {
       let mut editor = self.new_editor();
-      editor.open(&canon)?;
-      self.editors_by_path.insert(canon, SharedHandle::downgrade(&editor));
+      editor.open(&key)?;
+      self.editors_by_path.insert(key, SharedHandle::downgrade(&editor));
       Ok(editor)
     }
   }

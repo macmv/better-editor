@@ -806,8 +806,8 @@ impl WorkspaceLayout {
       if let Some(cursor) = cursor
         && res.is_ok()
       {
-        let cursor = cursor.into_cursor(e.editor.doc());
-        e.editor.move_to(cursor);
+        // A file on another machine is still on its way.
+        e.editor.move_to_when_loaded(cursor);
       }
     }
 

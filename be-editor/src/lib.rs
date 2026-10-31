@@ -48,6 +48,7 @@ pub struct EditorState {
   selection: Option<Selection>,
 
   file:    Option<OpenedFile>,
+  pending_open: Option<fs::PendingOpen>,
   status:  Option<Status>,
   command: Option<CommandState>,
 
@@ -154,6 +155,10 @@ impl EditorState {
   }
 
   pub fn layout(&mut self) {
+    if let Err(e) = self.update_open() {
+      self.status = Some(Status::for_error(e));
+    }
+
     if let Some(repo) = &mut *self.repo {
       repo.update();
     }
@@ -184,7 +189,7 @@ impl EditorState {
     self.connect_to_lsp();
 
     if let Some(repo) = &mut *self.repo {
-      repo.open_file(self.file.as_ref().unwrap().path());
+      repo.open_file_with(self.file.as_ref().unwrap().path(), self.doc.snapshot());
     }
   }
 

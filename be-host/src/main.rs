@@ -12,7 +12,7 @@ use std::os::unix::fs::MetadataExt;
 use be_git::{GitBackend, GitRepo};
 use be_remote::{
   Bytes, DirEntry, DirKind, FileStat, GitFileStatus, Host, HostError, HostInfo, HostService,
-  PROTOCOL_VERSION, TermSize,
+  OpenedFile, PROTOCOL_VERSION, TermSize,
 };
 use be_terminal::{PtyHost, Size};
 use lode_local::{Event, Reply, Sink, Token};
@@ -105,6 +105,13 @@ impl Host for Service {
   fn canonicalize(&self, path: String) -> Result<String, HostError> {
     let path = fs::canonicalize(path).map_err(io_error)?;
     Ok(path.to_string_lossy().into_owned())
+  }
+
+  fn open_file(&self, path: String) -> Result<OpenedFile, HostError> {
+    let path = fs::canonicalize(path).map_err(io_error)?;
+    let mtime = fs::metadata(&path).map_err(io_error)?.mtime();
+    let data = Bytes::from(fs::read(&path).map_err(io_error)?);
+    Ok(OpenedFile { path: path.to_string_lossy().into_owned(), mtime, data })
   }
 
   fn read_bytes(&self, path: String) -> Result<Bytes, HostError> {

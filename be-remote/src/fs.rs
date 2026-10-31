@@ -3,10 +3,10 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use be_fs::{DirEntry, FileKind, Fs, Metadata};
+use be_fs::{DirEntry, FileData, FileKind, Fs, Metadata, PendingRead};
 use lode::Bytes;
 
-use crate::{DirKind, Host, Transport};
+use crate::{DirKind, Host, Transport, transport};
 
 /// The remote machine's filesystem. Every call blocks for a round trip.
 pub struct RemoteFs {
@@ -43,6 +43,22 @@ impl Fs for RemoteFs {
 
   fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
     self.t.wait(self.t.local().proxy::<Host>().write_bytes(path_str(path), Bytes::copy_from_slice(data)))
+  }
+
+  fn is_local(&self) -> bool { false }
+
+  /// One round trip, and no waiting: the result is picked up by polling, as
+  /// the connection's owner delivers it.
+  fn begin_read(&self, path: &Path) -> PendingRead {
+    let mut call = self.t.local().proxy::<Host>().open_file(path_str(path));
+    self.t.io_done();
+    PendingRead::new(move || {
+      Some(match call.try_take()? {
+        Ok(f) => Ok(FileData { path: PathBuf::from(f.path), mtime: f.mtime, data: f.data.to_vec() }),
+        Err(lode_local::CallError::App(e)) => Err(transport::io_error(e)),
+        Err(lode_local::CallError::Rpc(e)) => Err(transport::rpc_error(e)),
+      })
+    })
   }
 
   fn read_dir(&self, path: &Path) -> io::Result<Vec<DirEntry>> {

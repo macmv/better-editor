@@ -30,6 +30,11 @@ type be_remote::HostError = enum { NotFound=0(), PermissionDenied=1(), NotUtf8=2
 sig = ((string), (vec<string>, be_remote::HostError))
 type be_remote::HostError = enum { NotFound=0(), PermissionDenied=1(), NotUtf8=2(), Io=3(0: string) }
 
+[Host::open_file v1] id=b4b56604fc41390a
+sig = ((string), (be_remote::OpenedFile, be_remote::HostError))
+type be_remote::HostError = enum { NotFound=0(), PermissionDenied=1(), NotUtf8=2(), Io=3(0: string) }
+type be_remote::OpenedFile = struct { path: string, mtime: i64, data: bytes }
+
 [Host::read_bytes v1] id=adfb4bc790aa6590
 sig = ((string), (bytes, be_remote::HostError))
 type be_remote::HostError = enum { NotFound=0(), PermissionDenied=1(), NotUtf8=2(), Io=3(0: string) }
