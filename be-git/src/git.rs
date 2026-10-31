@@ -3,40 +3,44 @@
 use std::path::{Path, PathBuf};
 
 use be_doc::DocumentSnapshot;
+use be_task::Task;
 use git2::Repository;
+
+/// What git says about one path.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PathStatus {
+  pub ignored:  bool,
+  pub added:    bool,
+  pub modified: bool,
+}
 
 /// The questions the editor asks of a git repository. `GitRepo` answers them
 /// with libgit2 on the local disk; a repository on another machine answers
 /// them over the wire. Paths are absolute, in the namespace of whichever
 /// machine holds the repository.
+///
+/// None of these block: an answer that has to come from another machine is
+/// asked for and picked up on a later call.
 pub trait GitBackend {
   /// An identifier for the current HEAD tree, which changes when HEAD does.
+  /// This is the latest answer the backend has, so it may trail HEAD a little.
   fn head(&self) -> Option<String>;
-  /// The contents of `path` at HEAD, if it is tracked there.
-  fn lookup_in_head(&self, path: &Path) -> Option<String>;
-  fn is_ignored(&self, path: &Path) -> bool;
-  fn is_added(&self, path: &Path) -> bool;
-  fn is_modified(&self, path: &Path) -> bool;
+  /// Starts looking up the contents of `path` at HEAD, if it is tracked there.
+  fn begin_lookup_in_head(&self, path: &Path) -> Task<Option<String>>;
+  /// What git says about `path`, or `None` if the answer hasn't arrived. The
+  /// first call for a path asks, and a later call takes the answer. Each answer
+  /// is given out once, so asking again gets a fresh one.
+  fn status(&self, path: &Path) -> Option<PathStatus>;
 }
 
 impl GitBackend for GitRepo {
-  fn head(&self) -> Option<String> {
-    Some(self.repo.head().ok()?.peel_to_tree().ok()?.as_object().id().to_string())
+  fn head(&self) -> Option<String> { self.head_id() }
+
+  fn begin_lookup_in_head(&self, path: &Path) -> Task<Option<String>> {
+    Task::ready(self.text_at_head(path))
   }
 
-  fn lookup_in_head(&self, path: &Path) -> Option<String> {
-    let rel = if path.is_absolute() { path.strip_prefix(&self.root).ok()? } else { path };
-
-    let head = self.repo.head().ok()?.peel_to_tree().ok()?;
-    let entry = head.get_path(rel).ok()?;
-    let blob = self.repo.find_blob(entry.id()).ok()?;
-
-    Some(String::from_utf8_lossy(blob.content()).into_owned())
-  }
-
-  fn is_ignored(&self, path: &Path) -> bool { GitRepo::is_ignored(self, path).unwrap_or(false) }
-  fn is_added(&self, path: &Path) -> bool { GitRepo::is_added(self, path).unwrap_or(false) }
-  fn is_modified(&self, path: &Path) -> bool { GitRepo::is_modified(self, path).unwrap_or(false) }
+  fn status(&self, path: &Path) -> Option<PathStatus> { Some(self.path_status(path)) }
 }
 
 pub struct GitRepo {
@@ -48,6 +52,30 @@ impl GitRepo {
   pub fn open(path: &Path) -> Result<Self, git2::Error> {
     let path = path.canonicalize().map_err(|e| git2::Error::from_str(&e.to_string()))?;
     Ok(GitRepo { repo: Repository::open(&path)?, root: path })
+  }
+
+  /// An identifier for the current HEAD tree.
+  pub fn head_id(&self) -> Option<String> {
+    Some(self.repo.head().ok()?.peel_to_tree().ok()?.as_object().id().to_string())
+  }
+
+  /// The contents of `path` at HEAD, if it is tracked there.
+  pub fn text_at_head(&self, path: &Path) -> Option<String> {
+    let rel = if path.is_absolute() { path.strip_prefix(&self.root).ok()? } else { path };
+
+    let head = self.repo.head().ok()?.peel_to_tree().ok()?;
+    let entry = head.get_path(rel).ok()?;
+    let blob = self.repo.find_blob(entry.id()).ok()?;
+
+    Some(String::from_utf8_lossy(blob.content()).into_owned())
+  }
+
+  pub fn path_status(&self, path: &Path) -> PathStatus {
+    PathStatus {
+      ignored:  self.is_ignored(path).unwrap_or(false),
+      added:    self.is_added(path).unwrap_or(false),
+      modified: self.is_modified(path).unwrap_or(false),
+    }
   }
 
   pub fn head(&self) -> git2::Oid {

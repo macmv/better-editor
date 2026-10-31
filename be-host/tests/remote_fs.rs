@@ -139,19 +139,45 @@ fn git_state() {
   let s = connect();
   let git = RemoteGit::new(s.t.clone(), &dir);
 
-  assert!(git.head().is_some());
-  assert_eq!(git.lookup_in_head(&dir.join("a.txt")).as_deref(), Some("one\n"));
-  assert_eq!(git.lookup_in_head(&dir.join("nope.txt")), None);
+  // Nothing is known until the host answers.
+  assert!(git.head().is_none());
+  let deadline = Instant::now() + Duration::from_secs(10);
+  let wait_for = |what: &str, mut done: &mut dyn FnMut() -> bool| {
+    while !done() {
+      assert!(Instant::now() < deadline, "{what} never arrived");
+      s.host.borrow().pump(50);
+    }
+  };
+  wait_for("head", &mut || git.head().is_some());
+
+  let lookup = |name: &str| {
+    let task = git.begin_lookup_in_head(&dir.join(name));
+    let mut out = None;
+    wait_for("lookup", &mut || {
+      out = task.completed();
+      out.is_some()
+    });
+    out.unwrap()
+  };
+  assert_eq!(lookup("a.txt").as_deref(), Some("one\n"));
+  assert_eq!(lookup("nope.txt"), None);
 
   std::fs::write(dir.join("a.txt"), "two\n").unwrap();
   std::fs::write(dir.join("b.txt"), "new\n").unwrap();
   std::fs::write(dir.join("ignored.txt"), "x\n").unwrap();
-  std::thread::sleep(Duration::from_millis(150));
 
-  assert!(git.is_modified(&dir.join("a.txt")));
-  assert!(!git.is_added(&dir.join("a.txt")));
-  assert!(git.is_added(&dir.join("b.txt")));
-  assert!(git.is_ignored(&dir.join("ignored.txt")));
+  let status = |name: &str| {
+    let mut out = None;
+    wait_for("status", &mut || {
+      out = git.status(&dir.join(name));
+      out.is_some()
+    });
+    out.unwrap()
+  };
+  let a = status("a.txt");
+  assert!(a.modified && !a.added);
+  assert!(status("b.txt").added);
+  assert!(status("ignored.txt").ignored);
 
   let _ = std::fs::remove_dir_all(&dir);
 }

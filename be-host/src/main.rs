@@ -9,7 +9,7 @@ use std::{cell::RefCell, collections::HashMap, fs, io, path::Path, rc::Rc, time:
 
 use std::os::unix::fs::MetadataExt;
 
-use be_git::{GitBackend, GitRepo};
+use be_git::GitRepo;
 use be_remote::{
   Bytes, DirEntry, DirKind, GitFileStatus, Host, HostError, HostInfo, HostService,
   OpenedFile, PROTOCOL_VERSION, TermSize, WrittenFile,
@@ -128,21 +128,20 @@ impl Host for Service {
   }
 
   fn git_head(&self, root: String) -> Result<Option<String>, HostError> {
-    Ok(self.with_repo(&root, |repo| GitBackend::head(repo)).flatten())
+    Ok(self.with_repo(&root, |repo| repo.head_id()).flatten())
   }
 
   fn git_lookup(&self, root: String, path: String) -> Result<Option<String>, HostError> {
-    Ok(self.with_repo(&root, |repo| GitBackend::lookup_in_head(repo, Path::new(&path))).flatten())
+    Ok(self.with_repo(&root, |repo| repo.text_at_head(Path::new(&path))).flatten())
   }
 
   fn git_status(&self, root: String, path: String) -> Result<GitFileStatus, HostError> {
     let path = Path::new(&path);
     Ok(
       self
-        .with_repo(&root, |repo| GitFileStatus {
-          ignored:  GitBackend::is_ignored(repo, path),
-          added:    GitBackend::is_added(repo, path),
-          modified: GitBackend::is_modified(repo, path),
+        .with_repo(&root, |repo| {
+          let s = repo.path_status(path);
+          GitFileStatus { ignored: s.ignored, added: s.added, modified: s.modified }
         })
         .unwrap_or_default(),
     )

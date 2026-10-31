@@ -304,6 +304,7 @@ version = "0.1.0"
 dependencies = [
  "be-doc",
  "be-rope",
+ "be-task",
  "git2",
  "imara-diff",
  "log",
@@ -413,6 +414,7 @@ version = "0.1.0"
 dependencies = [
  "be-fs",
  "be-git",
+ "be-task",
  "be-terminal",
  "lode",
  "lode-local",

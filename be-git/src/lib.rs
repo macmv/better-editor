@@ -4,6 +4,7 @@ use std::{
 };
 
 use be_doc::DocumentSnapshot;
+use be_task::Task;
 
 #[macro_use]
 extern crate log;
@@ -12,7 +13,7 @@ mod diff;
 mod git;
 
 pub use diff::{Change, LineDiff, LineDiffSimilarity};
-pub use git::{GitBackend, GitRepo};
+pub use git::{GitBackend, GitRepo, PathStatus};
 
 /// This acts like a store for modified files in the editor.
 ///
@@ -29,6 +30,12 @@ pub struct Repo {
 struct ChangedFile {
   original: Option<DocumentSnapshot>,
   current:  DocumentSnapshot,
+
+  /// False until HEAD's version of the file has arrived for the first time.
+  /// Until then, there is nothing to compare against.
+  loaded: bool,
+  /// HEAD's version of the file, on its way.
+  lookup: Option<Task<Option<String>>>,
 }
 
 impl Repo {
@@ -50,10 +57,15 @@ impl Repo {
       let head = git.head();
       if self.head != head {
         self.head = head;
-        for (path, file) in &mut self.files {
-          file.original = git.lookup_in_head(path).map(snapshot);
+        for (rel, file) in &mut self.files {
+          // Replacing an older lookup drops it, which cancels its result.
+          file.lookup = Some(git.begin_lookup_in_head(&self.root.join(rel)));
         }
       }
+    }
+
+    for file in self.files.values_mut() {
+      file.poll();
     }
   }
 
@@ -62,11 +74,18 @@ impl Repo {
   pub fn open_file_with(&mut self, path: &Path, current: DocumentSnapshot) {
     let path = path.to_path_buf();
     if let Ok(rel) = path.strip_prefix(&self.root) {
-      let file = if let Some(git) = &self.git {
-        ChangedFile { original: git.lookup_in_head(&path).map(snapshot), current }
+      let mut file = if let Some(git) = &self.git {
+        ChangedFile {
+          original: None,
+          current,
+          loaded: false,
+          lookup: Some(git.begin_lookup_in_head(&path)),
+        }
       } else {
         ChangedFile::new(current)
       };
+      // A local lookup is done already.
+      file.poll();
 
       self.files.insert(rel.to_path_buf(), file);
     }
@@ -85,9 +104,11 @@ impl Repo {
     }
   }
 
+  /// The changes to `path` since HEAD, once HEAD's version has arrived.
   pub fn changes_in(&self, path: &Path) -> Option<LineDiffSimilarity> {
     if let Ok(rel) = path.strip_prefix(&self.root)
       && let Some(file) = self.files.get(rel)
+      && file.loaded
     {
       return Some(file.changes());
     }
@@ -95,34 +116,32 @@ impl Repo {
     None
   }
 
-  pub fn is_added(&self, path: &Path) -> bool {
-    if let Ok(rel) = path.strip_prefix(&self.root) {
-      if let Some(file) = self.files.get(rel) {
-        return file.is_added();
-      } else if let Some(git) = &self.git {
-        return git.is_added(path);
+  /// What git says about `path`, or `None` if the answer hasn't arrived. See
+  /// `GitBackend::status`.
+  pub fn status(&self, path: &Path) -> Option<PathStatus> {
+    let git = match &self.git {
+      Some(git) => Some(git.status(path)?),
+      None => None,
+    };
+    let ignored = git.is_some_and(|g| g.ignored);
+
+    let Ok(rel) = path.strip_prefix(&self.root) else {
+      return Some(PathStatus { ignored, added: false, modified: false });
+    };
+
+    // An open file is compared with the text in the editor, not the disk.
+    if let Some(file) = self.files.get(rel) {
+      if !file.loaded {
+        return None;
       }
+      return Some(PathStatus { ignored, added: file.is_added(), modified: file.is_modified() });
     }
 
-    false
-  }
-
-  pub fn is_modified(&self, path: &Path) -> bool {
-    if let Ok(rel) = path.strip_prefix(&self.root) {
-      if let Some(file) = self.files.get(rel) {
-        return file.is_modified();
-      } else if let Some(git) = &self.git {
-        return git.is_modified(path);
-      }
-    }
-
-    false
-  }
-
-  pub fn is_ignored(&self, path: &Path) -> bool {
-    let Some(git) = &self.git else { return false };
-
-    git.is_ignored(path)
+    Some(PathStatus {
+      ignored,
+      added: git.is_some_and(|g| g.added),
+      modified: git.is_some_and(|g| g.modified),
+    })
   }
 }
 
@@ -132,7 +151,17 @@ fn snapshot(text: String) -> DocumentSnapshot {
 
 impl ChangedFile {
   fn new(doc: DocumentSnapshot) -> Self {
-    ChangedFile { original: Some(doc.clone()), current: doc }
+    ChangedFile { original: Some(doc.clone()), current: doc, loaded: true, lookup: None }
+  }
+
+  /// Takes HEAD's version of the file, if it has arrived.
+  fn poll(&mut self) {
+    let Some(lookup) = &self.lookup else { return };
+    let Some(original) = lookup.completed() else { return };
+    self.lookup = None;
+
+    self.original = original.map(snapshot);
+    self.loaded = true;
   }
 
   fn changes(&self) -> diff::LineDiffSimilarity {

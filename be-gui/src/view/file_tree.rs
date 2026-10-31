@@ -564,15 +564,7 @@ impl ItemMut<'_> {
         // TODO: Move the caching to repo? It's somewhat nice to have it here.
         // We just need some sense of 'staleness'.
         if dir.status.is_none() {
-          if repo.is_ignored(&root.resolve_path(&dir.path)) {
-            dir.status = Some(FileStatus::Ignored);
-          } else if repo.is_added(&root.resolve_path(&dir.path)) {
-            dir.status = Some(FileStatus::Created);
-          } else if repo.is_modified(&root.resolve_path(&dir.path)) {
-            dir.status = Some(FileStatus::Modified);
-          } else {
-            dir.status = Some(FileStatus::Unchanged);
-          }
+          dir.status = FileStatus::lookup(repo, &root.resolve_path(&dir.path));
         }
 
         if let Some(items) = &mut dir.items {
@@ -621,15 +613,7 @@ impl Item {
 impl File {
   fn layout(&mut self, root: &WorkspaceRoot, repo: &Repo) {
     if self.status.is_none() {
-      if repo.is_ignored(&root.resolve_path(&self.path)) {
-        self.status = Some(FileStatus::Ignored);
-      } else if repo.is_added(&root.resolve_path(&self.path)) {
-        self.status = Some(FileStatus::Created);
-      } else if repo.is_modified(&root.resolve_path(&self.path)) {
-        self.status = Some(FileStatus::Modified);
-      } else {
-        self.status = Some(FileStatus::Unchanged);
-      }
+      self.status = FileStatus::lookup(repo, &root.resolve_path(&self.path));
     }
   }
 }
@@ -789,6 +773,20 @@ impl TreeDraw<'_> {
 }
 
 impl FileStatus {
+  /// What git says about `path`, or `None` if it hasn't answered yet.
+  fn lookup(repo: &Repo, path: &std::path::Path) -> Option<FileStatus> {
+    let s = repo.status(path)?;
+    Some(if s.ignored {
+      FileStatus::Ignored
+    } else if s.added {
+      FileStatus::Created
+    } else if s.modified {
+      FileStatus::Modified
+    } else {
+      FileStatus::Unchanged
+    })
+  }
+
   fn icon(&self) -> Option<LazyLock<Icon>> {
     match self {
       FileStatus::Modified => Some(icon::SQUARE_DOT),
