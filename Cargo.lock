@@ -288,6 +288,7 @@ dependencies = [
  "btree-slab",
  "dispatch2",
  "expect-test",
+ "ignore",
  "inotify",
  "libc",
  "log",

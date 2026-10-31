@@ -6,6 +6,7 @@ use std::{
 
 mod change;
 mod fs;
+mod ignore;
 mod path;
 mod watch;
 
