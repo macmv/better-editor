@@ -1,9 +1,17 @@
-use std::fmt::Write as _;
+use std::{
+  cell::RefCell,
+  collections::VecDeque,
+  fmt::Write as _,
+  io,
+  path::PathBuf,
+  rc::Rc,
+  time::{Duration, Instant},
+};
 
 use anstyle_parse::{Parser, Utf8Parser};
 use expect_test::Expect;
 
-use crate::{BuiltinColor, Size, TerminalState};
+use crate::{BuiltinColor, PtyHost, Size, Terminal, TerminalState};
 
 // --- Sequence builder ---
 
@@ -448,4 +456,133 @@ fn ascii_fast_path_matches_the_parser() {
       assert_eq!(styles(&fast), styles(&slow), "seed {seed}, row {row}");
     }
   }
+}
+
+// --- Synchronized updates ---
+
+#[derive(Clone, Default)]
+struct Script {
+  chunks:  Rc<RefCell<VecDeque<Vec<u8>>>>,
+  written: Rc<RefCell<Vec<u8>>>,
+}
+
+impl Script {
+  fn send(&self, s: &str) { self.chunks.borrow_mut().push_back(s.as_bytes().to_vec()); }
+}
+
+struct FakeHost(Script);
+
+impl PtyHost for FakeHost {
+  fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    let Some(chunk) = self.0.chunks.borrow_mut().pop_front() else {
+      return Err(io::ErrorKind::WouldBlock.into());
+    };
+    buf[..chunk.len()].copy_from_slice(&chunk);
+    Ok(chunk.len())
+  }
+
+  fn write_bytes(&mut self, bytes: &[u8]) { self.0.written.borrow_mut().extend_from_slice(bytes); }
+  fn has_pending_writes(&self) -> bool { false }
+  fn flush(&mut self) {}
+  fn resize(&mut self, _size: Size) {}
+  fn current_dir(&self) -> PathBuf { PathBuf::from("/") }
+  fn set_wake(&mut self, _wake: Box<dyn Fn() + Send>) {}
+}
+
+fn terminal() -> (Terminal, Script) {
+  let script = Script::default();
+  let term = Terminal::with_host(Size { rows: 3, cols: 8 }, Box::new(FakeHost(script.clone())));
+  (term, script)
+}
+
+fn row(term: &Terminal, row: usize) -> String {
+  term.state.grid.line(row).unwrap().to_string().trim_end().to_string()
+}
+
+const BSU: &str = "\x1b[?2026h";
+const ESU: &str = "\x1b[?2026l";
+
+#[test]
+fn synchronized_update_is_shown_all_at_once() {
+  let (mut term, script) = terminal();
+
+  script.send(&format!("before{BSU}\x1b[1;1Hone"));
+  term.update();
+  // Nothing after the start of the update is visible yet.
+  assert_eq!(row(&term, 0), "before");
+  assert!(term.has_pending_output());
+
+  script.send("\x1b[2;1Htwo");
+  term.update();
+  assert_eq!(row(&term, 0), "before");
+  assert_eq!(row(&term, 1), "");
+
+  script.send(&format!("\x1b[3;1Hthree{ESU}!!"));
+  term.update();
+  assert_eq!(row(&term, 0), "oneore");
+  assert_eq!(row(&term, 1), "two");
+  assert_eq!(row(&term, 2), "three!!");
+  assert!(!term.has_pending_output());
+}
+
+#[test]
+fn synchronized_update_end_split_across_reads() {
+  let (mut term, script) = terminal();
+
+  script.send(&format!("{BSU}hi\x1b[?20"));
+  term.update();
+  assert_eq!(row(&term, 0), "");
+
+  script.send("26l");
+  term.update();
+  assert_eq!(row(&term, 0), "hi");
+}
+
+#[test]
+fn synchronized_updates_in_one_read() {
+  let (mut term, script) = terminal();
+
+  // The second update is never finished, so it stays held.
+  script.send(&format!("{BSU}a{ESU}{BSU}b"));
+  term.update();
+  assert_eq!(row(&term, 0), "a");
+  assert!(term.has_pending_output());
+
+  script.send(ESU);
+  term.update();
+  assert_eq!(row(&term, 0), "ab");
+}
+
+#[test]
+fn unfinished_synchronized_update_times_out() {
+  let (mut term, script) = terminal();
+
+  script.send(&format!("{BSU}stuck"));
+  term.update();
+  assert_eq!(row(&term, 0), "");
+
+  term.hold_deadline = Some(Instant::now() - Duration::from_millis(1));
+  term.update();
+  assert_eq!(row(&term, 0), "stuck");
+  assert!(!term.has_pending_output());
+  assert!(!term.state.synchronized);
+}
+
+#[test]
+fn synchronized_update_mode_can_be_queried() {
+  let (mut term, script) = terminal();
+
+  script.send("\x1b[?2026$p");
+  term.update();
+  assert_eq!(script.written.borrow().as_slice(), b"\x1b[?2026;2$y");
+
+  script.written.borrow_mut().clear();
+  script.send(&format!("{BSU}\x1b[?2026$p"));
+  term.update();
+  // The query is held with the rest of the update, so it is answered when the
+  // update ends.
+  assert_eq!(script.written.borrow().as_slice(), b"");
+  script.send(ESU);
+  term.update();
+  assert_eq!(script.written.borrow().as_slice(), b"\x1b[?2026;1$y");
 }

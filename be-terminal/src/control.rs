@@ -341,7 +341,11 @@ impl Perform for TerminalState {
         );
       }
       (b'p', [b'$']) => unhandled!("report mode"),
-      (b'p', [b'?', b'$']) => unhandled!("report private mode"),
+      (b'p', [b'?', b'$']) => match next_param_or(0) {
+        // 1 is set, 2 is reset. Programs ask before using synchronized updates.
+        2026 => self.send_text(&format!("\x1b[?2026;{}$y", if self.synchronized { 1 } else { 2 })),
+        _ => unhandled!("report private mode"),
+      },
       (b'q', [b' ']) => unhandled!("set cursor style"),
       (b'r', []) => {
         let scroll_start = (next_param_or(1) as usize - 1).clamp(0, self.size.rows - 1);
@@ -577,11 +581,13 @@ impl TerminalState {
       1042 => unhandled!("urgency hints"),
       1049 => self.set_alt_screen(set),
       2004 => self.flags.set(TerminalFlags::BRACKETED_PASTE, set),
-      // 2026: synchronized output (DEC private mode). When set, the terminal
-      // should buffer all rendering until reset (like a begin/end frame pair),
-      // eliminating flicker on full-screen redraws. Safe to silently ignore
-      // for correctness, but implementing it would improve TUI rendering quality.
-      2026 => unhandled!("sync update"),
+      // 2026: synchronized output. Output between setting and resetting this is held back, and
+      // shown all at once, so that full-screen redraws don't flicker or tear. See
+      // `Terminal::consume`.
+      2026 => {
+        self.synchronized = set;
+        self.sync_started |= set;
+      }
       // 2031: enable sending dark/light mode on change.
       // https://contour-terminal.org/vt-extensions/color-palette-update-notifications
       2031 => unhandled!("dark/light mode"),

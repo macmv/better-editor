@@ -43,6 +43,18 @@ const READ_SIZE: usize = 64 * 1024;
 /// ui.
 const UPDATE_BUDGET: Duration = Duration::from_millis(3);
 
+/// How long output is held back after a program starts a synchronized update
+/// (mode 2026) without finishing it. Programs that crash mid-update shouldn't
+/// freeze the screen.
+const SYNC_TIMEOUT: Duration = Duration::from_millis(150);
+
+/// The most output held back for a synchronized update, before it is shown
+/// anyway.
+const SYNC_MAX_HELD: usize = 4 * 1024 * 1024;
+
+/// The sequence that ends a synchronized update.
+const SYNC_END: &[u8] = b"\x1b[?2026l";
+
 /// A source of terminal bytes, and a sink for input. This is the process (or
 /// remote process) on the other side of the terminal.
 pub trait PtyHost {
@@ -74,6 +86,12 @@ pub struct Terminal {
   read_buf:       Box<[u8]>,
   // Set when `update` stopped reading before the pty ran dry.
   pending_output: bool,
+
+  // Output received during a synchronized update, which isn't parsed until the update ends, so
+  // that the screen never shows half of a frame. Held until `hold_deadline`, if it is set.
+  held:          Vec<u8>,
+  held_scanned:  usize,
+  hold_deadline: Option<Instant>,
 }
 
 #[derive(Clone, Copy)]
@@ -126,6 +144,11 @@ pub struct TerminalState {
   // for every byte that goes through the parser.
   ground:        bool,
   ground_before: bool,
+
+  // Mode 2026: the program is drawing a frame, and wants it shown all at once.
+  synchronized: bool,
+  // Set when that mode was just turned on, so `Terminal` can stop parsing and hold the frame.
+  sync_started: bool,
 }
 
 bitflags::bitflags! {
@@ -253,6 +276,9 @@ impl Terminal {
       parser: Parser::<Utf8Parser>::new(),
       read_buf: vec![0; READ_SIZE].into_boxed_slice(),
       pending_output: false,
+      held: Vec::new(),
+      held_scanned: 0,
+      hold_deadline: None,
     }
   }
 
@@ -462,12 +488,20 @@ impl Terminal {
     loop {
       match self.pty.read(&mut self.read_buf) {
         // Ok(0) -> pty closed on macos
-        Ok(0) => return true,
+        Ok(0) => {
+          self.finish_hold();
+          return true;
+        }
         // EIO error -> pty closed on linux
-        Err(e) if e.raw_os_error() == Some(rustix::io::Errno::IO.raw_os_error()) => return true,
+        Err(e) if e.raw_os_error() == Some(rustix::io::Errno::IO.raw_os_error()) => {
+          self.finish_hold();
+          return true;
+        }
 
         Ok(n) => {
-          advance(&mut self.parser, &mut self.state, &self.read_buf[..n]);
+          let buf = std::mem::take(&mut self.read_buf);
+          self.consume(&buf[..n]);
+          self.read_buf = buf;
 
           if !self.state.pending_writes.is_empty() {
             self.pty.write_bytes(&self.state.pending_writes);
@@ -488,15 +522,89 @@ impl Terminal {
       }
     }
 
+    self.release_held();
+    if !self.state.pending_writes.is_empty() {
+      self.pty.write_bytes(&self.state.pending_writes);
+      self.state.pending_writes.clear();
+    }
+
+    // Held output is released by a timeout, which nothing will wake us for.
+    if self.hold_deadline.is_some() {
+      self.pending_output = true;
+    }
+
     self.pty.flush();
 
     false
+  }
+
+  /// Parses `bytes`, unless a synchronized update is in progress, in which case
+  /// they are held until it ends.
+  fn consume(&mut self, mut bytes: &[u8]) {
+    if self.hold_deadline.is_some() {
+      self.held.extend_from_slice(bytes);
+      return;
+    }
+
+    while !bytes.is_empty() {
+      let used = advance(&mut self.parser, &mut self.state, bytes);
+      bytes = &bytes[used..];
+
+      if std::mem::take(&mut self.state.sync_started) {
+        self.held.clear();
+        self.held.extend_from_slice(bytes);
+        self.held_scanned = 0;
+        self.hold_deadline = Some(Instant::now() + SYNC_TIMEOUT);
+        return;
+      }
+    }
+  }
+
+  /// Whether a synchronized update has ended, or has gone on for too long.
+  fn should_release(&mut self) -> bool {
+    let Some(deadline) = self.hold_deadline else { return false };
+
+    // Only look at the new bytes, but the sequence might be split across reads.
+    let from = self.held_scanned.saturating_sub(SYNC_END.len() - 1);
+    self.held_scanned = self.held.len();
+
+    Instant::now() >= deadline
+      || self.held.len() > SYNC_MAX_HELD
+      || self.held[from..].windows(SYNC_END.len()).any(|w| w == SYNC_END)
+  }
+
+  /// Parses held output if its synchronized update is over. Output after the
+  /// end of the update can start another one, which holds the rest of it
+  /// again.
+  fn release_held(&mut self) {
+    while self.should_release() {
+      self.hold_deadline = None;
+
+      let held = std::mem::take(&mut self.held);
+      self.consume(&held);
+
+      // This is already off if the update ended, but not if it timed out.
+      if self.hold_deadline.is_none() {
+        self.state.synchronized = false;
+      }
+    }
+  }
+
+  /// Parses held output no matter what, for when the pty is closing.
+  fn finish_hold(&mut self) {
+    if self.hold_deadline.is_some() {
+      self.hold_deadline = Some(Instant::now());
+      self.release_held();
+    }
   }
 }
 
 /// Feeds `bytes` to the parser. Runs of printable ASCII in the ground state
 /// skip the parser, and are written straight into the grid.
-fn advance(parser: &mut Parser, state: &mut TerminalState, bytes: &[u8]) {
+///
+/// Stops early after a byte that starts a synchronized update (`sync_started`),
+/// and returns how many bytes were used.
+fn advance(parser: &mut Parser, state: &mut TerminalState, bytes: &[u8]) -> usize {
   let mut i = 0;
   while i < bytes.len() {
     if state.ground {
@@ -511,7 +619,13 @@ fn advance(parser: &mut Parser, state: &mut TerminalState, bytes: &[u8]) {
 
     advance_byte(parser, state, bytes[i]);
     i += 1;
+
+    if state.sync_started {
+      break;
+    }
   }
+
+  i
 }
 
 fn advance_byte(parser: &mut Parser, state: &mut TerminalState, byte: u8) {
@@ -554,6 +668,9 @@ impl TerminalState {
 
       ground: true,
       ground_before: true,
+
+      synchronized: false,
+      sync_started: false,
     }
   }
 
