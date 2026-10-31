@@ -578,6 +578,15 @@ impl WorkspaceLayout {
           _ => {}
         }
 
+        // Focus follows the mouse, but only when the mouse actually moves. This
+        // lets keyboard navigation move focus away from the hovered pane, and
+        // have it stay there until the mouse is moved again.
+        if self.dragging.is_none() {
+          if let Some(id) = new_id.filter(|id| *id != ViewId::TABS) {
+            self.focus_view(id);
+          }
+        }
+
         self.current_hover = new_hover;
       }
 
