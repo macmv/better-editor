@@ -45,6 +45,10 @@ type be_remote::HostError = enum { NotFound=0(), PermissionDenied=1(), NotUtf8=2
 type be_remote::TermSize = struct { rows: u16, cols: u16 }
 type lode::Stream = struct { item: bytes }
 
+[Host::terminal_cwd v1] id=e4da4549ef45ea93
+sig = ((u64), (string, be_remote::HostError))
+type be_remote::HostError = enum { NotFound=0(), PermissionDenied=1(), NotUtf8=2(), Io=3(0: string) }
+
 [Host::terminal_input v1] id=3f5937610735cba7
 sig = ((u64, bytes), ())
 

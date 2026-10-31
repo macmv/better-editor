@@ -180,6 +180,13 @@ impl Host for Service {
       term.pty.resize(size(term_size));
     }
   }
+
+  fn terminal_cwd(&self, id: u64) -> Result<String, HostError> {
+    match self.terms.borrow_mut().get_mut(id) {
+      Some(term) => Ok(term.pty.current_dir().to_string_lossy().into_owned()),
+      None => Err(HostError::NotFound),
+    }
+  }
 }
 
 fn main() {

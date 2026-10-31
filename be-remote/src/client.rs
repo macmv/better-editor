@@ -105,6 +105,11 @@ impl RemoteHost {
     self.conn.local().proxy::<Host>().canonicalize(path.to_string())
   }
 
+  /// The directory terminal `id`'s shell is in now.
+  pub fn terminal_cwd(&self, id: u64) -> Pending<String, HostError> {
+    self.conn.local().proxy::<Host>().terminal_cwd(id)
+  }
+
   /// The commit `root` is at, or `None` if it isn't a git repository.
   pub fn git_head(&self, root: &str) -> Pending<Option<String>, HostError> {
     self.conn.local().proxy::<Host>().git_head(root.to_string())

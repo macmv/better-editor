@@ -63,8 +63,8 @@ struct State {
 
   terminal:             crate::view::TerminalView,
   /// The terminal's shell runs on a remote host, so its directory is not a
-  /// local path.
-  terminal_is_remote:   bool,
+  /// local path. This names it in calls to the host.
+  terminal_remote_id:   Option<u64>,
   terminal_should_exit: bool,
 
   workspaces: HashMap<WorkspaceRoot, WorkspaceLayout>,
@@ -225,10 +225,13 @@ impl State {
     }
 
     let size = be_terminal::Size { rows: 40, cols: 80 };
+    let mut terminal_remote_id = None;
     let mut terminal = match &mut remote {
       Some(session) => {
         let cwd = session.path().unwrap_or_default().to_string();
-        let terminal = be_terminal::Terminal::with_host(size, Box::new(session.new_pty(size, cwd)));
+        let pty = session.new_pty(size, cwd);
+        terminal_remote_id = Some(pty.id());
+        let terminal = be_terminal::Terminal::with_host(size, Box::new(pty));
         crate::view::TerminalView::from_handle(&store.clipboard, SharedHandle::new(terminal))
       }
       None => {
@@ -241,7 +244,7 @@ impl State {
     let mut state = State {
       keys: vec![],
       terminal,
-      terminal_is_remote: remote.is_some(),
+      terminal_remote_id,
       terminal_should_exit: false,
       workspaces: HashMap::new(),
       active: AppView::Terminal,
@@ -258,7 +261,7 @@ impl State {
             Some(base) if root.is_relative() => Path::new(base).join(&root),
             _ => root.clone(),
           };
-          state.start_remote_workspace(handle, path);
+          state.start_remote_workspace(handle.open_workspace(&path), path);
           None
         }
         None => {
@@ -282,8 +285,7 @@ impl State {
 
   /// Starts opening the workspace at `path` on the remote host, and shows a
   /// loading screen until the host answers.
-  fn start_remote_workspace(&mut self, handle: remote::RemoteHandle, path: PathBuf) {
-    let opening = handle.open_workspace(&path);
+  fn start_remote_workspace(&mut self, opening: remote::OpeningWorkspace, path: PathBuf) {
     self.loading = Some(Loading {
       path,
       opening: Some(opening),
@@ -458,13 +460,9 @@ impl State {
     match action {
       Action::Navigate { nav: Navigation::OpenWorkspace } => {
         if matches!(self.active, AppView::Terminal) {
-          let path = if self.terminal_is_remote {
-            // The host doesn't report where the shell has `cd`ed to, so this
-            // is the directory the terminal started in.
+          let path = if let Some(id) = self.terminal_remote_id {
             let Some(handle) = self.remote.as_ref().map(|r| r.handle()) else { return };
-            let dir = self.terminal.current_dir();
-            let dir = if dir.as_os_str().is_empty() { PathBuf::from(".") } else { dir };
-            self.start_remote_workspace(handle, dir);
+            self.start_remote_workspace(handle.open_terminal_workspace(id), PathBuf::from("."));
             return;
           } else {
             let path = WorkspaceRoot::from_path(self.terminal.current_dir());

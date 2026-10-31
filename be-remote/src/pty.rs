@@ -37,6 +37,9 @@ impl RemotePty {
     RemotePty { local, id, cwd: cwd.into(), call, stream, unread: Bytes::new(), on_io }
   }
 
+  /// The name this terminal goes by in calls to the host.
+  pub fn id(&self) -> u64 { self.id }
+
   fn closed(&mut self, err: Option<String>) -> io::Result<usize> {
     if let Some(err) = err {
       error!("remote terminal {} ended: {err}", self.id);

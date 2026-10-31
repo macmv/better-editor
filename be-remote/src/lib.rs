@@ -128,4 +128,6 @@ pub trait Host {
   /// Keystrokes for terminal `id`.
   fn terminal_input(&self, id: u64, data: Bytes);
   fn terminal_resize(&self, id: u64, size: TermSize);
+  /// The directory terminal `id`'s shell is in now.
+  fn terminal_cwd(&self, id: u64) -> Result<String, HostError>;
 }

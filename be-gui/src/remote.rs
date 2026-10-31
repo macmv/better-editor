@@ -278,6 +278,14 @@ impl RemoteHandle {
     OpeningWorkspace { handle: self.clone(), stage: OpenStage::Canonicalize(call) }
   }
 
+  /// Starts opening the workspace at the directory terminal `id`'s shell is in
+  /// now.
+  pub fn open_terminal_workspace(&self, id: u64) -> OpeningWorkspace {
+    let call = self.link.host.borrow().terminal_cwd(id);
+    self.link.rearm();
+    OpeningWorkspace { handle: self.clone(), stage: OpenStage::TerminalCwd(call) }
+  }
+
   /// The pieces of a workspace rooted at `root` on the host. `root` must
   /// already be canonical there. Without a repository, the editor diffs
   /// against what it opened instead.
@@ -300,6 +308,7 @@ impl RemoteHandle {
 }
 
 enum OpenStage {
+  TerminalCwd(Pending<String, HostError>),
   Canonicalize(Pending<String, HostError>),
   Head(PathBuf, Pending<Option<String>, HostError>),
 }
@@ -319,6 +328,16 @@ impl OpeningWorkspace {
   pub fn poll(&mut self) -> Option<io::Result<(PathBuf, Backend)>> {
     loop {
       match &mut self.stage {
+        OpenStage::TerminalCwd(call) => {
+          let res = call.try_take()?;
+          let path = match res {
+            Ok(path) => path,
+            Err(e) => return Some(Err(call_error(e))),
+          };
+          let canon = self.handle.link.host.borrow().canonicalize(&path);
+          self.handle.link.rearm();
+          self.stage = OpenStage::Canonicalize(canon);
+        }
         OpenStage::Canonicalize(call) => {
           let res = call.try_take()?;
           let path = match res {
