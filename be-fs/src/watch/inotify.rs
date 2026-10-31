@@ -149,15 +149,25 @@ impl INotifyWatcher {
   fn remove_watch_tree_for(&mut self, root: &WorkspacePath) {
     let Ok(mut addr) = self.watch.address_of(root) else { return };
 
+    // NB: Removing the last entry leaves `addr` dangling, and btree-slab panics
+    // if it's looked up. That happens when the whole watched tree goes away.
     while self.watch.item(addr).is_some_and(|it| it.key().starts_with(root)) {
       let Some((it, a)) = self.watch.remove_at(addr) else { break };
-      addr = a;
-      let wd = it.into_value();
-
-      self.reverse_watch.remove(&wd);
-      if let Err(e) = self.inotify.watches().remove(wd) {
-        warn!("failed to remove inotify watch: {}", e);
+      if self.watch.is_empty() {
+        self.forget_watch(it.into_value());
+        break;
       }
+      addr = a;
+      self.forget_watch(it.into_value());
+    }
+  }
+
+  fn forget_watch(&mut self, wd: WatchDescriptor) {
+    self.reverse_watch.remove(&wd);
+    if let Err(e) = self.inotify.watches().remove(wd) {
+      // Expected when the directory itself was deleted: the kernel already
+      // dropped the watch.
+      warn!("failed to remove inotify watch: {}", e);
     }
   }
 }
@@ -323,6 +333,23 @@ mod tests {
     let reverse_descriptors =
       watcher.reverse_watch.keys().map(|wd| format!("{wd:?}")).collect::<BTreeSet<_>>();
     assert_eq!(watch_descriptors, reverse_descriptors, "watch/reverse descriptor sets diverged");
+  }
+
+  #[test]
+  fn deleting_the_root_does_not_panic() {
+    let (temp, mut watcher) = make_watcher(temp_dir!());
+    write(&temp.path().join("a/b/c.txt"), "x");
+    // Pick up the new directories, so there is a tree to tear down.
+    let _ = watcher.poll();
+    thread::sleep(Duration::from_millis(20));
+    let _ = watcher.poll();
+
+    fs::remove_dir_all(temp.path()).unwrap();
+    thread::sleep(Duration::from_millis(50));
+    let _ = watcher.poll();
+
+    assert!(watcher.watch.is_empty());
+    assert!(watcher.reverse_watch.is_empty());
   }
 
   #[test]
