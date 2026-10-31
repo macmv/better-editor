@@ -12,7 +12,7 @@ use std::os::unix::fs::MetadataExt;
 use be_git::{GitBackend, GitRepo};
 use be_remote::{
   Bytes, DirEntry, DirKind, FileStat, GitFileStatus, Host, HostError, HostInfo, HostService,
-  OpenedFile, PROTOCOL_VERSION, TermSize,
+  OpenedFile, PROTOCOL_VERSION, TermSize, WrittenFile,
 };
 use be_terminal::{PtyHost, Size};
 use lode_local::{Event, Reply, Sink, Token};
@@ -118,15 +118,17 @@ impl Host for Service {
     fs::read(path).map(Bytes::from).map_err(io_error)
   }
 
-  fn write_bytes(&self, path: String, data: Bytes) -> Result<(), HostError> {
+  fn write_file(&self, path: String, data: Bytes) -> Result<WrittenFile, HostError> {
     use std::io::Write;
 
+    let prev_mtime = fs::metadata(&path).map_err(io_error)?.mtime();
     let mut file =
       fs::OpenOptions::new().write(true).truncate(true).open(&path).map_err(io_error)?;
     file.write_all(&data).map_err(io_error)?;
     drop(file);
+    let mtime = fs::metadata(&path).map_err(io_error)?.mtime();
     self.watches.borrow_mut().notify_saved(Path::new(&path));
-    Ok(())
+    Ok(WrittenFile { prev_mtime, mtime })
   }
 
   // Takes its `Reply` by hand, like `spawn_terminal`: the call stays open until

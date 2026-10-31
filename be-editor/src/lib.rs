@@ -49,6 +49,7 @@ pub struct EditorState {
 
   file:    Option<OpenedFile>,
   pending_open: Option<fs::PendingOpen>,
+  pending_save: Option<fs::PendingSave>,
   status:  Option<Status>,
   command: Option<CommandState>,
 
@@ -156,6 +157,10 @@ impl EditorState {
 
   pub fn layout(&mut self) {
     if let Err(e) = self.update_open() {
+      self.status = Some(Status::for_error(e));
+    }
+
+    if let Err(e) = self.update_save() {
       self.status = Some(Status::for_error(e));
     }
 
@@ -531,13 +536,8 @@ impl EditorState {
       self.lsp_finish_on_save();
 
       if self.lsp.save_task.is_none() {
-        let res = self
-          .save()
-          .map(|()| format!("{}: written", self.file.as_ref().unwrap().path().display()));
-
-        match res {
-          Ok(m) => self.status = Some(Status::for_success(m)),
-          Err(e) => self.status = Some(Status::for_error(e)),
+        if let Err(e) = self.save() {
+          self.status = Some(Status::for_error(e));
         }
       }
     }
@@ -663,14 +663,8 @@ impl EditorState {
     if self.lsp.save_task.is_some() {
       self.status = Some(Status::for_success("saving..."));
     } else {
-      match self.save() {
-        Ok(()) => {
-          self.status = Some(Status::for_success(format!(
-            "{}: written",
-            self.file.as_ref().unwrap().path().display()
-          )))
-        }
-        Err(e) => self.status = Some(Status::for_error(e)),
+      if let Err(e) = self.save() {
+        self.status = Some(Status::for_error(e));
       }
     }
   }

@@ -67,7 +67,8 @@ sig = ((u64, string), (lode::Stream, be_remote::HostError))
 type be_remote::HostError = enum { NotFound=0(), PermissionDenied=1(), NotUtf8=2(), Io=3(0: string) }
 type lode::Stream = struct { item: vec<string> }
 
-[Host::write_bytes v1] id=1fd334e4ed62b956
-sig = ((string, bytes), ((), be_remote::HostError))
+[Host::write_file v1] id=86421cc325a582d6
+sig = ((string, bytes), (be_remote::WrittenFile, be_remote::HostError))
 type be_remote::HostError = enum { NotFound=0(), PermissionDenied=1(), NotUtf8=2(), Io=3(0: string) }
+type be_remote::WrittenFile = struct { prev_mtime: i64, mtime: i64 }
 

@@ -3,7 +3,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use be_fs::{DirEntry, FileData, FileKind, Fs, Metadata, PendingRead};
+use be_fs::{DirEntry, FileData, FileKind, Fs, PendingRead, PendingWrite, WriteResult};
 use lode::Bytes;
 
 use crate::{DirKind, Host, Transport, transport};
@@ -32,17 +32,8 @@ impl Fs for RemoteFs {
     self.t.wait(self.t.local().proxy::<Host>().canonicalize(path_str(path))).map(PathBuf::from)
   }
 
-  fn metadata(&self, path: &Path) -> io::Result<Metadata> {
-    let stat = self.t.wait(self.t.local().proxy::<Host>().stat(path_str(path)))?;
-    Ok(Metadata { kind: kind(stat.kind), mtime: stat.mtime })
-  }
-
   fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
     Ok(self.t.wait(self.t.local().proxy::<Host>().read_bytes(path_str(path)))?.to_vec())
-  }
-
-  fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
-    self.t.wait(self.t.local().proxy::<Host>().write_bytes(path_str(path), Bytes::copy_from_slice(data)))
   }
 
   fn is_local(&self) -> bool { false }
@@ -55,6 +46,18 @@ impl Fs for RemoteFs {
     PendingRead::new(move || {
       Some(match call.try_take()? {
         Ok(f) => Ok(FileData { path: PathBuf::from(f.path), mtime: f.mtime, data: f.data.to_vec() }),
+        Err(lode_local::CallError::App(e)) => Err(transport::io_error(e)),
+        Err(lode_local::CallError::Rpc(e)) => Err(transport::rpc_error(e)),
+      })
+    })
+  }
+
+  fn begin_write(&self, path: &Path, data: Vec<u8>) -> PendingWrite {
+    let mut call = self.t.local().proxy::<Host>().write_file(path_str(path), Bytes::from(data));
+    self.t.io_done();
+    PendingWrite::new(move || {
+      Some(match call.try_take()? {
+        Ok(w) => Ok(WriteResult { prev_mtime: w.prev_mtime, mtime: w.mtime }),
         Err(lode_local::CallError::App(e)) => Err(transport::io_error(e)),
         Err(lode_local::CallError::Rpc(e)) => Err(transport::rpc_error(e)),
       })

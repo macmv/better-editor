@@ -725,6 +725,16 @@ mod tests {
     // Saving writes through the host, over whatever changed there meanwhile.
     std::fs::write(dir.join("a.txt"), "changed\n").unwrap();
     editor.save().unwrap();
+    assert!(editor.saving());
+    let start = Instant::now();
+    while editor.saving() {
+      assert!(start.elapsed() < WAIT, "the save never finished");
+      if let Ok(wake) = rx.recv_timeout(Duration::from_millis(50)) {
+        session.on_wake(wake);
+      }
+      editor.layout();
+    }
+    assert!(editor.status().is_some_and(|s| s.success));
     assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "hello\nworld\n");
 
     // A missing file is reported in the status line when the host answers.

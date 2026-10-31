@@ -11,13 +11,6 @@ pub enum FileKind {
   Other,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Metadata {
-  pub kind:  FileKind,
-  /// Modification time, in seconds since the epoch.
-  pub mtime: i64,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DirEntry {
   pub name: String,
@@ -54,13 +47,42 @@ impl PendingRead {
   pub fn poll(&mut self) -> Option<io::Result<FileData>> { (self.poll)() }
 }
 
+/// What a finished write reports.
+#[derive(Debug, Clone, Copy)]
+pub struct WriteResult {
+  /// The file's modification time just before the write, so the caller can
+  /// tell if it changed underneath them.
+  pub prev_mtime: i64,
+  /// The file's modification time just after the write.
+  pub mtime:      i64,
+}
+
+/// A write that may not have finished. Polling it never blocks.
+pub struct PendingWrite {
+  poll: Box<dyn FnMut() -> Option<io::Result<WriteResult>>>,
+}
+
+impl PendingWrite {
+  /// A write that finishes when `poll` returns `Some`.
+  pub fn new(poll: impl FnMut() -> Option<io::Result<WriteResult>> + 'static) -> PendingWrite {
+    PendingWrite { poll: Box::new(poll) }
+  }
+
+  /// A write that has already finished.
+  pub fn ready(result: io::Result<WriteResult>) -> PendingWrite {
+    let mut result = Some(result);
+    PendingWrite::new(move || result.take())
+  }
+
+  /// The result, once there is one. After that, this returns `None` forever.
+  pub fn poll(&mut self) -> Option<io::Result<WriteResult>> { (self.poll)() }
+}
+
 /// The file operations the editor needs from whichever machine holds the
 /// workspace. `LocalFs` goes straight to disk.
 pub trait Fs {
   fn canonicalize(&self, path: &Path) -> io::Result<PathBuf>;
-  fn metadata(&self, path: &Path) -> io::Result<Metadata>;
   fn read(&self, path: &Path) -> io::Result<Vec<u8>>;
-  fn write(&self, path: &Path, data: &[u8]) -> io::Result<()>;
   fn read_dir(&self, path: &Path) -> io::Result<Vec<DirEntry>>;
 
   /// False if every call here waits on another machine, which makes the cheap
@@ -68,16 +90,12 @@ pub trait Fs {
   fn is_local(&self) -> bool { true }
 
   /// Starts reading `path` for opening in an editor. An `Fs` that has to wait
-  /// on something should override this to return without waiting; the
-  /// default reads right now.
-  fn begin_read(&self, path: &Path) -> PendingRead {
-    PendingRead::ready((|| {
-      let path = self.canonicalize(path)?;
-      let mtime = self.metadata(&path)?.mtime;
-      let data = self.read(&path)?;
-      Ok(FileData { path, mtime, data })
-    })())
-  }
+  /// on something should return without waiting.
+  fn begin_read(&self, path: &Path) -> PendingRead;
+
+  /// Starts replacing the contents of the existing file at `path`. `data` is a
+  /// snapshot, so the caller is free to keep editing.
+  fn begin_write(&self, path: &Path, data: Vec<u8>) -> PendingWrite;
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -96,18 +114,27 @@ fn kind(t: std::fs::FileType) -> FileKind {
 impl Fs for LocalFs {
   fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> { path.canonicalize() }
 
-  fn metadata(&self, path: &Path) -> io::Result<Metadata> {
-    let meta = path.metadata()?;
-    Ok(Metadata { kind: kind(meta.file_type()), mtime: meta.mtime() })
-  }
-
   fn read(&self, path: &Path) -> io::Result<Vec<u8>> { std::fs::read(path) }
 
-  fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+  fn begin_read(&self, path: &Path) -> PendingRead {
+    PendingRead::ready((|| {
+      let path = path.canonicalize()?;
+      let mtime = path.metadata()?.mtime();
+      let data = std::fs::read(&path)?;
+      Ok(FileData { path, mtime, data })
+    })())
+  }
+
+  fn begin_write(&self, path: &Path, data: Vec<u8>) -> PendingWrite {
     use std::io::Write;
 
-    let mut file = std::fs::OpenOptions::new().write(true).truncate(true).open(path)?;
-    file.write_all(data)
+    PendingWrite::ready((|| {
+      let prev_mtime = path.metadata()?.mtime();
+      let mut file = std::fs::OpenOptions::new().write(true).truncate(true).open(path)?;
+      file.write_all(&data)?;
+      drop(file);
+      Ok(WriteResult { prev_mtime, mtime: path.metadata()?.mtime() })
+    })())
   }
 
   fn read_dir(&self, path: &Path) -> io::Result<Vec<DirEntry>> {

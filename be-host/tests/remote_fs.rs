@@ -9,7 +9,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use be_fs::{FileKind, Fs, Watcher};
+use be_fs::{Fs, Watcher};
 use be_git::GitBackend;
 use be_remote::{RemoteFs, RemoteGit, RemoteHost, RemoteWatcher, Transport};
 
@@ -47,11 +47,18 @@ fn fs_round_trip() {
   let fs = RemoteFs::new(s.t.clone());
 
   assert_eq!(fs.canonicalize(&dir.join("sub/..")).unwrap(), dir);
-  assert_eq!(fs.metadata(&dir.join("sub")).unwrap().kind, FileKind::Dir);
-  assert_eq!(fs.metadata(&dir.join("a.txt")).unwrap().kind, FileKind::File);
   assert_eq!(fs.read(&dir.join("a.txt")).unwrap(), b"hello\n");
 
-  fs.write(&dir.join("a.txt"), b"bye\n").unwrap();
+  let mut write = fs.begin_write(&dir.join("a.txt"), b"bye\n".to_vec());
+  let deadline = Instant::now() + Duration::from_secs(10);
+  let written = loop {
+    if let Some(res) = write.poll() {
+      break res.unwrap();
+    }
+    assert!(Instant::now() < deadline, "the write never finished");
+    s.host.borrow().pump(50);
+  };
+  assert!(written.mtime >= written.prev_mtime);
   assert_eq!(std::fs::read(dir.join("a.txt")).unwrap(), b"bye\n");
 
   let mut names: Vec<_> = fs.read_dir(&dir).unwrap().into_iter().map(|e| e.name).collect();

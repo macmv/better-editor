@@ -6,7 +6,7 @@ use std::{
 };
 
 use be_doc::Document;
-use be_fs::{Fs, LocalFs, PendingRead};
+use be_fs::{Fs, LocalFs, PendingRead, PendingWrite};
 
 use crate::{CursorOrLsp, EditorState};
 
@@ -47,6 +47,14 @@ pub(crate) struct PendingOpen {
   read:   PendingRead,
   /// Where to put the cursor once the document arrives.
   cursor: Option<CursorOrLsp>,
+}
+
+/// A save that is on its way to disk. It holds the bytes as they were when the
+/// save began, so the editor can keep changing the document meanwhile.
+pub(crate) struct PendingSave {
+  write:                  PendingWrite,
+  /// What `saved_history_position` becomes once the write lands.
+  saved_history_position: usize,
 }
 
 impl EditorState {
@@ -106,20 +114,61 @@ impl EditorState {
     Ok(())
   }
 
+  /// Starts writing the document to its file. A local file has been written by
+  /// the time this returns, and a failure to write it is returned. A file on
+  /// another machine is finished by `layout` when the write is answered, and a
+  /// failure to write it is shown in the status line.
+  ///
+  /// The document is snapshotted here, so it can be edited while the write is
+  /// in flight. A second save replaces the first's bookkeeping, but the first
+  /// write still lands, and the host applies them in order.
   pub fn save(&mut self) -> io::Result<()> {
-    if let Some(file) = &mut self.file {
-      file.save(&*self.fs, &self.doc)?;
-      file.saved_history_position = self.history.len() - self.history_position;
-    } else {
+    let Some(file) = &self.file else {
       return Err(io::Error::new(io::ErrorKind::NotFound, "no file open"));
+    };
+
+    let mut data = vec![];
+    self.doc.write(&mut data)?;
+
+    self.pending_save = Some(PendingSave {
+      write:                  self.fs.begin_write(file.path(), data),
+      saved_history_position: self.history.len() - self.history_position,
+    });
+
+    let res = self.update_save();
+    if self.pending_save.is_some() {
+      self.status = Some(crate::Status::for_success("saving..."));
     }
+    res
+  }
+
+  /// True while a save is on its way to disk.
+  pub fn saving(&self) -> bool { self.pending_save.is_some() }
+
+  /// Finishes a `save`, if its write has been answered. Returns the error if
+  /// the write failed.
+  pub(crate) fn update_save(&mut self) -> io::Result<()> {
+    let Some(pending) = &mut self.pending_save else { return Ok(()) };
+    let Some(res) = pending.write.poll() else { return Ok(()) };
+    let pending = self.pending_save.take().unwrap();
+
+    let written = res?;
+    let Some(file) = &mut self.file else { return Ok(()) };
+    if written.prev_mtime > file.mtime {
+      // TODO: Confirm popup
+      warn!("file has been modified");
+    }
+    file.mtime = written.mtime;
+    file.saved_history_position = pending.saved_history_position;
+    let path = file.path().to_path_buf();
 
     self.lsp_notify_did_save();
 
-    if let (Some(send), Some(file)) = (&self.send, &self.file) {
-      send(crate::EditorEvent::SavedFile(file.path().to_path_buf()));
+    if let Some(send) = &self.send {
+      send(crate::EditorEvent::SavedFile(path.clone()));
     }
 
+    self.status = Some(crate::Status::for_success(format!("{}: written", path.display())));
     Ok(())
   }
 
@@ -145,23 +194,6 @@ impl EditorState {
 
 impl OpenedFile {
   pub fn path(&self) -> &Path { &self.path }
-
-  pub fn save(&mut self, fs: &dyn Fs, doc: &Document) -> io::Result<()> {
-    let stat = fs.metadata(&self.path)?;
-    if stat.mtime > self.mtime {
-      // TODO: Confirm popup
-      // return Err(io::Error::new(io::ErrorKind::Other, "file has been
-      // modified"));
-      warn!("file has been modified");
-    }
-
-    let mut data = vec![];
-    doc.write(&mut data)?;
-    fs.write(&self.path, &data)?;
-
-    self.mtime = fs.metadata(&self.path)?.mtime;
-    Ok(())
-  }
 }
 
 #[cfg(test)]
@@ -201,9 +233,9 @@ mod tests {
 
   impl Fs for SlowFs {
     fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> { Ok(path.to_path_buf()) }
-    fn metadata(&self, _: &Path) -> io::Result<be_fs::Metadata> { unimplemented!() }
     fn read(&self, _: &Path) -> io::Result<Vec<u8>> { unimplemented!() }
-    fn write(&self, _: &Path, _: &[u8]) -> io::Result<()> { unimplemented!() }
+
+    fn begin_write(&self, _: &Path, _: Vec<u8>) -> PendingWrite { unimplemented!() }
     fn read_dir(&self, _: &Path) -> io::Result<Vec<be_fs::DirEntry>> { unimplemented!() }
 
     fn begin_read(&self, _: &Path) -> PendingRead {

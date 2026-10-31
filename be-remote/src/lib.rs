@@ -24,7 +24,7 @@ pub use transport::Transport;
 pub use watch::RemoteWatcher;
 
 /// Bumped when the `Host` interface changes in a way old peers cannot read.
-pub const PROTOCOL_VERSION: u32 = 3;
+pub const PROTOCOL_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, PartialEq, lode::Message)]
 pub struct HostInfo {
@@ -75,6 +75,15 @@ pub enum HostError {
   Io(String),
 }
 
+/// What a write reports.
+#[derive(Debug, Clone, Copy, PartialEq, lode::Message)]
+pub struct WrittenFile {
+  /// The file's modification time just before the write.
+  pub prev_mtime: i64,
+  /// The file's modification time just after the write.
+  pub mtime:      i64,
+}
+
 /// A file, read in one call.
 #[derive(Debug, Clone, PartialEq, lode::Message)]
 pub struct OpenedFile {
@@ -97,7 +106,7 @@ pub trait Host {
   fn open_file(&self, path: String) -> Result<OpenedFile, HostError>;
   fn read_bytes(&self, path: String) -> Result<Bytes, HostError>;
   /// Replaces the contents of an existing file.
-  fn write_bytes(&self, path: String, data: Bytes) -> Result<(), HostError>;
+  fn write_file(&self, path: String, data: Bytes) -> Result<WrittenFile, HostError>;
 
   /// Every file under `root` that git would not ignore, relative to `root`.
   fn list_files(&self, root: String) -> Result<Vec<String>, HostError>;

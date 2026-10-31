@@ -10,7 +10,9 @@ mod path;
 mod watch;
 
 pub use change::DirectoryChanges;
-pub use fs::{DirEntry, FileData, FileKind, Fs, LocalFs, Metadata, PendingRead};
+pub use fs::{
+  DirEntry, FileData, FileKind, Fs, LocalFs, PendingRead, PendingWrite, WriteResult,
+};
 pub use path::{Component, WorkspacePath, WorkspacePathBuf, WorkspaceRoot};
 pub use watch::*;
 
