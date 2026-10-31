@@ -1017,9 +1017,10 @@ impl WorkspaceLayout {
         tab.zoomed = if tab.zoomed.is_some() { None } else { Some(tab.content.active()) };
       }
       Action::Navigate { nav: Navigation::OpenSearch } => {
-        // The files of a remote workspace come from the host, so the popup opens
-        // empty and fills in when they arrive.
-        let listed = self.remote.as_ref().map(|r| r.begin_list_files(self.workspace.root.as_path()));
+        // The files of a remote workspace come from the host, so the popup
+        // opens empty and fills in when they arrive.
+        let listed =
+          self.remote.as_ref().map(|r| r.begin_list_files(self.workspace.root.as_path()));
         self.active_tab_mut().popup = Some(view::Popup::Search(view::Search::new(
           self.workspace.root.clone(),
           self.notify.clone(),

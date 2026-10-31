@@ -127,7 +127,14 @@ mod tests {
     let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
     assert_eq!(
       args,
-      ["-T", "-o", "BatchMode=yes", "--", "me@box", r"cd '/home/a b/it'\''s' && exec rust-analyzer"]
+      [
+        "-T",
+        "-o",
+        "BatchMode=yes",
+        "--",
+        "me@box",
+        r"cd '/home/a b/it'\''s' && exec rust-analyzer"
+      ]
     );
   }
 }

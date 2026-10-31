@@ -11,8 +11,8 @@ use std::os::unix::fs::MetadataExt;
 
 use be_git::GitRepo;
 use be_remote::{
-  Bytes, DirEntry, DirKind, GitFileStatus, Host, HostError, HostInfo, HostService,
-  OpenedFile, PROTOCOL_VERSION, TermSize, WrittenFile,
+  Bytes, DirEntry, DirKind, GitFileStatus, Host, HostError, HostInfo, HostService, OpenedFile,
+  PROTOCOL_VERSION, TermSize, WrittenFile,
 };
 use be_terminal::{PtyHost, Size};
 use lode_local::{Event, Reply, Sink, Token};

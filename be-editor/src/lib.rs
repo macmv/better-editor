@@ -8,10 +8,7 @@ use be_rope::RopeSlice;
 use be_shared::SharedHandle;
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{
-  fs::OpenedFile,
-  status::Status,
-};
+use crate::{fs::OpenedFile, status::Status};
 
 mod edit;
 mod filetype;
@@ -47,11 +44,11 @@ pub struct EditorState {
 
   selection: Option<Selection>,
 
-  file:    Option<OpenedFile>,
+  file:         Option<OpenedFile>,
   pending_open: Option<fs::PendingOpen>,
   pending_save: Option<fs::PendingSave>,
-  status:  Option<Status>,
-  command: Option<CommandState>,
+  status:       Option<Status>,
+  command:      Option<CommandState>,
 
   pub search: SharedHandle<SearchState>,
 

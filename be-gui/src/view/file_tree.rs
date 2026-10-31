@@ -15,8 +15,8 @@ use kurbo::{Point, Rect, Vec2};
 use crate::{
   Color, Layout, Notify, Render,
   icon::{self, Icon},
-  theme::Theme,
   spinner::Spinner,
+  theme::Theme,
   view::Scroll,
 };
 
@@ -513,8 +513,8 @@ impl FileTree {
 
 struct TreeDraw<'a> {
   spinner: &'a Spinner,
-  line:   usize,
-  indent: usize,
+  line:    usize,
+  indent:  usize,
 
   indent_width: f64,
   line_height:  f64,

@@ -57,11 +57,7 @@ impl Workspace {
 
   /// A workspace whose root is on another machine, reached through `backend`.
   /// `root` must already be canonical there.
-  pub fn with_backend(
-    root: WorkspaceRoot,
-    config: Rc<RefCell<Config>>,
-    backend: Backend,
-  ) -> Self {
+  pub fn with_backend(root: WorkspaceRoot, config: Rc<RefCell<Config>>, backend: Backend) -> Self {
     Workspace::build(root, config, Some(backend))
   }
 

@@ -94,11 +94,9 @@ impl GitBackend for RemoteGit {
     }
 
     match statuses.remove(&path) {
-      Some(Status::Ready(s)) => Some(PathStatus {
-        ignored:  s.ignored,
-        added:    s.added,
-        modified: s.modified,
-      }),
+      Some(Status::Ready(s)) => {
+        Some(PathStatus { ignored: s.ignored, added: s.added, modified: s.modified })
+      }
       Some(pending @ Status::Pending(_)) => {
         statuses.insert(path, pending);
         None

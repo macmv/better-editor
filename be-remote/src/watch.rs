@@ -16,8 +16,7 @@ impl RemoteWatcher {
   /// Watches `root` on the host. `id` must be unique among this connection's
   /// terminals and watches.
   pub fn new(t: &Transport, id: u64, root: &std::path::Path) -> RemoteWatcher {
-    let (call, stream) =
-      t.local().proxy::<Host>().watch(id, root.to_string_lossy().into_owned());
+    let (call, stream) = t.local().proxy::<Host>().watch(id, root.to_string_lossy().into_owned());
     t.io_done();
     RemoteWatcher { _call: call, stream }
   }

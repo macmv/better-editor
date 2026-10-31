@@ -232,7 +232,6 @@ mod tests {
   struct SlowFs(Rc<std::cell::RefCell<Option<io::Result<be_fs::FileData>>>>);
 
   impl Fs for SlowFs {
-
     fn begin_write(&self, _: &Path, _: Vec<u8>) -> PendingWrite { unimplemented!() }
     fn begin_read_dir(&self, _: &Path) -> be_fs::PendingReadDir { unimplemented!() }
 

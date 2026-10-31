@@ -180,11 +180,7 @@ impl Search {
 }
 
 impl Index {
-  pub fn new(
-    root: WorkspaceRoot,
-    notify: Notify,
-    listed: Option<Pending<Vec<String>>>,
-  ) -> Self {
+  pub fn new(root: WorkspaceRoot, notify: Notify, listed: Option<Pending<Vec<String>>>) -> Self {
     let config = nucleo::Config::DEFAULT;
     let nucleo = Nucleo::new(config.clone(), std::sync::Arc::new(move || notify.wake()), None, 1);
     let matcher = nucleo::Matcher::new(config);

@@ -16,9 +16,9 @@ mod transport;
 mod watch;
 
 pub use client::{RemoteHost, ssh_command, ssh_exec_command};
-pub use lode::Bytes;
 pub use fs::RemoteFs;
 pub use git::RemoteGit;
+pub use lode::Bytes;
 pub use pty::RemotePty;
 pub use transport::Transport;
 pub use watch::RemoteWatcher;
