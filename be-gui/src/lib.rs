@@ -643,6 +643,7 @@ impl WorkspaceLayout {
     layout.clipped(
       Rect::new(0.0, 0.0, layout.size().width, layout.size().height - TAB_BAR_HEIGHT),
       |layout| {
+        let mut tab_count = self.tabs.len();
         let mut tab = &mut self.tabs[self.active];
         if let Some(popup) = &mut tab.popup {
           popup.layout(layout);
@@ -654,11 +655,22 @@ impl WorkspaceLayout {
         if !layout.to_close.is_empty() {
           for to_close in layout.to_close.drain(..) {
             if matches!(tab.content, Pane::View(v) if v == to_close) {
+              // The only view in the tab: the tab goes with it, unless it is
+              // the last tab, which has to stay (and keep its view).
+              if tab_count == 1 {
+                continue;
+              }
               self.tabs.remove(self.active);
-              self.active -= 1;
+              tab_count -= 1;
+              self.active = self.active.saturating_sub(1);
               tab = &mut self.tabs[self.active];
             } else {
               tab.content.close(to_close, &mut self.views.views);
+              // The close is a no-op if it was the last child of a split, and
+              // that view must stay for the pane to point at.
+              if tab.content.views().any(|v| v == to_close) {
+                continue;
+              }
             }
 
             // FIXME: Deduplicate with ':q'
@@ -1161,10 +1173,15 @@ impl WorkspaceLayout {
           "q" => {
             let tab = &mut self.tabs[self.active];
             let active_view = tab.content.active();
-            tab.content.close(active_view, &mut self.views.views);
-            // FIXME: Deduplicate layouts closing themselves (ie, terminal
-            // exit).
-            self.views.views.remove(&active_view);
+            let before = tab.content.views().count();
+            if before > 1 {
+              tab.content.close(active_view, &mut self.views.views);
+              // FIXME: Deduplicate layouts closing themselves (ie, terminal
+              // exit).
+              if tab.content.views().count() < before {
+                self.views.views.remove(&active_view);
+              }
+            }
           }
           "e" => {
             if args.is_empty() {
