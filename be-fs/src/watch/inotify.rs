@@ -2,7 +2,7 @@ use std::{
   collections::HashMap,
   ffi::OsStr,
   fs,
-  os::fd::AsRawFd,
+  os::{fd::AsRawFd, unix::net::UnixStream},
   path::PathBuf,
   time::{Duration, Instant},
 };
@@ -22,6 +22,9 @@ pub struct INotifyWatcher {
   watch:         BTreeMap<WorkspacePathBuf, WatchDescriptor>,
   reverse_watch: HashMap<WatchDescriptor, WorkspacePathBuf>,
   recent_saves:  HashMap<PathBuf, Instant>,
+  /// Dropped with the watcher, which hangs up the waker thread's end and
+  /// tells it to exit.
+  waker_stop:    std::cell::RefCell<Option<UnixStream>>,
 }
 
 impl INotifyWatcher {
@@ -33,6 +36,7 @@ impl INotifyWatcher {
       watch: BTreeMap::new(),
       reverse_watch: HashMap::new(),
       recent_saves: HashMap::new(),
+      waker_stop: Default::default(),
     };
     watcher.add_watch_tree_for(WorkspacePath::new(""));
     watcher
@@ -106,7 +110,7 @@ impl INotifyWatcher {
 
   /// Spawns a background thread that blocks until inotify events are ready,
   /// then calls `waker`. Events are not consumed -- the main thread must still
-  /// call `poll()` to drain them. The thread exits when the fd is closed.
+  /// call `poll()` to drain them. The thread exits when the watcher is dropped.
   pub fn spawn(&self, waker: super::Waker) {
     let fd = self.inotify.as_raw_fd();
     // dup() so the thread owns a valid fd for the lifetime of the thread,
@@ -116,14 +120,26 @@ impl INotifyWatcher {
       error!("inotify spawn: dup failed: {}", std::io::Error::last_os_error());
       return;
     }
+    let (stop_tx, stop_rx) = match UnixStream::pair() {
+      Ok(pair) => pair,
+      Err(err) => {
+        error!("inotify spawn: socketpair failed: {err}");
+        unsafe { libc::close(dup_fd) };
+        return;
+      }
+    };
+    *self.waker_stop.borrow_mut() = Some(stop_tx);
 
     std::thread::Builder::new()
       .name("inotify-waker".into())
       .spawn(move || {
         loop {
           // poll() checks readability without consuming events.
-          let mut pfd = libc::pollfd { fd: dup_fd, events: libc::POLLIN, revents: 0 };
-          let ret = unsafe { libc::poll(&mut pfd, 1, -1) };
+          let mut pfds = [
+            libc::pollfd { fd: dup_fd, events: libc::POLLIN, revents: 0 },
+            libc::pollfd { fd: stop_rx.as_raw_fd(), events: libc::POLLIN, revents: 0 },
+          ];
+          let ret = unsafe { libc::poll(pfds.as_mut_ptr(), 2, -1) };
           if ret < 0 {
             let err = std::io::Error::last_os_error();
             if err.kind() == std::io::ErrorKind::Interrupted {
@@ -132,12 +148,24 @@ impl INotifyWatcher {
             error!("inotify waker poll error: {}", err);
             break;
           }
-          if pfd.revents & libc::POLLNVAL != 0 {
+          // The watcher was dropped.
+          if pfds[1].revents != 0 {
+            break;
+          }
+          if pfds[0].revents & libc::POLLNVAL != 0 {
             warn!("inotify waker: fd closed");
             break; // fd was closed
           }
-          if pfd.revents & libc::POLLIN != 0 {
+          if pfds[0].revents & libc::POLLIN != 0 {
             waker();
+
+            // The events stay readable until the main thread drains them, so
+            // wait for it (or a stop) instead of spinning on the same wake.
+            let mut stop =
+              libc::pollfd { fd: stop_rx.as_raw_fd(), events: libc::POLLIN, revents: 0 };
+            if unsafe { libc::poll(&mut stop, 1, 10) } > 0 && stop.revents != 0 {
+              break;
+            }
           }
         }
         unsafe { libc::close(dup_fd) };
