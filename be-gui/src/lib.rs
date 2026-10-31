@@ -7,6 +7,7 @@ use std::{
   hash::Hash,
   ops::{Index, IndexMut},
   path::{Path, PathBuf},
+  sync::LazyLock,
 };
 
 use be_editor::CursorOrLsp;
@@ -14,17 +15,19 @@ use be_fs::{WorkspacePath, WorkspaceRoot};
 use be_input::{Action, KeyStroke, Mode, Navigation};
 use be_shared::SharedHandle;
 use be_workspace::{Workspace, WorkspaceEvent};
-use kurbo::{Affine, Axis, Point, Rect, RoundedRect, RoundedRectRadii, Size, Stroke, Vec2};
+use kurbo::{Axis, Point, Rect, Size};
 pub use render::*;
 
 use pane::{HitResult, Pane, SplitPath};
 use view::View;
 
 use crate::{
+  button_group::ButtonGroup,
   view::{EditorView, FileTree, ViewContent},
   widget::{Align, Justify, WidgetCollection},
 };
 
+mod button_group;
 mod icon;
 mod layout;
 mod palette;
@@ -87,13 +90,10 @@ struct State {
   /// What the workspace list returns to when it is left without a choice.
   list_return:   AppView,
 
-  /// The mouse is over the menu button in the bottom right.
-  menu_hover: bool,
-
-  /// The mouse is over the command palette button, left of the menu button.
-  palette_hover: bool,
+  /// The button in the bottom right the mouse is over.
+  corner_hover: Option<CornerButton>,
   /// The command palette, if it is open. It floats over whatever is showing.
-  palette:       Option<palette::Palette>,
+  palette:      Option<palette::Palette>,
 }
 
 #[derive(Clone)]
@@ -147,14 +147,16 @@ struct ViewCollection {
 /// font line plus its border) plus 5px of margin above and below.
 const TAB_BAR_HEIGHT: f64 = 30.0;
 
-/// The menu button's size, which matches a tab button: the tab bar less its
-/// margin.
-const MENU_BUTTON_SIZE: f64 = TAB_BAR_HEIGHT - 10.0;
-/// The gap between the menu button and the window edges.
-const MENU_BUTTON_MARGIN: f64 = 5.0;
-/// The width the buttons in the bottom right take, with the margin after them.
-/// The tab bar leaves this much room for them.
-const BUTTONS_WIDTH: f64 = MENU_BUTTON_SIZE * 2.0 + MENU_BUTTON_MARGIN * 2.0;
+/// The width the buttons in the bottom right take, with the margin around
+/// them. The tab bar leaves this much room for them.
+const BUTTONS_WIDTH: f64 = button_group::width(2) + button_group::MARGIN * 2.0;
+
+/// The buttons in the bottom right, drawn as one group.
+#[derive(Clone, Copy, PartialEq)]
+enum CornerButton {
+  Palette,
+  Menu,
+}
 
 struct Tab {
   title:   String,
@@ -288,8 +290,7 @@ impl State {
       next_session: 1,
       list_selected: 0,
       list_return: AppView::Terminal,
-      menu_hover: false,
-      palette_hover: false,
+      corner_hover: None,
       palette: None,
     };
 
@@ -450,99 +451,36 @@ impl State {
     }
   }
 
-  /// Where the menu button sits in a window of `size`: the rightmost slot.
-  fn menu_bounds(size: Size) -> Rect {
-    Rect::from_origin_size(
-      Point::new(
-        size.width - MENU_BUTTON_MARGIN - MENU_BUTTON_SIZE,
-        size.height - MENU_BUTTON_MARGIN - MENU_BUTTON_SIZE,
-      ),
-      Size::new(MENU_BUTTON_SIZE, MENU_BUTTON_SIZE),
-    )
-  }
-
-  /// Where the command palette button sits: the leftmost slot of the button
-  /// group, which is the corner itself when the menu button is hidden.
-  fn palette_button_bounds(size: Size, menu_visible: bool) -> Rect {
-    let menu = Self::menu_bounds(size);
-    if menu_visible { menu - Vec2::new(MENU_BUTTON_SIZE, 0.0) } else { menu }
-  }
-
   /// The menu button is on every screen but the full screen terminal. The
   /// palette button is on all of them.
   fn menu_visible(&self) -> bool { !matches!(self.active, AppView::Terminal) }
 
-  /// Draws the buttons in the bottom right as one rounded rectangle, split by
-  /// a thin line when there are two.
-  fn draw_buttons(&self, render: &mut Render) {
-    let size = render.size();
-    let menu_visible = self.menu_visible();
-
-    let (command_icon, menu_icon) = (icon::COMMAND, icon::MENU);
-
-    // (bounds, icon, active, hover), left to right.
-    let mut buttons = vec![(
-      Self::palette_button_bounds(size, menu_visible),
-      &command_icon,
-      self.palette.is_some(),
-      self.palette_hover,
-    )];
-    if menu_visible {
-      buttons.push((
-        Self::menu_bounds(size),
-        &menu_icon,
-        matches!(self.active, AppView::Workspaces),
-        self.menu_hover,
-      ));
+  /// The buttons in the bottom right of a window of `size`.
+  fn corner_buttons<'a>(
+    &self,
+    size: Size,
+    command: &'a LazyLock<icon::Icon>,
+    menu: &'a LazyLock<icon::Icon>,
+  ) -> ButtonGroup<'a, CornerButton> {
+    let mut items = vec![button_group::Item {
+      id:     CornerButton::Palette,
+      icon:   command,
+      active: self.palette.is_some(),
+    }];
+    if self.menu_visible() {
+      items.push(button_group::Item {
+        id:     CornerButton::Menu,
+        icon:   menu,
+        active: matches!(self.active, AppView::Workspaces),
+      });
     }
 
-    let group = buttons.iter().skip(1).fold(buttons[0].0, |group, (b, ..)| group.union(*b));
-    let outline = render.theme().background_raised_outline;
+    ButtonGroup::bottom_right(size, items)
+  }
 
-    render.clipped(group, |render| {
-      let shape = Rect::from_origin_size(Point::ZERO, group.size());
-      render.fill(&shape.to_rounded_rect(4.0), render.theme().background_raised);
-
-      let last = buttons.len() - 1;
-      for (i, (bounds, icon, active, hover)) in buttons.iter().enumerate() {
-        let segment = *bounds - group.origin().to_vec2();
-        // Only the outer corners of the group are rounded.
-        let radii = RoundedRectRadii::new(
-          if i == 0 { 4.0 } else { 0.0 },
-          if i == last { 4.0 } else { 0.0 },
-          if i == last { 4.0 } else { 0.0 },
-          if i == 0 { 4.0 } else { 0.0 },
-        );
-
-        if *active {
-          render.fill(&RoundedRect::from_rect(segment, radii), outline);
-        }
-        if *active || *hover {
-          render.stroke_transform(
-            &RoundedRect::from_rect(segment.inset(-0.5), radii),
-            Affine::IDENTITY,
-            outline,
-            Stroke::new(1.0),
-          );
-        }
-
-        let icon_size = 14.0;
-        let offset = (MENU_BUTTON_SIZE - icon_size) / 2.0;
-        let color = render.theme().text;
-        icon.stroke(segment.origin() + Vec2::splat(offset), icon_size, color, render);
-      }
-
-      // The line between the buttons.
-      for (bounds, ..) in buttons.iter().skip(1) {
-        let x = bounds.x0 - group.x0;
-        render.stroke_transform(
-          &kurbo::Line::new((x, 0.0), (x, shape.height())),
-          Affine::IDENTITY,
-          outline,
-          Stroke::new(1.0),
-        );
-      }
-    });
+  fn draw_buttons(&self, render: &mut Render) {
+    let (command, menu) = (icon::COMMAND, icon::MENU);
+    self.corner_buttons(render.size(), &command, &menu).draw(render, self.corner_hover);
   }
 
   /// Opens the command palette, or closes it if it is open.
@@ -751,37 +689,28 @@ impl State {
       };
       // A click that closes the palette on the palette button is a toggle, so
       // it must not reopen it below.
+      let (command, menu) = (icon::COMMAND, icon::MENU);
       let on_button = matches!(ev, MouseEvent::Button { pos, .. }
-        if Self::palette_button_bounds(size, self.menu_visible()).contains(pos));
+        if self.corner_buttons(size, &command, &menu).hit(pos) == Some(CornerButton::Palette));
       if !on_button || !matches!(outcome, palette::Outcome::Close) {
         self.on_palette_outcome(outcome, store);
         return if over_row { CursorKind::Pointer } else { CursorKind::Default };
       }
     }
 
-    let menu = Self::menu_bounds(size);
-    let palette_button = Self::palette_button_bounds(size, self.menu_visible());
+    let (command, menu) = (icon::COMMAND, icon::MENU);
+    let buttons = self.corner_buttons(size, &command, &menu);
     match ev {
-      MouseEvent::Move { pos } => {
-        self.menu_hover = self.menu_visible() && menu.contains(pos);
-        self.palette_hover = palette_button.contains(pos);
-      }
-      MouseEvent::Leave => {
-        self.menu_hover = false;
-        self.palette_hover = false;
-      }
+      MouseEvent::Move { pos } => self.corner_hover = buttons.hit(pos),
+      MouseEvent::Leave => self.corner_hover = None,
       _ => {}
     }
-    if self.menu_hover || self.palette_hover {
-      match ev {
-        MouseEvent::Button { pos, pressed: true, button: MouseButton::Left } => {
-          if menu.contains(pos) {
-            self.toggle_workspace_list();
-          } else if palette_button.contains(pos) {
-            self.toggle_palette(store);
-          }
+    if let Some(hovered) = self.corner_hover {
+      if let MouseEvent::Button { pressed: true, button: MouseButton::Left, .. } = ev {
+        match hovered {
+          CornerButton::Menu => self.toggle_workspace_list(),
+          CornerButton::Palette => self.toggle_palette(store),
         }
-        _ => {}
       }
       return CursorKind::Pointer;
     }
