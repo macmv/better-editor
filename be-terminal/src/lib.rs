@@ -13,6 +13,7 @@ pub use crate::{
   emulator::{Emulator, MouseMode},
   grid::{Line, OwnedLine},
   keys::{Arrow, InputModes},
+  mouse::MouseModes,
   pty::{Pty, SpawnSpec},
 };
 
@@ -20,6 +21,7 @@ mod control;
 mod emulator;
 mod grid;
 pub mod keys;
+pub mod mouse;
 mod pty;
 
 #[cfg(test)]
@@ -337,9 +339,8 @@ impl Terminal {
   ///
   /// `button` is 0=left, 1=middle, 2=right. Only sent when mode 1000 is active.
   pub fn perform_mouse_button(&mut self, col: usize, row: usize, button: u8, pressed: bool) {
-    if self.emu.state.flags.contains(TerminalFlags::REPORT_MOUSE) {
-      let code = if pressed { button } else { 3 };
-      self.send_mouse_report(col, row, code);
+    if let Some(bytes) = mouse::button(self.emu.mouse_modes(), col, row, button, pressed) {
+      self.write_keys(bytes);
     }
   }
 
@@ -348,10 +349,9 @@ impl Terminal {
   /// Only sent when mode 1000 is active.
   pub fn perform_mouse_scroll(&mut self, col: usize, row: usize, dy: i32) {
     if self.emu.state.flags.contains(TerminalFlags::REPORT_MOUSE) {
-      // Scroll buttons: 64=wheel-up, 65=wheel-down (before the +32 offset in
-      // send_mouse_report).
-      let code = if dy > 0 { 64 } else { 65 };
-      self.send_mouse_report(col, row, code);
+      if let Some(bytes) = mouse::scroll(self.emu.mouse_modes(), col, row, dy) {
+        self.write_keys(bytes);
+      }
     } else if !self.emu.state.alt_screen {
       self.emu.state.viewport_offset =
         self.emu.state.viewport_offset.saturating_add_signed(dy as isize);
@@ -373,18 +373,8 @@ impl Terminal {
   /// `held` is the button currently held (0=left, 1=middle, 2=right), or None.
   /// Sent when mode 1002 (held button) or 1003 (all motion) is active.
   pub fn perform_mouse_move(&mut self, col: usize, row: usize, held: Option<u8>) {
-    let report = if self.emu.state.flags.contains(TerminalFlags::MOUSE_ALL_MOTION) {
-      true
-    } else if self.emu.state.flags.contains(TerminalFlags::MOUSE_MOTION) {
-      held.is_some()
-    } else {
-      false
-    };
-    if report {
-      // Add the motion bit (0x20 / 32) to the button code.
-      // When no button is held the code is 3 (release), giving 32|3 = 35.
-      let code = held.map(|b| b | 32).unwrap_or(32 | 3);
-      self.send_mouse_report(col, row, code);
+    if let Some(bytes) = mouse::motion(self.emu.mouse_modes(), col, row, held) {
+      self.write_keys(bytes);
     }
   }
 
@@ -392,36 +382,8 @@ impl Terminal {
   ///
   /// Only sent when mode 1004 is active.
   pub fn perform_focus_event(&mut self, focus: bool) {
-    if self.emu.state.flags.contains(TerminalFlags::REPORT_FOCUS) {
-      if focus {
-        self.pty.write_bytes(b"\x1b[I");
-      } else {
-        self.pty.write_bytes(b"\x1b[O");
-      }
-    }
-  }
-
-  fn send_mouse_report(&mut self, col: usize, row: usize, button_code: u8) {
-    if self.emu.state.flags.contains(TerminalFlags::MOUSE_UTF8) {
-      // Mode 1005: encode each of the three values as a UTF-8 codepoint.
-      let mut buf = vec![0x1b, b'[', b'M'];
-      push_utf8_coord(&mut buf, 32 + u32::from(button_code));
-      push_utf8_coord(&mut buf, 32 + col as u32 + 1);
-      push_utf8_coord(&mut buf, 32 + row as u32 + 1);
-      self.pty.write_bytes(&buf);
-    } else {
-      // X10 encoding: coords are limited to < 224 (byte value 255-32+1).
-      if col >= 224 || row >= 224 {
-        return;
-      }
-      self.pty.write_bytes(&[
-        0x1b,
-        b'[',
-        b'M',
-        32 + button_code,
-        (32 + col + 1) as u8,
-        (32 + row + 1) as u8,
-      ]);
+    if let Some(bytes) = mouse::focus(self.emu.mouse_modes(), focus) {
+      self.pty.write_bytes(&bytes);
     }
   }
 
@@ -548,13 +510,6 @@ fn advance_byte(parser: &mut Parser, state: &mut TerminalState, byte: u8) {
   state.ground_before = state.ground;
   state.ground = false;
   parser.advance(state, byte);
-}
-
-fn push_utf8_coord(buf: &mut Vec<u8>, codepoint: u32) {
-  if let Some(c) = char::from_u32(codepoint) {
-    let mut tmp = [0u8; 4];
-    buf.extend_from_slice(c.encode_utf8(&mut tmp).as_bytes());
-  }
 }
 
 impl TerminalState {

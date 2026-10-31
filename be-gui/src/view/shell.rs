@@ -33,19 +33,20 @@ use be_shell::{
   GitHead, Job, JobId, JobState, PromptContext, Shell, ShellEvent, SubmitResult, UiCommand,
   format_duration, format_local_time,
 };
-use be_terminal::{Arrow, InputModes, Position, keys};
+use be_terminal::{Arrow, InputModes, Position, keys, mouse};
 use kurbo::{Point, Rect, RoundedRect, Size, Stroke};
 
 use super::{
   shell_input::{HistoryNav, InputLine},
-  shell_layout::{BlockKind, Blocks, Item, PROMPT_KEY, ScrollState, header_command, stack},
+  shell_layout::{
+    BlockKind, Blocks, Item, PROMPT_KEY, ScrollState, header_command, is_fullscreen, mouse_cell,
+    pty_grid, stack,
+  },
   shell_prompt::{
     BlockResult, Chevron, Element, Kind, SYMBOL_COLS, Wrapped, prompt_elements, symbol,
     symbol_color,
   },
-  terminal_paint::{
-    CursorDraw, DrawOptions, Span, TerminalPainter, character_size, grid_size, styled_line,
-  },
+  terminal_paint::{CursorDraw, DrawOptions, Span, TerminalPainter, character_size, styled_line},
 };
 use crate::{
   Color, Font, Layout, MouseButton, MouseEvent, Render, RenderStore, TextLayout, icon,
@@ -104,6 +105,12 @@ pub struct ShellView {
   /// ones.
   grid:     be_terminal::Size,
   painters: HashMap<JobId, TerminalPainter>,
+
+  /// The running job that has the alternate screen and so fills the view, as
+  /// of the last layout.
+  fullscreen: Option<JobId>,
+  /// The mouse button held down in a fullscreen job.
+  mouse_held: Option<u8>,
 
   mouse_pos: Option<Point>,
   drag:      Option<Selection>,
@@ -320,6 +327,8 @@ impl ShellView {
       geom: Geometry::default(),
       grid: be_terminal::Size { rows: 24, cols: 80 },
       painters: HashMap::new(),
+      fullscreen: None,
+      mouse_held: None,
       mouse_pos: None,
       drag: None,
       selection: None,
@@ -328,8 +337,8 @@ impl ShellView {
   }
 
   /// Whether something is spinning, so the view must keep redrawing. Only a
-  /// running job spins.
-  pub fn animated(&self) -> bool { self.running().is_some() }
+  /// running job in the block layout spins; a fullscreen one has no spinner.
+  pub fn animated(&self) -> bool { self.running().is_some() && self.fullscreen.is_none() }
 
   pub fn mode(&self) -> Mode {
     if self.running().is_some() || self.mode == ShellMode::Input {
@@ -339,7 +348,15 @@ impl ShellView {
     }
   }
 
-  pub fn on_focus(&mut self, focus: bool) { self.focused = focus; }
+  pub fn on_focus(&mut self, focus: bool) {
+    self.focused = focus;
+    if let Some(job) = self.running()
+      && let Some(bytes) = mouse::focus(job.emulator.mouse_modes(), focus)
+    {
+      let id = job.id;
+      self.shell.send_input(id, &bytes);
+    }
+  }
 
   fn running(&self) -> Option<&Job> { self.shell.jobs().iter().find(|j| j.is_running()) }
 
@@ -618,6 +635,10 @@ impl ShellView {
     _size: Size,
     _store: &RenderStore,
   ) -> crate::CursorKind {
+    if let Some(id) = self.fullscreen {
+      return self.on_fullscreen_mouse(id, ev);
+    }
+
     match *ev {
       MouseEvent::Move { pos } => {
         self.mouse_pos = Some(pos);
@@ -681,6 +702,49 @@ impl ShellView {
     }
   }
 
+  /// Mouse events for a job that fills the view, which go to the program if
+  /// it asked for them. There is no selection or scrollback here.
+  fn on_fullscreen_mouse(&mut self, id: JobId, ev: &MouseEvent) -> crate::CursorKind {
+    let Some(modes) = self.shell.job(id).map(|j| j.emulator.mouse_modes()) else {
+      return crate::CursorKind::Default;
+    };
+    let ch = self.geom.char_size;
+
+    let bytes = match *ev {
+      MouseEvent::Move { pos } => {
+        self.mouse_pos = Some(pos);
+        let (col, row) = mouse_cell(pos, ch);
+        mouse::motion(modes, col, row, self.mouse_held)
+      }
+      MouseEvent::Button { pos, pressed, button } => {
+        let code = match button {
+          MouseButton::Left => 0,
+          MouseButton::Middle => 1,
+          MouseButton::Right => 2,
+        };
+        self.mouse_held = pressed.then_some(code);
+        let (col, row) = mouse_cell(pos, ch);
+        mouse::button(modes, col, row, code, pressed)
+      }
+      MouseEvent::Scroll { pos, delta } => {
+        // The same step as the terminal view.
+        let lines = (delta.y / 20.0) as i32;
+        let (col, row) = mouse_cell(pos, ch);
+        if lines == 0 { None } else { mouse::scroll(modes, col, row, lines) }
+      }
+      MouseEvent::Leave => {
+        self.mouse_held = None;
+        self.mouse_pos = None;
+        None
+      }
+      _ => None,
+    };
+    if let Some(bytes) = bytes {
+      self.shell.send_input(id, &bytes);
+    }
+    crate::CursorKind::Beam
+  }
+
   fn copy(&self) {
     let Some(selection) = self.selection else { return };
     let Some(BlockKind::Job(id)) = self.blocks.get(selection.key).map(|b| &b.kind) else { return };
@@ -739,9 +803,11 @@ impl ShellView {
     let char_size = character_size(layout.store);
     let ui_line = layout.store.text.font_metrics(Font::Ui).line_height;
 
-    // The pty is as wide as the text area, and as tall as the view.
-    let grid = grid_size(Size::new((size.width - PAD_X).max(0.0), size.height), char_size);
-    let grid = be_terminal::Size { rows: grid.rows.max(5), cols: grid.cols.max(10) };
+    // The pty is as wide as the text area, and as tall as the view; or the
+    // whole view, for a program on the alternate screen.
+    let fullscreen =
+      self.running().filter(|j| is_fullscreen(j.is_running(), &j.emulator)).map(|j| j.id);
+    let grid = pty_grid(size, char_size, PAD_X, fullscreen.is_some());
     if grid != self.grid {
       self.grid = grid;
       if let Some(id) = self.running().map(|j| j.id) {
@@ -753,6 +819,29 @@ impl ShellView {
     self.geom.char_size = char_size;
     self.geom.ui_line = ui_line;
     self.geom.cols = grid.cols;
+
+    if fullscreen != self.fullscreen {
+      // A job that left the alternate screen is resized by the running path
+      // above. One that died in it is not running any more, so put its
+      // emulator back to the normal width here.
+      if let Some(prev) = self.fullscreen
+        && self.shell.job(prev).is_some_and(|j| !j.is_running())
+      {
+        self.shell.resize(prev, grid);
+      }
+      self.fullscreen = fullscreen;
+      self.mouse_held = None;
+      self.drag = None;
+      self.selection = None;
+      // Back in the block layout, the prompt is where the user wants to be.
+      self.scroll.follow_bottom();
+    }
+    if fullscreen.is_some() {
+      if self.shell.needs_poll() {
+        layout.notifier().wake();
+      }
+      return;
+    }
 
     let mut rows = vec![];
     let mut header_rows = vec![];
@@ -806,6 +895,21 @@ impl ShellView {
 
     let size = render.size();
     render.fill(&Rect::from_origin_size(Point::ZERO, size), render.theme().background);
+
+    if let Some(id) = self.fullscreen
+      && let Some(job) = self.shell.job(id)
+    {
+      // The program has the whole view, like in the terminal view.
+      let state = job.emulator.state();
+      let mut options =
+        DrawOptions::screen(state, Rect::from_origin_size(Point::ZERO, size), self.grid.rows);
+      options.cursor = state
+        .cursor
+        .visible
+        .then(|| CursorDraw { pos: state.cursor.pos, focused: self.focused });
+      self.painters.entry(id).or_default().draw(render, state, &options);
+      return;
+    }
 
     let offset = self.scroll.offset();
     let hover = self.mouse_pos.and_then(|p| self.block_at(p));

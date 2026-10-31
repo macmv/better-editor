@@ -3,6 +3,10 @@
 //! rendering.
 
 use be_shell::JobId;
+use be_terminal::Emulator;
+use kurbo::{Point, Size};
+
+use super::terminal_paint::grid_size;
 
 /// The key of the live prompt at the bottom of the list, which isn't a block.
 pub const PROMPT_KEY: u64 = u64::MAX;
@@ -92,6 +96,37 @@ impl Blocks {
     let i = (i + delta).clamp(0, self.list.len() as isize - 1);
     self.focus = Some(self.list[i as usize].key);
   }
+}
+
+/// Whether a job takes over the whole view: it is running and has switched to
+/// the alternate screen. A finished job never does, even if it died without
+/// leaving the alternate screen.
+pub fn is_fullscreen(running: bool, emulator: &Emulator) -> bool {
+  running && emulator.alt_screen()
+}
+
+/// The size of the pty for a view of `size` with cells of `char_size`. In a
+/// fullscreen takeover that is the whole view; otherwise it is the text area
+/// minus `pad_right`, and big enough to be usable.
+pub fn pty_grid(
+  size: Size,
+  char_size: Size,
+  pad_right: f64,
+  fullscreen: bool,
+) -> be_terminal::Size {
+  if fullscreen {
+    let grid = grid_size(size, char_size);
+    be_terminal::Size { rows: grid.rows.max(1), cols: grid.cols.max(1) }
+  } else {
+    let grid = grid_size(Size::new((size.width - pad_right).max(0.0), size.height), char_size);
+    be_terminal::Size { rows: grid.rows.max(5), cols: grid.cols.max(10) }
+  }
+}
+
+/// The `(col, row)` of the cell under `pos` in a fullscreen view.
+pub fn mouse_cell(pos: Point, char_size: Size) -> (usize, usize) {
+  let cell = |v: f64, size: f64| (v / size).floor().max(0.0) as usize;
+  (cell(pos.x, char_size.width), cell(pos.y, char_size.height))
 }
 
 /// Where a block or the prompt sits in the scrolled content.
@@ -340,6 +375,48 @@ mod tests {
 
     blocks.clear();
     assert_eq!(blocks.focus(), None);
+  }
+
+  #[test]
+  fn alt_screen_round_trip() {
+    let mut emulator = Emulator::new(be_terminal::Size { rows: 5, cols: 20 });
+    emulator.feed(b"normal output\r\n");
+    assert!(!is_fullscreen(true, &emulator));
+
+    emulator.feed(b"\x1b[?1049h\x1b[Halt");
+    assert!(is_fullscreen(true, &emulator));
+    // A job that is done never takes over the view.
+    assert!(!is_fullscreen(false, &emulator));
+
+    emulator.feed(b"\x1b[?1049l");
+    assert!(!is_fullscreen(true, &emulator));
+    // The normal screen is as it was.
+    assert_eq!(emulator.text(), "normal output");
+  }
+
+  #[test]
+  fn grid_sizes() {
+    let cell = Size::new(10.0, 20.0);
+    let view = Size::new(805.0, 410.0);
+    assert_eq!(pty_grid(view, cell, 8.0, false), be_terminal::Size { rows: 20, cols: 79 });
+    assert_eq!(pty_grid(view, cell, 8.0, true), be_terminal::Size { rows: 20, cols: 80 });
+    // Tiny views stay usable for a shell but not clamped when fullscreen.
+    assert_eq!(
+      pty_grid(Size::new(30.0, 30.0), cell, 8.0, false),
+      be_terminal::Size { rows: 5, cols: 10 }
+    );
+    assert_eq!(
+      pty_grid(Size::new(30.0, 30.0), cell, 8.0, true),
+      be_terminal::Size { rows: 1, cols: 3 }
+    );
+  }
+
+  #[test]
+  fn mouse_cells() {
+    let cell = Size::new(10.0, 20.0);
+    assert_eq!(mouse_cell(Point::new(0.0, 0.0), cell), (0, 0));
+    assert_eq!(mouse_cell(Point::new(19.9, 39.9), cell), (1, 1));
+    assert_eq!(mouse_cell(Point::new(-5.0, 41.0), cell), (0, 2));
   }
 
   #[test]

@@ -167,6 +167,16 @@ impl Emulator {
   /// Whether Ctrl+Enter and friends should use `CSI u` encodings.
   pub fn kitty_disambiguate(&self) -> bool { self.state.kitty_flags & KITTY_DISAMBIGUATE != 0 }
 
+  /// The modes that change which mouse and focus events the program gets.
+  pub fn mouse_modes(&self) -> crate::MouseModes {
+    crate::MouseModes {
+      reporting: self.mouse_reporting(),
+      motion:    self.mouse_mode(),
+      utf8:      self.mouse_utf8(),
+      focus:     self.report_focus(),
+    }
+  }
+
   /// The modes that change how keys are encoded for this program.
   pub fn input_modes(&self) -> InputModes {
     InputModes {
