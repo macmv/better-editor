@@ -18,6 +18,20 @@ pub fn ssh_command(target: &str, host_cmd: &str) -> Command {
   cmd
 }
 
+/// Quotes `s` as one word for a POSIX shell.
+fn shell_quote(s: &str) -> String { format!("'{}'", s.replace('\'', "'\\''")) }
+
+/// `ssh <target> 'cd <dir> && exec <cmd>'`, with the same options as
+/// `ssh_command`. Used to run a language server next to the files it reads;
+/// its stdio is the command's stdio. `cmd` is run by the remote shell, so it
+/// may carry arguments.
+pub fn ssh_exec_command(target: &str, dir: &std::path::Path, cmd: &str) -> Command {
+  let mut ssh = Command::new("ssh");
+  ssh.args(["-T", "-o", "BatchMode=yes", "--", target]);
+  ssh.arg(format!("cd {} && exec {cmd}", shell_quote(&dir.to_string_lossy())));
+  ssh
+}
+
 /// A connection to a `be-host`. The owner drives `connection()` from its poll
 /// loop (see `lode_poll::Connection`); calls return pending values that
 /// complete as the loop runs.
@@ -89,5 +103,22 @@ impl RemoteHost {
 
   pub fn read_file(&self, path: &str) -> Pending<String, HostError> {
     self.conn.local().proxy::<Host>().read_file(path.to_string())
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use std::path::Path;
+
+  use super::*;
+
+  #[test]
+  fn exec_command_quotes_the_directory() {
+    let cmd = ssh_exec_command("me@box", Path::new("/home/a b/it's"), "rust-analyzer");
+    let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+    assert_eq!(
+      args,
+      ["-T", "-o", "BatchMode=yes", "--", "me@box", r"cd '/home/a b/it'\''s' && exec rust-analyzer"]
+    );
   }
 }

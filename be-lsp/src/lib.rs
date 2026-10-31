@@ -5,7 +5,7 @@ use parking_lot::Mutex;
 use std::{
   collections::HashMap,
   ops::Range,
-  path::PathBuf,
+  path::{Path, PathBuf},
   sync::{Arc, Weak},
 };
 
@@ -22,10 +22,16 @@ pub use client::LspClient;
 
 use crate::client::LspState;
 
+/// Builds the command that runs a language server for a workspace rooted at
+/// the given path. The command's stdio carries LSP.
+pub type ServerLauncher = Box<dyn Fn(&str, &Path) -> std::process::Command>;
+
 pub struct LanguageServerStore {
   root:       PathBuf,
   servers:    HashMap<LanguageServerKey, Arc<LanguageServerState>>,
   on_message: Arc<Mutex<Box<dyn Fn() + Send>>>,
+  /// `None`: servers run on this machine.
+  launcher:   Option<ServerLauncher>,
 }
 
 pub struct Diagnostic {
@@ -71,12 +77,17 @@ impl Default for LanguageServerStore {
       root:       PathBuf::new(),
       servers:    HashMap::new(),
       on_message: Arc::new(Mutex::new(Box::new(|| {}))),
+      launcher:   None,
     }
   }
 }
 
 impl LanguageServerStore {
   pub fn set_root(&mut self, root: PathBuf) { self.root = root; }
+
+  /// Runs servers through `launcher` instead of directly. Servers started
+  /// this way are assumed to be on another machine.
+  pub fn set_launcher(&mut self, launcher: ServerLauncher) { self.launcher = Some(launcher); }
 
   pub fn set_on_message(&mut self, waker: Arc<Mutex<Box<dyn Fn() + Send>>>) {
     self.on_message = waker;
@@ -87,7 +98,12 @@ impl LanguageServerStore {
   }
 
   pub fn spawn(&mut self, key: LanguageServerKey, cmd: &str) -> Weak<LanguageServerState> {
-    let (client, server_caps) = LspClient::spawn(cmd, &self.root, self.on_message.clone());
+    let (client, server_caps) = match &self.launcher {
+      Some(launcher) => {
+        LspClient::spawn_command(launcher(cmd, &self.root), false, self.on_message.clone())
+      }
+      None => LspClient::spawn(cmd, &self.root, self.on_message.clone()),
+    };
 
     let state = Arc::new(LanguageServerState { client: Mutex::new(client), caps: server_caps });
     let weak = Arc::downgrade(&state);

@@ -98,12 +98,21 @@ impl LspClient {
     path: &Path,
     on_message: Arc<Mutex<Box<dyn Fn() + Send>>>,
   ) -> (LspClient, lsp::ServerCapabilities) {
-    let mut child = std::process::Command::new(cmd)
-      .current_dir(path)
-      .stdin(Stdio::piped())
-      .stdout(Stdio::piped())
-      .spawn()
-      .unwrap();
+    let mut command = std::process::Command::new(cmd);
+    command.current_dir(path);
+    LspClient::spawn_command(command, true, on_message)
+  }
+
+  /// Runs `command` as the server, speaking LSP over its stdio. `command` may
+  /// run the server on another machine (such as through `ssh`), in which case
+  /// `send_pid` should be false: this process's id means nothing there, and
+  /// servers that watch it would exit.
+  pub fn spawn_command(
+    mut command: std::process::Command,
+    send_pid: bool,
+    on_message: Arc<Mutex<Box<dyn Fn() + Send>>>,
+  ) -> (LspClient, lsp::ServerCapabilities) {
+    let mut child = command.stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
 
     let stdin = child.stdin.take().unwrap();
     let stdout = child.stdout.take().unwrap();
@@ -135,7 +144,7 @@ impl LspClient {
     };
 
     let init = lsp::InitializeParams {
-      process_id: Some(std::process::id() as i32),
+      process_id: send_pid.then(|| std::process::id() as i32),
       capabilities: crate::init::client_capabilities(),
       ..Default::default()
     };
