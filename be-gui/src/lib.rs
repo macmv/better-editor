@@ -787,6 +787,21 @@ impl WorkspaceLayout {
 
         self.views.get_mut(self.tabs[new_active].content.active()).unwrap().on_focus(true);
       }
+      Action::Navigate { nav: Navigation::NewTerminal } => {
+        let view = self.views.new_view(view::TerminalView::new(
+          &self.workspace.clipboard,
+          self.workspace.root.as_path(),
+        ));
+        self.tabs.push(Tab {
+          title:   "terminal".into(),
+          content: Pane::View(view),
+          popup:   None,
+          last:    None,
+          zoomed:  None,
+        });
+        let index = self.tabs.len() - 1;
+        self.perform_action(Action::Navigate { nav: Navigation::Tab(index as u8) }, store);
+      }
       Action::Navigate { nav: Navigation::Direction(dir) } => {
         self.active_tab_mut().zoomed = None;
         let prev_focus = self.active_tab().content.active();

@@ -79,6 +79,7 @@ navigate = "\\"
 "f" = { action = "navigate", nav = { nav = "create_split", axis = "horizontal" } }
 "o" = { action = "navigate", nav = "open_workspace" }
 ":" = { action = "set_mode", mode = "command" }
+"c" = { action = "navigate", nav = "new_terminal" }
 # A literal backslash, as the prefix would otherwise swallow it.
 "\\" = { edit = "insert", char = "\\" }
 "0" = { action = "navigate", nav = { nav = "tab", tab = 0 } }

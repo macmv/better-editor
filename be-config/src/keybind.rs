@@ -230,6 +230,7 @@ impl ParseKey for be_input::Navigation {
       Some("last_pane") => Ok(LastPane),
       Some("close_pane") => Ok(ClosePane),
       Some("zoom") => Ok(Zoom),
+      Some("new_terminal") => Ok(NewTerminal),
       Some("create_split") => Ok(Split(p.get("axis")?)),
       Some("tab") => {
         Ok(Tab(u8::try_from(p.get::<i32>("tab")?).map_err(|_| format!("invalid tab"))?))

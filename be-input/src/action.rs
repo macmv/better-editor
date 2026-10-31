@@ -33,6 +33,8 @@ pub enum Navigation {
   Zoom,
   Split(Axis),
   Tab(u8),
+  /// Open a new tab containing a terminal, and switch to it.
+  NewTerminal,
 }
 
 #[derive(Debug, Clone, Copy)]
