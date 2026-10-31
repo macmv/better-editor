@@ -105,6 +105,7 @@ navigate = "\\"
 ":" = { action = "set_mode", mode = "command" }
 "/" = "open_search"
 "SP s" = { action = "navigate", nav = "open_search" }
+"SP l" = { action = "navigate", nav = "open_symbol_search" }
 
 "r" = "replace"
 "x" = "delete_single"

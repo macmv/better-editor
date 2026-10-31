@@ -327,6 +327,7 @@ dependencies = [
  "be-macros",
  "be-remote",
  "be-shared",
+ "be-task",
  "be-terminal",
  "be-workspace",
  "bytemuck",

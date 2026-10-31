@@ -23,6 +23,7 @@ pub enum Action {
 pub enum Navigation {
   OpenWorkspace,
   OpenSearch,
+  OpenSymbolSearch,
   Direction(Direction),
   /// Focus the next or previous pane in the current tab, wrapping around.
   Cycle(ChangeDirection),

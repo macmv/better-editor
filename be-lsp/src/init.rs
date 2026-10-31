@@ -58,6 +58,10 @@ pub fn client_capabilities() -> lsp::ClientCapabilities {
       }),
       ..Default::default()
     }),
+    workspace: Some(lsp::WorkspaceClientCapabilities {
+      symbol: Some(lsp::WorkspaceSymbolClientCapabilities::default()),
+      ..Default::default()
+    }),
     window: Some(lsp::WindowClientCapabilities {
       work_done_progress: Some(true),
       ..Default::default()

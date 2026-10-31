@@ -111,6 +111,17 @@ impl LanguageServerStore {
 
     weak
   }
+
+  /// Sends `command` to every running server that supports it, regardless of
+  /// which editors are using them.
+  pub fn send<T: command::LspCommand>(&self, command: &T) -> Vec<Task<T::Result>> {
+    self
+      .servers
+      .values()
+      .filter(|server| command.is_capable(&server.caps))
+      .filter_map(|server| command.send(&mut server.client.lock()))
+      .collect()
+  }
 }
 
 impl LanguageClientState {

@@ -306,9 +306,10 @@ impl State {
         let handle = opening.handle().clone();
         let root = WorkspaceRoot::remote(handle.target().to_string(), path);
         if !self.workspaces.contains_key(&root) {
-          self
-            .workspaces
-            .insert(root.clone(), WorkspaceLayout::new(root.clone(), store, Some((handle, backend))));
+          self.workspaces.insert(
+            root.clone(),
+            WorkspaceLayout::new(root.clone(), store, Some((handle, backend))),
+          );
         }
         self.loading = None;
         self.active = AppView::Workspace(root);
@@ -1023,6 +1024,13 @@ impl WorkspaceLayout {
           self.workspace.root.clone(),
           self.notify.clone(),
           listed,
+        )));
+      }
+      Action::Navigate { nav: Navigation::OpenSymbolSearch } => {
+        self.active_tab_mut().popup = Some(view::Popup::SymbolSearch(view::SymbolSearch::new(
+          self.workspace.root.clone(),
+          self.workspace.lsp.clone(),
+          self.notify.clone(),
         )));
       }
       Action::Navigate { nav: Navigation::Split(axis) } => {

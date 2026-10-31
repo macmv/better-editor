@@ -659,3 +659,71 @@ fn on_progress(state: &mut LspState, params: lsp::ProgressParams) {
     }
   }
 }
+
+/// A symbol returned from a `workspace/symbol` request.
+#[derive(Debug, Clone)]
+pub struct WorkspaceSymbol {
+  pub name:      String,
+  pub kind:      types::SymbolKind,
+  pub container: Option<String>,
+  pub uri:       types::Uri,
+  pub encoding:  PositionEncoding,
+  pub pos:       types::Position,
+}
+
+pub struct WorkspaceSymbols {
+  pub query: String,
+}
+
+impl LspCommand for WorkspaceSymbols {
+  type Result = Vec<WorkspaceSymbol>;
+
+  fn is_capable(&self, caps: &types::ServerCapabilities) -> bool {
+    match &caps.workspace_symbol_provider {
+      Some(types::Or2::A(enabled)) => *enabled,
+      Some(types::Or2::B(_)) => true,
+      None => false,
+    }
+  }
+
+  fn send(&self, client: &mut LspClient) -> Option<Task<Vec<WorkspaceSymbol>>> {
+    let encoding = client.state.lock().position_encoding();
+
+    Some(
+      client
+        .request::<types::request::WorkspaceSymbolRequest>(types::WorkspaceSymbolParams {
+          query: self.query.clone(),
+          ..Default::default()
+        })
+        .map(move |res| {
+          let symbol = |base: types::BaseSymbolInformation, uri: types::Uri, pos| WorkspaceSymbol {
+            name: base.name,
+            kind: base.kind,
+            container: base.container_name,
+            uri,
+            encoding,
+            pos,
+          };
+
+          match res {
+            Some(types::Or2::A(symbols)) => symbols
+              .into_iter()
+              .map(|s| symbol(s.base_symbol_information, s.location.uri, s.location.range.start))
+              .collect(),
+            Some(types::Or2::B(symbols)) => symbols
+              .into_iter()
+              .map(|s| match s.location {
+                types::Or2::A(loc) => symbol(s.base_symbol_information, loc.uri, loc.range.start),
+                // We don't advertise `resolveSupport`, so servers shouldn't send these. If one
+                // does anyway, jump to the top of the file.
+                types::Or2::B(loc) => {
+                  symbol(s.base_symbol_information, loc.uri, types::Position::default())
+                }
+              })
+              .collect(),
+            None => vec![],
+          }
+        }),
+    )
+  }
+}

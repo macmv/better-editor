@@ -7,12 +7,14 @@ mod command;
 mod editor;
 mod file_tree;
 mod search;
+mod symbol_search;
 mod terminal;
 
 pub use command::CommandView;
 pub use editor::EditorView;
 pub use file_tree::FileTree;
 pub use search::Search;
+pub use symbol_search::SymbolSearch;
 pub use terminal::TerminalView;
 
 pub struct View {
@@ -48,6 +50,7 @@ pub enum ViewContent {
 
 pub enum Popup {
   Search(Search),
+  SymbolSearch(SymbolSearch),
   Command(CommandView),
 }
 
@@ -133,7 +136,9 @@ impl View {
 impl Popup {
   pub fn bounds(&self, size: Size) -> Rect {
     match self {
-      Popup::Search(_) => Rect::new(100.0, 50.0, size.width - 100.0, size.height - 50.0),
+      Popup::Search(_) | Popup::SymbolSearch(_) => {
+        Rect::new(100.0, 50.0, size.width - 100.0, size.height - 50.0)
+      }
       Popup::Command(_) => {
         Rect::new(100.0, size.height - 110.0, size.width - 100.0, size.height - 50.0)
       }
@@ -143,6 +148,7 @@ impl Popup {
   pub fn layout(&mut self, _layout: &mut Layout) {
     match self {
       Popup::Search(search) => search.layout(),
+      Popup::SymbolSearch(search) => search.layout(),
       Popup::Command(_) => {}
     }
   }
@@ -150,6 +156,7 @@ impl Popup {
   pub fn draw(&mut self, render: &mut Render) {
     match self {
       Popup::Search(search) => search.draw(render),
+      Popup::SymbolSearch(search) => search.draw(render),
       Popup::Command(command) => command.draw(render),
     }
   }
@@ -157,6 +164,7 @@ impl Popup {
   pub fn perform_action(&mut self, action: Action) {
     match self {
       Popup::Search(search) => search.perform_action(action),
+      Popup::SymbolSearch(search) => search.perform_action(action),
       Popup::Command(command) => command.perform_action(action),
     }
   }
