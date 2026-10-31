@@ -3,13 +3,14 @@
 //! command after it), then the output. A live prompt in the same style sits
 //! below the blocks.
 //!
-//! Every row of the view has a gutter on the left, which holds the chevron
-//! that collapses a block and the focus bar, so text never shifts when they
-//! appear. Rows are all one terminal cell tall:
+//! Everything starts at the left edge of the view, like in a terminal. The
+//! chevron that collapses a block is the first element of its info line (the
+//! live prompt keeps the same two cells blank, so nothing shifts when a
+//! prompt is frozen into a block). Rows are all one terminal cell tall:
 //!
 //! ```text
 //! blank row                 \
-//! info line (chevron here)   | the header of a block, `header_rows` rows
+//! info line (chevron first)  | the header of a block, `header_rows` rows
 //! symbol line + command      | (more if the command wraps or has newlines)
 //! (continuation rows)       /
 //! output rows (or a `+N lines` hint row when collapsed)
@@ -39,7 +40,8 @@ use super::{
   shell_input::{HistoryNav, InputLine},
   shell_layout::{BlockKind, Blocks, Item, PROMPT_KEY, ScrollState, header_command, stack},
   shell_prompt::{
-    BlockResult, Element, Kind, SYMBOL_COLS, Wrapped, prompt_elements, symbol, symbol_color,
+    BlockResult, Chevron, Element, Kind, SYMBOL_COLS, Wrapped, prompt_elements, symbol,
+    symbol_color,
   },
   terminal_paint::{
     CursorDraw, DrawOptions, Span, TerminalPainter, character_size, grid_size, styled_line,
@@ -52,8 +54,6 @@ use crate::{
 
 /// Padding to the right of the text.
 const PAD_X: f64 = 8.0;
-/// The width of the gutter on the left, in cells.
-const GUTTER_CELLS: f64 = 1.5;
 /// Vertical padding inside the tooltip.
 const TIP_PAD_Y: f64 = 4.0;
 /// How far a pill reaches past the cells of its text, in cells. This is under
@@ -64,6 +64,8 @@ const PILL_PAD_X: f64 = 0.35;
 const PILL_INSET_Y: f64 = 2.0;
 /// How opaque the tinted background of a pill is.
 const PILL_ALPHA: f32 = 0.18;
+/// How opaque the band behind the header of the focused block is.
+const FOCUS_ALPHA: f32 = 0.12;
 /// Lines of `history` shown.
 const HISTORY_LINES: usize = 20;
 
@@ -120,8 +122,6 @@ struct Geometry {
   size:        Size,
   char_size:   Size,
   ui_line:     f64,
-  /// The x of the text, after the gutter.
-  text_left:   f64,
   /// Columns of text.
   cols:        usize,
   /// Rows of each block's header (zero for notices), in the order of
@@ -605,7 +605,7 @@ impl ShellView {
     let row = ((rel.y - self.header_height(i)) / ch.height).floor().max(0.0) as usize;
     Position {
       row: row.min(rows.saturating_sub(1)),
-      col: ((rel.x - self.geom.text_left) / ch.width).round().max(0.0) as usize,
+      col: (rel.x / ch.width).round().max(0.0) as usize,
     }
   }
 
@@ -738,11 +738,9 @@ impl ShellView {
     let size = layout.size();
     let char_size = character_size(layout.store);
     let ui_line = layout.store.text.font_metrics(Font::Ui).line_height;
-    let text_left = (GUTTER_CELLS * char_size.width).ceil();
 
     // The pty is as wide as the text area, and as tall as the view.
-    let grid =
-      grid_size(Size::new((size.width - text_left - PAD_X).max(0.0), size.height), char_size);
+    let grid = grid_size(Size::new((size.width - PAD_X).max(0.0), size.height), char_size);
     let grid = be_terminal::Size { rows: grid.rows.max(5), cols: grid.cols.max(10) };
     if grid != self.grid {
       self.grid = grid;
@@ -754,7 +752,6 @@ impl ShellView {
     self.geom.size = size;
     self.geom.char_size = char_size;
     self.geom.ui_line = ui_line;
-    self.geom.text_left = text_left;
     self.geom.cols = grid.cols;
 
     let mut rows = vec![];
@@ -824,7 +821,13 @@ impl ShellView {
 
       let focused = self.mode == ShellMode::Blocks && self.blocks.focus() == Some(block.key);
       if focused {
-        render.fill(&Rect::new(0.0, y, 2.0, y + item.height), render.theme().mode_normal);
+        // A faint band behind the header (or the whole notice).
+        let height = match block.kind {
+          BlockKind::Job(_) => self.header_height(i),
+          BlockKind::Notice(_) => item.height,
+        };
+        let tint = render.theme().mode_normal.multiply_alpha(FOCUS_ALPHA);
+        render.fill(&Rect::new(0.0, y, size.width, y + height), tint);
       }
 
       match &block.kind {
@@ -834,9 +837,17 @@ impl ShellView {
           let over = hover.is_some_and(|(j, _)| j == i);
           let over_header = hover.is_some_and(|(j, rel)| j == i && self.in_header(i, rel));
 
-          self.draw_prompt(render, y, &job.context, &job.line, job_result(job), None);
+          let chevron = if block.collapsed { Chevron::Collapsed } else { Chevron::Expanded };
           let hot = focused || over;
-          self.draw_chevron(render, y, block.collapsed, hot);
+          self.draw_prompt(
+            render,
+            y,
+            &job.context,
+            &job.line,
+            job_result(job),
+            (chevron, hot),
+            None,
+          );
           if over_header {
             tooltip = Some(job);
           }
@@ -847,7 +858,7 @@ impl ShellView {
             if rows > 0 {
               let hint = if rows == 1 { "+1 line".to_string() } else { format!("+{rows} lines") };
               let layout = render.layout_text(Font::Terminal, &hint, render.theme().text_dim);
-              render.draw_text(&layout, (self.geom.text_left, top));
+              render.draw_text(&layout, (0.0, top));
             }
           } else if rows > 0 {
             drawn.push(*id);
@@ -862,7 +873,6 @@ impl ShellView {
               selection,
               self.focused,
               self.geom.char_size,
-              self.geom.text_left,
             );
           }
         }
@@ -881,6 +891,7 @@ impl ShellView {
         &self.prompt,
         self.input.text(),
         BlockResult::Live,
+        (Chevron::Hidden, false),
         Some((self.input.cursor(), focused)),
       );
     }
@@ -894,26 +905,8 @@ impl ShellView {
     let dim = render.theme().text_dim;
     for (i, line) in lines.iter().enumerate() {
       let layout = render.layout_text(Font::Terminal, line, dim);
-      render.draw_text(&layout, (self.geom.text_left, y + i as f64 * self.geom.char_size.height));
+      render.draw_text(&layout, (0.0, y + i as f64 * self.geom.char_size.height));
     }
-  }
-
-  /// The chevron in the gutter, on the info line of the block starting at `y`.
-  fn draw_chevron(&self, render: &mut Render, y: f64, collapsed: bool, hot: bool) {
-    let theme = render.theme();
-    let color = if hot { theme.text } else { theme.text_dim.multiply_alpha(0.5) };
-    let ch = self.geom.char_size;
-    let size = (ch.height * 0.6).round();
-    let icon = if collapsed { &*icon::CHEVRON_RIGHT } else { &*icon::CHEVRON_DOWN };
-    icon.stroke(
-      Point::new(
-        ((self.geom.text_left - size) / 2.0).max(0.0),
-        y + ch.height + (ch.height - size) / 2.0,
-      ),
-      size,
-      color,
-      render,
-    );
   }
 
   /// Draws a prompt (blank row, info line, symbol line) with `command` typed
@@ -926,17 +919,18 @@ impl ShellView {
     ctx: &PromptContext,
     command: &str,
     result: BlockResult,
+    (chevron, hot): (Chevron, bool),
     cursor: Option<(usize, bool)>,
   ) {
     let ch = self.geom.char_size;
-    let x = self.geom.text_left;
+    let x = 0.0;
 
     let info_y = y + ch.height;
     let width = render.size().width;
-    let elements = prompt_elements(ctx, &result, self.geom.cols);
+    let elements = prompt_elements(ctx, &result, chevron, self.geom.cols);
     render.clipped(Rect::new(0.0, info_y, width, info_y + ch.height), |render| {
       for e in &elements {
-        self.draw_element(render, e, info_y);
+        self.draw_element(render, e, info_y, hot);
       }
     });
 
@@ -979,12 +973,29 @@ impl ShellView {
   /// Draws one element of the info line, whose row starts at `y`. The text
   /// sits exactly on its cells; a pill's background reaches a little past
   /// them, into the gap to its neighbours.
-  fn draw_element(&self, render: &mut Render, e: &Element, y: f64) {
+  fn draw_element(&self, render: &mut Render, e: &Element, y: f64, hot: bool) {
     let ch = self.geom.char_size;
-    let x = self.geom.text_left + e.col_start as f64 * ch.width;
+    let x = e.col_start as f64 * ch.width;
     let w = e.col_len as f64 * ch.width;
     let fg = e.color.color().unwrap_or(render.theme().text);
 
+    if e.kind == Kind::Chevron {
+      // Centered on the boundary between its two cells.
+      let theme = render.theme();
+      let color = if hot { theme.text } else { theme.text_dim.multiply_alpha(0.5) };
+      let size = (ch.height * 0.6).round();
+      let icon = match e.chevron {
+        Chevron::Collapsed => &*icon::CHEVRON_RIGHT,
+        _ => &*icon::CHEVRON_DOWN,
+      };
+      icon.stroke(
+        Point::new((x + ch.width - size / 2.0).max(0.0), y + (ch.height - size) / 2.0),
+        size,
+        color,
+        render,
+      );
+      return;
+    }
     if e.kind == Kind::Spinner {
       self.spinner.draw_sized(
         render,
@@ -1079,7 +1090,6 @@ fn draw_output(
   selection: Option<(Position, Position)>,
   focused: bool,
   char_size: Size,
-  left: f64,
 ) {
   let height = render.size().height;
   let first = ((-top) / char_size.height).floor().max(0.0) as usize;
@@ -1105,7 +1115,7 @@ fn draw_output(
 
   let options = DrawOptions {
     rect: Rect::from_origin_size(
-      (left, top + first as f64 * char_size.height),
+      (0.0, top + first as f64 * char_size.height),
       (render.size().width, (last - first) as f64 * char_size.height),
     ),
     first_row: first,

@@ -32,6 +32,10 @@ const SIDE_GAP: usize = 2;
 const MIN_CWD: usize = 2;
 /// Cut-off marker of a long working directory.
 pub const ELLIPSIS: char = '\u{2026}';
+/// Columns the chevron takes at the start of the info line: the glyph and a
+/// blank cell. Every prompt keeps them, even without a chevron, so that
+/// freezing the live prompt into a block moves nothing.
+pub const CHEVRON_COLS: usize = 2;
 /// Columns the spinner takes.
 const SPINNER_COLS: usize = 2;
 
@@ -72,6 +76,15 @@ pub enum BlockResult {
   },
 }
 
+/// The collapse chevron at the start of the info line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Chevron {
+  /// The live prompt: the cells are blank.
+  Hidden,
+  Collapsed,
+  Expanded,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Side {
   Left,
@@ -80,6 +93,8 @@ pub enum Side {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
+  /// Text is empty; the state is in `Element::chevron`.
+  Chevron,
   User,
   Host,
   Cwd,
@@ -94,7 +109,7 @@ pub enum Kind {
 
 impl Kind {
   /// Whether the element sits on a tinted rounded background.
-  pub fn is_pill(self) -> bool { !matches!(self, Kind::Cwd | Kind::Spinner) }
+  pub fn is_pill(self) -> bool { !matches!(self, Kind::Cwd | Kind::Spinner | Kind::Chevron) }
 }
 
 /// One thing on the info line, `col_len` cells starting at `col_start`.
@@ -108,12 +123,14 @@ pub struct Element {
   /// From this char of `text` on, the text has another color.
   pub tail:      Option<(usize, PromptColor)>,
   pub side:      Side,
+  /// For `Kind::Chevron` only.
+  pub chevron:   Chevron,
 }
 
 fn element(kind: Kind, text: impl Into<String>, color: PromptColor, side: Side) -> Element {
   let text = text.into();
   let col_len = if kind == Kind::Spinner { SPINNER_COLS } else { text.chars().count() };
-  Element { kind, text, col_start: 0, col_len, color, tail: None, side }
+  Element { kind, text, col_start: 0, col_len, color, tail: None, side, chevron: Chevron::Hidden }
 }
 
 /// `%~`: the working directory, with `$HOME` as `~`.
@@ -261,37 +278,48 @@ fn truncate_start(text: &str, max: usize) -> String {
 
 /// The elements of the info line of a prompt in a terminal `cols` wide.
 ///
+/// The first `CHEVRON_COLS` columns hold the chevron (nothing for
+/// `Chevron::Hidden`); the rest of the left side starts after them.
+///
 /// The left side is the working directory and what is known about the
 /// environment, in order, with a gap of one column between elements; it never
 /// moves when more is learned (git status only adds elements at its end). The
 /// right side is the result of the block, right-aligned. When the two don't
 /// fit, the duration is dropped first, then the exit code, and then the
 /// working directory is cut short from the left. Nothing ever overlaps.
-pub fn prompt_elements(ctx: &PromptContext, result: &BlockResult, cols: usize) -> Vec<Element> {
+pub fn prompt_elements(
+  ctx: &PromptContext,
+  result: &BlockResult,
+  chevron: Chevron,
+  cols: usize,
+) -> Vec<Element> {
   let mut left = left_elements(ctx);
   let mut right = right_elements(result);
 
   // Drop the right side, last element (exit code or spinner) last.
-  while !right.is_empty() && side_width(&left) + SIDE_GAP + side_width(&right) > cols {
+  while !right.is_empty() && CHEVRON_COLS + side_width(&left) + SIDE_GAP + side_width(&right) > cols
+  {
     right.remove(0);
   }
 
-  if right.is_empty() && side_width(&left) > cols {
+  if right.is_empty() && CHEVRON_COLS + side_width(&left) > cols {
     // Everything but the directory, including the gap next to it.
     let cwd_len = left.iter().find(|e| e.kind == Kind::Cwd).map_or(0, |e| e.col_len);
-    let others = side_width(&left) - cwd_len;
+    let others = CHEVRON_COLS + side_width(&left) - cwd_len;
     let room = cols.saturating_sub(others).max(MIN_CWD);
     if let Some(cwd) = left.iter_mut().find(|e| e.kind == Kind::Cwd) {
       cwd.text = truncate_start(&cwd.text, room);
       cwd.col_len = cwd.text.chars().count();
     }
     // Still too much (a very narrow pane): drop what follows the directory.
-    while side_width(&left) > cols && left.last().is_some_and(|e| e.kind != Kind::Cwd) {
+    while CHEVRON_COLS + side_width(&left) > cols
+      && left.last().is_some_and(|e| e.kind != Kind::Cwd)
+    {
       left.pop();
     }
   }
 
-  let mut col = 0;
+  let mut col = CHEVRON_COLS;
   for e in &mut left {
     e.col_start = col;
     col += e.col_len + GAP;
@@ -302,6 +330,12 @@ pub fn prompt_elements(ctx: &PromptContext, result: &BlockResult, cols: usize) -
     end = e.col_start.saturating_sub(GAP);
   }
   left.extend(right);
+  if chevron != Chevron::Hidden {
+    let mut e = element(Kind::Chevron, "", PromptColor::Default, Side::Left);
+    e.col_len = CHEVRON_COLS;
+    e.chevron = chevron;
+    left.insert(0, e);
+  }
   left
 }
 
@@ -389,7 +423,7 @@ mod tests {
   /// The row as it would be laid out on the cells, then one line per element:
   /// `kind side col_start+col_len color 'text'`.
   fn show(c: &PromptContext, result: BlockResult, cols: usize) -> String {
-    let elements = prompt_elements(c, &result, cols);
+    let elements = prompt_elements(c, &result, Chevron::Hidden, cols);
     let mut row = vec![' '; cols];
     let mut lines = vec![];
     for e in &elements {
@@ -423,24 +457,24 @@ mod tests {
       BlockResult::Live,
       30,
       expect![@r#"
-      |/etc/nginx                    |
-      Cwd Left 0+10 Cyan "/etc/nginx""#],
+        |  /etc/nginx                  |
+        Cwd Left 2+10 Cyan "/etc/nginx""#],
     );
     check(
       &ctx("/home/me"),
       BlockResult::Live,
       30,
       expect![@r#"
-      |~                             |
-      Cwd Left 0+1 Cyan "~""#],
+        |  ~                           |
+        Cwd Left 2+1 Cyan "~""#],
     );
     check(
       &ctx("/home/me/x"),
       BlockResult::Live,
       30,
       expect![@r#"
-      |~/x                           |
-      Cwd Left 0+3 Cyan "~/x""#],
+        |  ~/x                         |
+        Cwd Left 2+3 Cyan "~/x""#],
     );
     // A sibling that merely shares the prefix is not under home.
     assert_eq!(tilde_path(Path::new("/home/media"), Some(Path::new("/home/me"))), "/home/media");
@@ -454,9 +488,9 @@ mod tests {
       BlockResult::Live,
       30,
       expect![@r#"
-      |/w main                       |
-      Cwd Left 0+2 Cyan "/w"
-      Branch Left 3+4 Magenta "main""#],
+        |  /w main                     |
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+4 Magenta "main""#],
     );
     // The status has not been computed yet.
     let mut c = ctx("/w");
@@ -466,9 +500,9 @@ mod tests {
       BlockResult::Live,
       30,
       expect![@r#"
-      |/w main                       |
-      Cwd Left 0+2 Cyan "/w"
-      Branch Left 3+4 Magenta "main""#],
+        |  /w main                     |
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+4 Magenta "main""#],
     );
 
     check(
@@ -476,50 +510,50 @@ mod tests {
       BlockResult::Live,
       30,
       expect![@r#"
-        |/w dev $                      |
-        Cwd Left 0+2 Cyan "/w"
-        Branch Left 3+3 Magenta "dev"
-        GitFlags Left 7+1 Red "$""#],
+        |  /w dev $                    |
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+3 Magenta "dev"
+        GitFlags Left 9+1 Red "$""#],
     );
     check(
       &ctx_git("/w", branch("dev"), GitStatus { unindexed: true, ..s() }),
       BlockResult::Live,
       30,
       expect![@r#"
-        |/w dev !                      |
-        Cwd Left 0+2 Cyan "/w"
-        Branch Left 3+3 Magenta "dev"
-        GitFlags Left 7+1 Red "!""#],
+        |  /w dev !                    |
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+3 Magenta "dev"
+        GitFlags Left 9+1 Red "!""#],
     );
     check(
       &ctx_git("/w", branch("dev"), GitStatus { indexed: true, ..s() }),
       BlockResult::Live,
       30,
       expect![@r#"
-        |/w dev +                      |
-        Cwd Left 0+2 Cyan "/w"
-        Branch Left 3+3 Magenta "dev"
-        GitFlags Left 7+1 Red "+""#],
+        |  /w dev +                    |
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+3 Magenta "dev"
+        GitFlags Left 9+1 Red "+""#],
     );
     check(
       &ctx_git("/w", branch("dev"), GitStatus { ahead: true, ..s() }),
       BlockResult::Live,
       30,
       expect![@r#"
-        |/w dev >                      |
-        Cwd Left 0+2 Cyan "/w"
-        Branch Left 3+3 Magenta "dev"
-        GitFlags Left 7+1 Red ">""#],
+        |  /w dev >                    |
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+3 Magenta "dev"
+        GitFlags Left 9+1 Red ">""#],
     );
     check(
       &ctx_git("/w", branch("dev"), GitStatus { behind: true, ..s() }),
       BlockResult::Live,
       30,
       expect![@r#"
-        |/w dev <                      |
-        Cwd Left 0+2 Cyan "/w"
-        Branch Left 3+3 Magenta "dev"
-        GitFlags Left 7+1 Red "<""#],
+        |  /w dev <                    |
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+3 Magenta "dev"
+        GitFlags Left 9+1 Red "<""#],
     );
     check(
       &ctx_git(
@@ -537,19 +571,19 @@ mod tests {
       BlockResult::Live,
       30,
       expect![@r#"
-        |/w main $!+><                 |
-        Cwd Left 0+2 Cyan "/w"
-        Branch Left 3+4 Magenta "main"
-        GitFlags Left 8+5 Red "$!+><""#],
+        |  /w main $!+><               |
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+4 Magenta "main"
+        GitFlags Left 10+5 Red "$!+><""#],
     );
     check(
       &ctx_git("/w", GitHead::Detached("abc1234".into()), s()),
       BlockResult::Live,
       30,
       expect![@r#"
-        |/w HEAD abc1234               |
-        Cwd Left 0+2 Cyan "/w"
-        Branch Left 3+12 Magenta "HEAD abc1234" tail 5:Green"#],
+        |  /w HEAD abc1234             |
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+12 Magenta "HEAD abc1234" tail 5:Green"#],
     );
     check(
       &ctx_git(
@@ -560,11 +594,11 @@ mod tests {
       BlockResult::Live,
       40,
       expect![@r#"
-        |/w topic + REBASE-I                     |
-        Cwd Left 0+2 Cyan "/w"
-        Branch Left 3+5 Magenta "topic"
-        GitFlags Left 9+1 Red "+"
-        GitAction Left 11+8 Yellow "REBASE-I""#],
+        |  /w topic + REBASE-I                   |
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+5 Magenta "topic"
+        GitFlags Left 11+1 Red "+"
+        GitAction Left 13+8 Yellow "REBASE-I""#],
     );
   }
 
@@ -574,10 +608,26 @@ mod tests {
     before.git = Some(branch("main"));
     let after =
       ctx_git("/w", branch("main"), GitStatus { unindexed: true, ..GitStatus::default() });
-    let a = prompt_elements(&before, &BlockResult::Live, 40);
-    let b = prompt_elements(&after, &BlockResult::Live, 40);
+    let a = prompt_elements(&before, &BlockResult::Live, Chevron::Hidden, 40);
+    let b = prompt_elements(&after, &BlockResult::Live, Chevron::Hidden, 40);
     assert_eq!(a[..], b[..a.len()]);
     assert_eq!(b.len(), a.len() + 1);
+  }
+
+  #[test]
+  fn freezing_the_prompt_moves_nothing() {
+    let mut c = ctx_git("/w", branch("main"), GitStatus { indexed: true, ..GitStatus::default() });
+    c.venv = Some(".venv".into());
+    let live = prompt_elements(&c, &BlockResult::Live, Chevron::Hidden, 40);
+    for chevron in [Chevron::Collapsed, Chevron::Expanded] {
+      let frozen = prompt_elements(&c, &BlockResult::Live, chevron, 40);
+      assert_eq!(frozen[0].kind, Kind::Chevron);
+      assert_eq!((frozen[0].col_start, frozen[0].col_len), (0, CHEVRON_COLS));
+      assert_eq!(frozen[0].chevron, chevron);
+      assert_eq!(frozen[1..], live[..]);
+    }
+    // The first element after the chevron starts right after its cells.
+    assert_eq!(live[0].col_start, CHEVRON_COLS);
   }
 
   #[test]
@@ -589,9 +639,9 @@ mod tests {
       BlockResult::Live,
       30,
       expect![@r#"
-      |/w .venv                      |
-      Cwd Left 0+2 Cyan "/w"
-      Venv Left 3+5 Yellow ".venv""#],
+        |  /w .venv                    |
+        Cwd Left 2+2 Cyan "/w"
+        Venv Left 5+5 Yellow ".venv""#],
     );
 
     let mut c = ctx("/root");
@@ -602,9 +652,9 @@ mod tests {
       BlockResult::Live,
       30,
       expect![@r#"
-      |root /root                    |
-      User Left 0+4 Red "root"
-      Cwd Left 5+5 Cyan "/root""#],
+        |  root /root                  |
+        User Left 2+4 Red "root"
+        Cwd Left 7+5 Cyan "/root""#],
     );
     assert_eq!(symbol(&c), "#");
 
@@ -615,10 +665,10 @@ mod tests {
       BlockResult::Live,
       30,
       expect![@r#"
-      |me box /w                     |
-      User Left 0+2 Yellow "me"
-      Host Left 3+3 Green "box"
-      Cwd Left 7+2 Cyan "/w""#],
+        |  me box /w                   |
+        User Left 2+2 Yellow "me"
+        Host Left 5+3 Green "box"
+        Cwd Left 9+2 Cyan "/w""#],
     );
   }
 
@@ -630,79 +680,79 @@ mod tests {
       done(0, 100),
       40,
       expect![@r#"
-      |/w main                                 |
-      Cwd Left 0+2 Cyan "/w"
-      Branch Left 3+4 Magenta "main""#],
+        |  /w main                               |
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+4 Magenta "main""#],
     );
     check(
       &c,
       done(1, 100),
       40,
       expect![@r#"
-      |/w main                                1|
-      Cwd Left 0+2 Cyan "/w"
-      Branch Left 3+4 Magenta "main"
-      Exit Right 39+1 Red "1""#],
+        |  /w main                              1|
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+4 Magenta "main"
+        Exit Right 39+1 Red "1""#],
     );
     check(
       &c,
       done(130, 100),
       40,
       expect![@r#"
-      |/w main                       130 SIGINT|
-      Cwd Left 0+2 Cyan "/w"
-      Branch Left 3+4 Magenta "main"
-      Exit Right 30+10 Red "130 SIGINT""#],
+        |  /w main                     130 SIGINT|
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+4 Magenta "main"
+        Exit Right 30+10 Red "130 SIGINT""#],
     );
     check(
       &c,
       done(0, 499),
       40,
       expect![@r#"
-      |/w main                                 |
-      Cwd Left 0+2 Cyan "/w"
-      Branch Left 3+4 Magenta "main""#],
+        |  /w main                               |
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+4 Magenta "main""#],
     );
     check(
       &c,
       done(0, 40_000),
       40,
       expect![@r#"
-      |/w main                              40s|
-      Cwd Left 0+2 Cyan "/w"
-      Branch Left 3+4 Magenta "main"
-      Duration Right 37+3 Yellow "40s""#],
+        |  /w main                            40s|
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+4 Magenta "main"
+        Duration Right 37+3 Yellow "40s""#],
     );
     check(
       &c,
       done(2, 65_000),
       40,
       expect![@r#"
-      |/w main                           1m5s 2|
-      Cwd Left 0+2 Cyan "/w"
-      Branch Left 3+4 Magenta "main"
-      Duration Right 34+4 Yellow "1m5s"
-      Exit Right 39+1 Red "2""#],
+        |  /w main                         1m5s 2|
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+4 Magenta "main"
+        Duration Right 34+4 Yellow "1m5s"
+        Exit Right 39+1 Red "2""#],
     );
     check(
       &c,
       done(0, 7_385_000),
       40,
       expect![@r#"
-      |/w main                             2h3m|
-      Cwd Left 0+2 Cyan "/w"
-      Branch Left 3+4 Magenta "main"
-      Duration Right 36+4 Yellow "2h3m""#],
+        |  /w main                           2h3m|
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+4 Magenta "main"
+        Duration Right 36+4 Yellow "2h3m""#],
     );
     check(
       &c,
       BlockResult::Running,
       40,
       expect![@r#"
-      |/w main                                 |
-      Cwd Left 0+2 Cyan "/w"
-      Branch Left 3+4 Magenta "main"
-      Spinner Right 38+2 Default """#],
+        |  /w main                               |
+        Cwd Left 2+2 Cyan "/w"
+        Branch Left 5+4 Magenta "main"
+        Spinner Right 38+2 Default """#],
     );
 
     assert_eq!(symbol_color(&BlockResult::Live), PromptColor::Green);
@@ -720,11 +770,11 @@ mod tests {
       done(1, 12_000),
       40,
       expect![@r#"
-      |~/code/project main                12s 1|
-      Cwd Left 0+14 Cyan "~/code/project"
-      Branch Left 15+4 Magenta "main"
-      Duration Right 35+3 Yellow "12s"
-      Exit Right 39+1 Red "1""#],
+        |  ~/code/project main              12s 1|
+        Cwd Left 2+14 Cyan "~/code/project"
+        Branch Left 17+4 Magenta "main"
+        Duration Right 35+3 Yellow "12s"
+        Exit Right 39+1 Red "1""#],
     );
     // Not the duration.
     check(
@@ -732,11 +782,11 @@ mod tests {
       done(1, 12_000),
       34,
       expect![@r#"
-      |~/code/project main          12s 1|
-      Cwd Left 0+14 Cyan "~/code/project"
-      Branch Left 15+4 Magenta "main"
-      Duration Right 29+3 Yellow "12s"
-      Exit Right 33+1 Red "1""#],
+        |  ~/code/project main        12s 1|
+        Cwd Left 2+14 Cyan "~/code/project"
+        Branch Left 17+4 Magenta "main"
+        Duration Right 29+3 Yellow "12s"
+        Exit Right 33+1 Red "1""#],
     );
     // Not the exit code either: the directory is cut.
     check(
@@ -744,28 +794,28 @@ mod tests {
       done(1, 12_000),
       24,
       expect![@r#"
-      |~/code/project main    1|
-      Cwd Left 0+14 Cyan "~/code/project"
-      Branch Left 15+4 Magenta "main"
-      Exit Right 23+1 Red "1""#],
+        |  ~/code/project main  1|
+        Cwd Left 2+14 Cyan "~/code/project"
+        Branch Left 17+4 Magenta "main"
+        Exit Right 23+1 Red "1""#],
     );
     check(
       &c,
       done(1, 12_000),
       15,
       expect![@r#"
-      |^e/project main|
-      Cwd Left 0+10 Cyan "^e/project"
-      Branch Left 11+4 Magenta "main""#],
+        |  ^project main|
+        Cwd Left 2+8 Cyan "^project"
+        Branch Left 11+4 Magenta "main""#],
     );
     check(
       &c,
       BlockResult::Running,
       15,
       expect![@r#"
-      |^e/project main|
-      Cwd Left 0+10 Cyan "^e/project"
-      Branch Left 11+4 Magenta "main""#],
+        |  ^project main|
+        Cwd Left 2+8 Cyan "^project"
+        Branch Left 11+4 Magenta "main""#],
     );
     // Very narrow.
     check(
@@ -773,17 +823,16 @@ mod tests {
       done(1, 12_000),
       8,
       expect![@r#"
-      |^ct main|
-      Cwd Left 0+3 Cyan "^ct"
-      Branch Left 4+4 Magenta "main""#],
+        |  ^t    |
+        Cwd Left 2+2 Cyan "^t""#],
     );
     check(
       &c,
       done(1, 12_000),
       4,
       expect![@r#"
-      |^t  |
-      Cwd Left 0+2 Cyan "^t""#],
+        |  ^t|
+        Cwd Left 2+2 Cyan "^t""#],
     );
   }
 
@@ -796,18 +845,18 @@ mod tests {
       BlockResult::Live,
       50,
       expect![@r#"
-      |^deep/deep/deep/deep/deep/deep/deep/deep/deep main|
-      Cwd Left 0+45 Cyan "^deep/deep/deep/deep/deep/deep/deep/deep/deep"
-      Branch Left 46+4 Magenta "main""#],
+        |  ^ep/deep/deep/deep/deep/deep/deep/deep/deep main|
+        Cwd Left 2+43 Cyan "^ep/deep/deep/deep/deep/deep/deep/deep/deep"
+        Branch Left 46+4 Magenta "main""#],
     );
     check(
       &c,
       done(0, 3000),
       50,
       expect![@r#"
-      |^deep/deep/deep/deep/deep/deep/deep/deep/deep main|
-      Cwd Left 0+45 Cyan "^deep/deep/deep/deep/deep/deep/deep/deep/deep"
-      Branch Left 46+4 Magenta "main""#],
+        |  ^ep/deep/deep/deep/deep/deep/deep/deep/deep main|
+        Cwd Left 2+43 Cyan "^ep/deep/deep/deep/deep/deep/deep/deep/deep"
+        Branch Left 46+4 Magenta "main""#],
     );
   }
 
