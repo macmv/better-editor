@@ -327,12 +327,14 @@ dependencies = [
  "be-macros",
  "be-remote",
  "be-shared",
+ "be-shell",
  "be-task",
  "be-terminal",
  "be-workspace",
  "bytemuck",
  "chrono",
  "clap",
+ "expect-test",
  "fern",
  "ignore",
  "kurbo",
@@ -435,6 +437,17 @@ dependencies = [
 [[package]]
 name = "be-shared"
 version = "0.1.0"
+
+[[package]]
+name = "be-shell"
+version = "0.1.0"
+dependencies = [
+ "be-terminal",
+ "expect-test",
+ "git2",
+ "libc",
+ "log",
+]
 
 [[package]]
 name = "be-sumtree"
