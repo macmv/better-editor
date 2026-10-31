@@ -233,7 +233,6 @@ mod tests {
 
   impl Fs for SlowFs {
     fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> { Ok(path.to_path_buf()) }
-    fn read(&self, _: &Path) -> io::Result<Vec<u8>> { unimplemented!() }
 
     fn begin_write(&self, _: &Path, _: Vec<u8>) -> PendingWrite { unimplemented!() }
     fn read_dir(&self, _: &Path) -> io::Result<Vec<be_fs::DirEntry>> { unimplemented!() }

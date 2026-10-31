@@ -52,13 +52,6 @@ pub struct DirEntry {
   pub kind: DirKind,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, lode::Message)]
-pub struct FileStat {
-  pub kind:  DirKind,
-  /// Modification time, in seconds since the epoch.
-  pub mtime: i64,
-}
-
 /// What git says about one path.
 #[derive(Debug, Clone, Copy, Default, PartialEq, lode::Message)]
 pub struct GitFileStatus {
@@ -100,11 +93,9 @@ pub trait Host {
   fn list_dir(&self, path: String) -> Result<Vec<DirEntry>, HostError>;
   fn read_file(&self, path: String) -> Result<String, HostError>;
 
-  fn stat(&self, path: String) -> Result<FileStat, HostError>;
   fn canonicalize(&self, path: String) -> Result<String, HostError>;
-  /// `canonicalize`, `stat`, and `read_bytes` in one round trip.
+  /// `canonicalize`, a stat, and a read in one round trip.
   fn open_file(&self, path: String) -> Result<OpenedFile, HostError>;
-  fn read_bytes(&self, path: String) -> Result<Bytes, HostError>;
   /// Replaces the contents of an existing file.
   fn write_file(&self, path: String, data: Bytes) -> Result<WrittenFile, HostError>;
 

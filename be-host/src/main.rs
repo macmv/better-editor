@@ -11,7 +11,7 @@ use std::os::unix::fs::MetadataExt;
 
 use be_git::{GitBackend, GitRepo};
 use be_remote::{
-  Bytes, DirEntry, DirKind, FileStat, GitFileStatus, Host, HostError, HostInfo, HostService,
+  Bytes, DirEntry, DirKind, GitFileStatus, Host, HostError, HostInfo, HostService,
   OpenedFile, PROTOCOL_VERSION, TermSize, WrittenFile,
 };
 use be_terminal::{PtyHost, Size};
@@ -92,16 +92,6 @@ impl Host for Service {
     Ok(files)
   }
 
-  fn stat(&self, path: String) -> Result<FileStat, HostError> {
-    let meta = fs::metadata(path).map_err(io_error)?;
-    let kind = match meta.file_type() {
-      t if t.is_dir() => DirKind::Dir,
-      t if t.is_file() => DirKind::File,
-      _ => DirKind::Other,
-    };
-    Ok(FileStat { kind, mtime: meta.mtime() })
-  }
-
   fn canonicalize(&self, path: String) -> Result<String, HostError> {
     let path = fs::canonicalize(path).map_err(io_error)?;
     Ok(path.to_string_lossy().into_owned())
@@ -112,10 +102,6 @@ impl Host for Service {
     let mtime = fs::metadata(&path).map_err(io_error)?.mtime();
     let data = Bytes::from(fs::read(&path).map_err(io_error)?);
     Ok(OpenedFile { path: path.to_string_lossy().into_owned(), mtime, data })
-  }
-
-  fn read_bytes(&self, path: String) -> Result<Bytes, HostError> {
-    fs::read(path).map(Bytes::from).map_err(io_error)
   }
 
   fn write_file(&self, path: String, data: Bytes) -> Result<WrittenFile, HostError> {

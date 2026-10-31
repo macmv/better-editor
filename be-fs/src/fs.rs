@@ -82,7 +82,6 @@ impl PendingWrite {
 /// workspace. `LocalFs` goes straight to disk.
 pub trait Fs {
   fn canonicalize(&self, path: &Path) -> io::Result<PathBuf>;
-  fn read(&self, path: &Path) -> io::Result<Vec<u8>>;
   fn read_dir(&self, path: &Path) -> io::Result<Vec<DirEntry>>;
 
   /// False if every call here waits on another machine, which makes the cheap
@@ -113,8 +112,6 @@ fn kind(t: std::fs::FileType) -> FileKind {
 
 impl Fs for LocalFs {
   fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> { path.canonicalize() }
-
-  fn read(&self, path: &Path) -> io::Result<Vec<u8>> { std::fs::read(path) }
 
   fn begin_read(&self, path: &Path) -> PendingRead {
     PendingRead::ready((|| {

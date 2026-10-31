@@ -47,7 +47,14 @@ fn fs_round_trip() {
   let fs = RemoteFs::new(s.t.clone());
 
   assert_eq!(fs.canonicalize(&dir.join("sub/..")).unwrap(), dir);
-  assert_eq!(fs.read(&dir.join("a.txt")).unwrap(), b"hello\n");
+  let mut read = fs.begin_read(&dir.join("a.txt"));
+  let data = loop {
+    if let Some(res) = read.poll() {
+      break res.unwrap();
+    }
+    s.host.borrow().pump(50);
+  };
+  assert_eq!(data.data, b"hello\n");
 
   let mut write = fs.begin_write(&dir.join("a.txt"), b"bye\n".to_vec());
   let deadline = Instant::now() + Duration::from_secs(10);
@@ -65,7 +72,13 @@ fn fs_round_trip() {
   names.sort();
   assert_eq!(names, ["a.txt", "sub"]);
 
-  let err = fs.read(&dir.join("missing")).unwrap_err();
+  let mut read = fs.begin_read(&dir.join("missing"));
+  let err = loop {
+    if let Some(res) = read.poll() {
+      break res.unwrap_err();
+    }
+    s.host.borrow().pump(50);
+  };
   assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
 
   drop(s.host);

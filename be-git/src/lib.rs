@@ -4,7 +4,7 @@ use std::{
   rc::Rc,
 };
 
-use be_doc::{Document, DocumentSnapshot};
+use be_doc::DocumentSnapshot;
 use be_fs::{Fs, LocalFs};
 
 #[macro_use]
@@ -48,11 +48,6 @@ impl Repo {
     Repo { git, head: None, fs, root, files: HashMap::new() }
   }
 
-  fn read_snapshot(&self, path: &Path) -> Option<DocumentSnapshot> {
-    let bytes = self.fs.read(path).ok()?;
-    Some(Document::read_lossy(&mut std::io::Cursor::new(bytes)).ok()?.snapshot())
-  }
-
   pub fn update(&mut self) {
     if let Some(git) = &self.git {
       let head = git.head();
@@ -65,13 +60,7 @@ impl Repo {
     }
   }
 
-  pub fn open_file(&mut self, path: &Path) {
-    let Ok(path) = self.fs.canonicalize(path) else { return };
-    let Some(current) = self.read_snapshot(&path) else { return };
-    self.open_file_with(&path, current);
-  }
-
-  /// `open_file` for a file that has already been read. `path` must be
+  /// Starts tracking a file that has already been read. `path` must be
   /// canonical.
   pub fn open_file_with(&mut self, path: &Path, current: DocumentSnapshot) {
     let path = path.to_path_buf();

@@ -32,10 +32,6 @@ impl Fs for RemoteFs {
     self.t.wait(self.t.local().proxy::<Host>().canonicalize(path_str(path))).map(PathBuf::from)
   }
 
-  fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
-    Ok(self.t.wait(self.t.local().proxy::<Host>().read_bytes(path_str(path)))?.to_vec())
-  }
-
   fn is_local(&self) -> bool { false }
 
   /// One round trip, and no waiting: the result is picked up by polling, as
