@@ -37,9 +37,10 @@ const SCROLLBACK_LIMIT: usize = 10_000;
 /// How many bytes to read from the pty at once.
 const READ_SIZE: usize = 64 * 1024;
 
-/// The longest `Terminal::update` spends parsing before it gives the caller a turn. Output that
-/// is still queued is picked up by the next call (see `has_pending_output`), so that a program
-/// that prints a lot can't freeze the ui.
+/// The longest `Terminal::update` spends parsing before it gives the caller a
+/// turn. Output that is still queued is picked up by the next call (see
+/// `has_pending_output`), so that a program that prints a lot can't freeze the
+/// ui.
 const UPDATE_BUDGET: Duration = Duration::from_millis(3);
 
 /// A source of terminal bytes, and a sink for input. This is the process (or
@@ -70,7 +71,7 @@ pub struct Terminal {
 
   parser: Parser,
 
-  read_buf: Box<[u8]>,
+  read_buf:       Box<[u8]>,
   // Set when `update` stopped reading before the pty ran dry.
   pending_output: bool,
 }
@@ -118,6 +119,13 @@ pub struct TerminalState {
 
   pending_writes: Vec<u8>,
   charsets:       [Charset; 4],
+
+  // Whether the parser is known to be between sequences, so printable ASCII can skip it. This is
+  // conservative: it is false whenever we can't be sure. The parser doesn't expose its state, so
+  // `Perform` callbacks that always leave it in the ground state set this, and `advance` clears it
+  // for every byte that goes through the parser.
+  ground:        bool,
+  ground_before: bool,
 }
 
 bitflags::bitflags! {
@@ -439,13 +447,13 @@ impl Terminal {
     }
   }
 
-  /// Whether the last `update` ran out of time before it read everything the pty had. The caller
-  /// should call `update` again soon, as there will be no wakeup for output that was already
-  /// there.
+  /// Whether the last `update` ran out of time before it read everything the
+  /// pty had. The caller should call `update` again soon, as there will be no
+  /// wakeup for output that was already there.
   pub fn has_pending_output(&self) -> bool { self.pending_output }
 
-  /// Reads and parses output from the pty, for at most `UPDATE_BUDGET`. Returns true once the pty
-  /// has closed.
+  /// Reads and parses output from the pty, for at most `UPDATE_BUDGET`. Returns
+  /// true once the pty has closed.
   pub fn update(&mut self) -> bool {
     self.state.begin_frame();
     self.pending_output = false;
@@ -459,9 +467,7 @@ impl Terminal {
         Err(e) if e.raw_os_error() == Some(rustix::io::Errno::IO.raw_os_error()) => return true,
 
         Ok(n) => {
-          for &b in &self.read_buf[..n] {
-            self.parser.advance(&mut self.state, b);
-          }
+          advance(&mut self.parser, &mut self.state, &self.read_buf[..n]);
 
           if !self.state.pending_writes.is_empty() {
             self.pty.write_bytes(&self.state.pending_writes);
@@ -486,6 +492,32 @@ impl Terminal {
 
     false
   }
+}
+
+/// Feeds `bytes` to the parser. Runs of printable ASCII in the ground state
+/// skip the parser, and are written straight into the grid.
+fn advance(parser: &mut Parser, state: &mut TerminalState, bytes: &[u8]) {
+  let mut i = 0;
+  while i < bytes.len() {
+    if state.ground {
+      let run =
+        bytes[i..].iter().position(|b| !(0x20..0x7f).contains(b)).unwrap_or(bytes.len() - i);
+      if run > 0 {
+        state.print_ascii(&bytes[i..i + run]);
+        i += run;
+        continue;
+      }
+    }
+
+    advance_byte(parser, state, bytes[i]);
+    i += 1;
+  }
+}
+
+fn advance_byte(parser: &mut Parser, state: &mut TerminalState, byte: u8) {
+  state.ground_before = state.ground;
+  state.ground = false;
+  parser.advance(state, byte);
 }
 
 fn push_utf8_coord(buf: &mut Vec<u8>, codepoint: u32) {
@@ -519,6 +551,9 @@ impl TerminalState {
 
       pending_writes: vec![],
       charsets: [Charset::Ascii; 4],
+
+      ground: true,
+      ground_before: true,
     }
   }
 

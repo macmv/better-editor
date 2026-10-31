@@ -6,6 +6,9 @@ use crate::{
 
 impl Perform for TerminalState {
   fn print(&mut self, c: char) {
+    // Only called from the ground state, which it leaves the parser in.
+    self.ground = true;
+
     if self.cursor.pending_wrap {
       self.cursor.col = 0;
       self.cursor.pending_wrap = false;
@@ -30,6 +33,10 @@ impl Perform for TerminalState {
   }
 
   fn execute(&mut self, b: u8) {
+    // Executing a control character doesn't change the state, except that CAN
+    // and SUB cancel whatever sequence was in progress.
+    self.ground = self.ground_before || matches!(b, 0x18 | 0x1a);
+
     match b {
       C0::HT => {
         self.cursor.pending_wrap = false;
@@ -65,6 +72,8 @@ impl Perform for TerminalState {
   }
 
   fn esc_dispatch(&mut self, intermediates: &[u8], _ignore: bool, byte: u8) {
+    self.ground = true;
+
     macro_rules! unhandled {
       () => {{
         debug!("[unhandled ESC] byte={byte:?} intermediates={intermediates:?}");
@@ -112,6 +121,10 @@ impl Perform for TerminalState {
   }
 
   fn osc_dispatch(&mut self, params: &[&[u8]], bell_terminated: bool) {
+    // A sequence ended by `ESC \` isn't over until the `\` is dispatched as an
+    // escape.
+    self.ground = bell_terminated;
+
     let terminator = if bell_terminated { "\x07" } else { "\x1b\\" };
 
     macro_rules! unhandled {
@@ -182,6 +195,8 @@ impl Perform for TerminalState {
     _ignore: bool,
     action: u8,
   ) {
+    self.ground = true;
+
     macro_rules! unhandled {
       () => {{
         debug!(
@@ -433,6 +448,39 @@ impl TerminalState {
 
   fn clear_line(&mut self) {
     self.grid.line_mut(self.cursor.row).clear_range(0..=self.size.cols - 1, self.cursor.style);
+  }
+
+  /// Prints a run of printable ASCII, the same as calling `print` on each byte.
+  pub(crate) fn print_ascii(&mut self, mut run: &[u8]) {
+    let plain = !self.cursor.insert
+      && matches!(self.charsets[self.cursor.active_charset], Charset::Ascii)
+      && self.cursor.col < self.size.cols
+      && self.cursor.row < self.size.rows;
+    if !plain {
+      for &b in run {
+        self.print(b as char);
+      }
+      return;
+    }
+
+    while !run.is_empty() {
+      if self.cursor.pending_wrap {
+        self.cursor.col = 0;
+        self.cursor.pending_wrap = false;
+        self.linefeed();
+      }
+
+      let n = run.len().min(self.size.cols - self.cursor.col);
+      self.grid.put_ascii(self.cursor.pos, &run[..n], self.cursor.style);
+      run = &run[n..];
+
+      self.cursor.col += n - 1;
+      if self.cursor.col + 1 < self.size.cols {
+        self.cursor.col += 1;
+      } else if self.cursor.auto_wrap {
+        self.cursor.pending_wrap = true;
+      }
+    }
   }
 
   fn linefeed(&mut self) {

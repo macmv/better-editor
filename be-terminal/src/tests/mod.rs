@@ -84,8 +84,16 @@ impl Vt {
     Vt { state: TerminalState::new(Size { rows, cols }), parser: Parser::<Utf8Parser>::new() }
   }
 
-  fn feed(&mut self, seq: Seq) {
-    for b in seq.0.bytes() {
+  fn feed(&mut self, seq: Seq) { self.feed_bytes(seq.0.as_bytes()); }
+
+  fn feed_bytes(&mut self, bytes: &[u8]) {
+    crate::advance(&mut self.parser, &mut self.state, bytes);
+  }
+
+  /// Feeds every byte through the parser, without the printable ASCII fast
+  /// path.
+  fn feed_slow(&mut self, bytes: &[u8]) {
+    for &b in bytes {
       self.parser.advance(&mut self.state, b);
     }
   }
@@ -291,4 +299,153 @@ fn scrollback_is_capped() {
   // 49 (printed as "9") the oldest.
   assert_eq!(vt.state.scrollback[0].to_string().trim_end(), "9");
   assert_eq!(vt.state.scrollback[1].to_string().trim_end(), "0");
+}
+
+// --- Fast path ---
+
+#[test]
+fn ascii_fast_path_wraps() {
+  let mut vt = Vt::new(3, 4);
+  vt.feed(s().print("abcdefghij"));
+  vt.check(expect![@r#"
+    |abcd|
+    |efgh|
+    |ij🮙 |
+  "#]);
+}
+
+#[test]
+fn ascii_fast_path_stops_at_the_last_column() {
+  let mut vt = Vt::new(2, 4);
+  // Without autowrap, everything after the last column overwrites it.
+  vt.feed(s().print("\x1b[?7l").print("abcdef").move_to(1, 0));
+  vt.check(expect![@r#"
+    |abcf|
+    |🮙   |
+  "#]);
+}
+
+struct Rng(u64);
+
+impl Rng {
+  fn next(&mut self) -> u64 {
+    self.0 ^= self.0 << 13;
+    self.0 ^= self.0 >> 7;
+    self.0 ^= self.0 << 17;
+    self.0
+  }
+
+  fn below(&mut self, n: usize) -> usize { (self.next() % n as u64) as usize }
+}
+
+/// Pieces of output that exercise the parser's states: text, controls, and
+/// sequences that are complete, cut short, or cancelled.
+const PIECES: &[&str] = &[
+  "hello world",
+  "x",
+  "                    ",
+  "\r\n",
+  "\r",
+  "\n",
+  "\t",
+  "\x08",
+  "\x7f",
+  "\x07",
+  "\x0e",
+  "\x0f",
+  "\x1b(0",
+  "\x1b(B",
+  "lqqqk",
+  "caf\u{e9}",
+  "\u{2500}\u{2502}",
+  "\x1b[1m",
+  "\x1b[31m",
+  "\x1b[38;2;1;2;3m",
+  "\x1b[0m",
+  "\x1b[7m",
+  "\x1b[2;3H",
+  "\x1b[H",
+  "\x1b[K",
+  "\x1b[2K",
+  "\x1b[J",
+  "\x1b[2J",
+  "\x1b[3A",
+  "\x1b[2C",
+  "\x1b[@",
+  "\x1b[3P",
+  "\x1b[L",
+  "\x1b[M",
+  "\x1b[S",
+  "\x1b[T",
+  "\x1b[2;4r",
+  "\x1b[r",
+  "\x1b[4h",
+  "\x1b[4l",
+  "\x1b[?7l",
+  "\x1b[?7h",
+  "\x1b[?1049h",
+  "\x1b[?1049l",
+  "\x1bM",
+  "\x1b7",
+  "\x1b8",
+  "\x1b]0;title\x07",
+  "\x1b]0;title\x1b\\",
+  "\x1b]0;cut short",
+  "\x1bP1$rtext\x1b\\",
+  "\x1b[3",
+  "\x1b[",
+  "\x1b",
+  "\x18",
+  "\x1a",
+];
+
+/// Bytes that aren't valid utf-8 on their own: an invalid byte, and the start
+/// of a character.
+const RAW_PIECES: &[&[u8]] = &[b"\xff", b"\xc3"];
+
+#[test]
+fn ascii_fast_path_matches_the_parser() {
+  for seed in 1..200u64 {
+    let mut rng = Rng(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15));
+
+    let mut bytes = vec![];
+    for _ in 0..rng.below(80) + 1 {
+      if rng.below(16) == 0 {
+        bytes.extend_from_slice(RAW_PIECES[rng.below(RAW_PIECES.len())]);
+      } else {
+        bytes.extend_from_slice(PIECES[rng.below(PIECES.len())].as_bytes());
+      }
+    }
+
+    let mut fast = Vt::new(4, 10);
+    let mut slow = Vt::new(4, 10);
+
+    // Split the input at random places, as reads from a pty would.
+    let mut rest = &bytes[..];
+    while !rest.is_empty() {
+      let n = (rng.below(24) + 1).min(rest.len());
+      fast.feed_bytes(&rest[..n]);
+      rest = &rest[n..];
+    }
+    slow.feed_slow(&bytes);
+
+    let rows =
+      |vt: &Vt| (0..4).map(|row| vt.state.grid.line(row).unwrap().to_string()).collect::<Vec<_>>();
+    assert_eq!(
+      rows(&fast),
+      rows(&slow),
+      "seed {seed}, input {:?}",
+      String::from_utf8_lossy(&bytes)
+    );
+    assert_eq!(fast.cursor(), slow.cursor(), "seed {seed}");
+    assert_eq!(fast.state.cursor.pending_wrap, slow.state.cursor.pending_wrap, "seed {seed}");
+    assert_eq!(fast.state.scrollback.len(), slow.state.scrollback.len(), "seed {seed}");
+
+    for row in 0..4 {
+      let styles = |vt: &Vt| {
+        vt.state.grid.line(row).unwrap().specific_styles(|_, style| style).collect::<Vec<_>>()
+      };
+      assert_eq!(styles(&fast), styles(&slow), "seed {seed}, row {row}");
+    }
+  }
 }
