@@ -14,10 +14,14 @@
 //!
 //! The initial state (aliases, functions, env from the user's rc files) comes
 //! from an interactive `zsh -i` that takes ~50ms or much more with a heavy rc.
-//! [`Shell::new`] starts it on a background thread, with all of its output
-//! discarded. [`Shell::submit`] waits for it if it is still running (so the
-//! very first command may be delayed by the remaining time), and
-//! [`Shell::poll`] adopts it as soon as it is done.
+//! [`Shell::start`] runs it on a pty of the view's size (so rc scripts that
+//! check for a tty or its width behave as in a real terminal), as a
+//! pseudo-job with the id [`STARTUP_ID`]: whatever the rc prints, with its
+//! colors, is the output of [`Shell::startup`]. [`Shell::poll`] drains it and
+//! adopts the state as soon as it is done. [`Shell::submit`] waits for it if
+//! it is still running (so the very first command may be delayed by the
+//! remaining time). If the snapshot fails or is aborted (Ctrl-C), the process
+//! environment is used and the output, errors included, stays visible.
 
 use crate::{
   History, HistoryEntry, ShellState, UiCommand,
@@ -31,12 +35,10 @@ use std::{
   ffi::OsString,
   io,
   path::{Path, PathBuf},
-  process::Stdio,
   sync::{
     Arc,
     atomic::{AtomicU32, Ordering},
   },
-  thread::JoinHandle,
   time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -76,9 +78,15 @@ pub enum SubmitResult {
 
 type Wake = Arc<dyn Fn() + Send + Sync>;
 
-struct PendingSnapshot {
-  thread: JoinHandle<io::Result<()>>,
-  run:    PreparedRun,
+/// The id of the session-start snapshot, which is not in [`Shell::jobs`] but
+/// can be reached with [`Shell::job`], [`Shell::resize`], etc.
+pub const STARTUP_ID: JobId = JobId(0);
+
+/// The session-start snapshot: a job whose process is the interactive zsh.
+struct Startup {
+  job: Job,
+  /// Taken when the state is adopted.
+  run: Option<PreparedRun>,
 }
 
 pub struct Shell {
@@ -87,7 +95,11 @@ pub struct Shell {
   jobs:       Vec<Job>,
   next_id:    u64,
   wake:       Option<Wake>,
-  snapshot:   Option<PendingSnapshot>,
+  startup:    Option<Startup>,
+  /// `start` was called (whether or not it worked).
+  started:    bool,
+  /// Events found while waiting for the snapshot in `submit`.
+  pending:    Vec<ShellEvent>,
   /// Scratch dir to remove on drop, if we created it.
   owned_root: Option<PathBuf>,
 }
@@ -95,7 +107,7 @@ pub struct Shell {
 impl Shell {
   /// A shell in `cwd`, with the environment of this process, the default
   /// history file, and a private scratch dir under the system temp dir. The
-  /// initial snapshot is started in the background.
+  /// initial snapshot is started by [`Shell::start`].
   pub fn new(cwd: impl Into<PathBuf>) -> io::Result<Shell> {
     static N: AtomicU32 = AtomicU32::new(0);
     let root = std::env::temp_dir().join(format!(
@@ -115,50 +127,106 @@ impl Shell {
   /// environment the snapshot starts from.
   pub fn with_parts(state: ShellState, root: &Path, history: History) -> io::Result<Shell> {
     let session = Session::new(root, state)?;
-    let mut shell = Shell {
+    let shell = Shell {
       session,
       history,
       jobs: vec![],
       next_id: 1,
       wake: None,
-      snapshot: None,
+      startup: None,
+      started: false,
+      pending: vec![],
       owned_root: None,
     };
-    shell.start_snapshot()?;
     Ok(shell)
   }
 
-  fn start_snapshot(&mut self) -> io::Result<()> {
+  /// Starts the session snapshot on a pty of `size`, if that was not done
+  /// yet. Called by [`Shell::submit`] if the host never did.
+  pub fn start(&mut self, size: Size) {
+    if std::mem::replace(&mut self.started, true) {
+      return;
+    }
+    if let Err(e) = self.start_startup(size) {
+      log::warn!("failed to start the shell snapshot: {e}");
+    }
+  }
+
+  fn start_startup(&mut self, size: Size) -> io::Result<()> {
     let run = self.session.prepare_snapshot()?;
-    let mut cmd = run.spec.to_command();
-    cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-    let thread = std::thread::Builder::new()
-      .name("be-shell-snapshot".into())
-      .spawn(move || cmd.status().map(|_| ()))?;
-    self.snapshot = Some(PendingSnapshot { thread, run });
+    let mut pty = match Pty::spawn(spawn_spec(&run.spec, size)) {
+      Ok(p) => p,
+      Err(e) => {
+        self.session.abandon(run);
+        return Err(e);
+      }
+    };
+    if let Some(wake) = &self.wake {
+      apply_wake(Some(&mut pty), wake);
+    }
+    let job = Job {
+      id:          STARTUP_ID,
+      line:        String::new(),
+      started:     Instant::now(),
+      started_at:  SystemTime::now(),
+      duration:    None,
+      state:       JobState::Running,
+      emulator:    Emulator::new(size),
+      pty:         Some(Box::new(pty)),
+      prepared:    None,
+      context:     PromptContext::bare(&run.spec.cwd),
+      eof:         false,
+      exited_at:   None,
+      more_output: false,
+    };
+    self.startup = Some(Startup { job, run: Some(run) });
     Ok(())
   }
 
-  /// Adopts the snapshot if it is done (or, with `wait`, once it is). Returns
-  /// whether the state changed.
-  fn finish_snapshot(&mut self, wait: bool) -> bool {
-    let Some(p) = self.snapshot.take_if(|p| wait || p.thread.is_finished()) else { return false };
-    match p.thread.join() {
-      Ok(Ok(())) => {}
-      Ok(Err(e)) => log::warn!("failed to run the shell snapshot: {e}"),
-      Err(_) => log::warn!("the shell snapshot thread panicked"),
+  /// The snapshot's output so far, as the output of a pseudo-job.
+  pub fn startup(&self) -> Option<&Job> { self.startup.as_ref().map(|s| &s.job) }
+
+  /// Whether the snapshot is still running.
+  pub fn startup_running(&self) -> bool { self.startup().is_some_and(|j| j.is_running()) }
+
+  /// Reads the snapshot's output, and adopts its state once it is done.
+  /// Returns whether it is still running.
+  fn poll_startup(&mut self, events: &mut Vec<ShellEvent>) -> bool {
+    let Some(s) = self.startup.as_mut().filter(|s| s.job.is_running()) else { return false };
+    let (output, done) = drain(&mut s.job);
+    if output {
+      events.push(ShellEvent::Output(STARTUP_ID));
     }
-    match self.session.finish(p.run) {
-      Ok(true) => true,
-      Ok(false) => {
-        log::warn!("the shell snapshot did not complete; using the process environment");
-        false
-      }
-      Err(e) => {
-        log::warn!("failed to read the shell snapshot: {e}");
-        false
+    if !done {
+      return true;
+    }
+
+    let job = &mut s.job;
+    let exit = job.pty.as_mut().and_then(|p| p.exit_status()).unwrap_or(-1);
+    job.emulator.finish();
+    job.duration = Some(job.started.elapsed());
+    job.state = JobState::Done { exit };
+    job.pty = None;
+    events.push(ShellEvent::Output(STARTUP_ID));
+    if let Some(run) = s.run.take() {
+      match self.session.finish(run) {
+        Ok(true) => events.push(ShellEvent::StateChanged),
+        Ok(false) => {
+          log::warn!("the shell snapshot did not complete; using the process environment");
+        }
+        Err(e) => log::warn!("failed to read the shell snapshot: {e}"),
       }
     }
+    false
+  }
+
+  /// Waits for the snapshot to finish.
+  fn finish_startup(&mut self) {
+    let mut events = std::mem::take(&mut self.pending);
+    while self.poll_startup(&mut events) {
+      std::thread::sleep(Duration::from_millis(2));
+    }
+    self.pending = events;
   }
 
   pub fn state(&self) -> &ShellState { &self.session.state }
@@ -169,9 +237,18 @@ impl Shell {
 
   pub fn jobs(&self) -> &[Job] { &self.jobs }
 
-  pub fn job(&self, id: JobId) -> Option<&Job> { self.jobs.iter().find(|j| j.id == id) }
+  /// A job, or the snapshot for [`STARTUP_ID`].
+  pub fn job(&self, id: JobId) -> Option<&Job> {
+    if id == STARTUP_ID { self.startup() } else { self.jobs.iter().find(|j| j.id == id) }
+  }
 
-  fn job_mut(&mut self, id: JobId) -> Option<&mut Job> { self.jobs.iter_mut().find(|j| j.id == id) }
+  fn job_mut(&mut self, id: JobId) -> Option<&mut Job> {
+    if id == STARTUP_ID {
+      self.startup.as_mut().map(|s| &mut s.job)
+    } else {
+      self.jobs.iter_mut().find(|j| j.id == id)
+    }
+  }
 
   /// The prompt for the next line.
   pub fn prompt(&self) -> PromptContext {
@@ -184,13 +261,15 @@ impl Shell {
   /// True if the last `poll` stopped early, so it should be called again soon
   /// (without waiting for a wakeup).
   pub fn needs_poll(&self) -> bool {
-    self.jobs.iter().any(|j| j.is_running() && (j.more_output || j.eof || j.emulator.is_holding()))
+    self.jobs.iter().chain(self.startup()).any(|j| {
+      j.is_running() && (j.more_output || j.eof || j.exited_at.is_some() || j.emulator.is_holding())
+    })
   }
 
   /// Sets a function to call from any thread when a job may have output.
   pub fn set_wake(&mut self, wake: impl Fn() + Send + Sync + 'static) {
     let wake: Wake = Arc::new(wake);
-    for job in &mut self.jobs {
+    for job in self.jobs.iter_mut().chain(self.startup.as_mut().map(|s| &mut s.job)) {
       apply_wake(job.pty.as_deref_mut(), &wake);
     }
     self.wake = Some(wake);
@@ -219,7 +298,8 @@ impl Shell {
       });
     }
 
-    self.finish_snapshot(true);
+    self.start(size);
+    self.finish_startup();
 
     let context = prompt.unwrap_or_else(|| self.prompt());
     let prepared = match self.session.prepare(line) {
@@ -260,10 +340,8 @@ impl Shell {
 
   /// Reads output, detects completion, and adopts new state.
   pub fn poll(&mut self) -> Vec<ShellEvent> {
-    let mut events = vec![];
-    if self.finish_snapshot(false) {
-      events.push(ShellEvent::StateChanged);
-    }
+    let mut events = std::mem::take(&mut self.pending);
+    self.poll_startup(&mut events);
 
     let mut finished = vec![];
     for job in &mut self.jobs {
@@ -347,9 +425,7 @@ impl Drop for Shell {
   fn drop(&mut self) {
     // Kill running jobs (see `Job::drop`) before removing their scratch dirs.
     self.jobs.clear();
-    if let Some(snap) = self.snapshot.take() {
-      let _ = snap.thread.join();
-    }
+    self.startup = None;
     if let Some(root) = &self.owned_root {
       let _ = std::fs::remove_dir_all(root);
     }

@@ -1,7 +1,7 @@
 //! Drives a `Shell` headlessly. Needs a real `zsh`; skips without one.
 
 use be_shell::{
-  History, JobId, JobState, Shell, ShellEvent, ShellState, SubmitResult, UiCommand, zsh,
+  History, JobId, JobState, STARTUP_ID, Shell, ShellEvent, ShellState, SubmitResult, UiCommand, zsh,
 };
 use be_terminal::{BuiltinColor, Size, TerminalColor};
 use std::{
@@ -51,7 +51,8 @@ impl Fixture {
     state.env.retain(|(k, _)| k != "ZDOTDIR");
     state.env.push(("ZDOTDIR".into(), dir.join("zdot").to_string_lossy().into_owned()));
     let history = History::open(dir.join("history")).unwrap();
-    let shell = Shell::with_parts(state, &dir.join("session"), history).unwrap();
+    let mut shell = Shell::with_parts(state, &dir.join("session"), history).unwrap();
+    shell.start(SIZE);
     Fixture { shell, dir, work }
   }
 
@@ -123,12 +124,90 @@ fn output_and_exit_codes() {
   assert_eq!(f.shell.history().entries()[1].exit_code, 1);
 }
 
+impl Fixture {
+  /// Polls until the startup snapshot is over.
+  fn wait_startup(&mut self) {
+    let start = Instant::now();
+    while self.shell.startup_running() {
+      self.shell.poll();
+      assert!(start.elapsed() < Duration::from_secs(20), "the snapshot never finished");
+      std::thread::sleep(Duration::from_millis(2));
+    }
+  }
+}
+
 #[test]
-fn rc_file_state_and_banner_discarded() {
+fn rc_file_state_round_trips() {
   need_zsh!();
-  let mut f = Fixture::new("echo BANNER\nalias rcal='echo from-rc'\nexport RC_VAR=1\n");
+  let mut f = Fixture::new("alias rcal='echo from-rc'\nexport RC_VAR=1\n");
   let (exit, text) = f.run("rcal $RC_VAR");
   assert_eq!((exit, text.as_str()), (0, "from-rc 1"));
+}
+
+#[test]
+fn startup_output_is_shown_with_colors() {
+  need_zsh!();
+  let mut f = Fixture::new("print -P '%F{red}BANNER%f plain'\nalias rcal='echo from-rc'\n");
+  f.wait_startup();
+  let startup = f.shell.startup().expect("no startup job");
+  assert_eq!(startup.id, STARTUP_ID);
+  assert!(!startup.is_running());
+  assert_eq!(startup.emulator.text(), "BANNER plain");
+  let line = startup.emulator.screen_line(0).unwrap();
+  let red = line.styles().any(|(s, _)| {
+    s.foreground == Some(TerminalColor::Builtin { color: BuiltinColor::Red, bright: false })
+  });
+  assert!(red, "no red cells");
+
+  // The state is adopted all the same, and the startup is no ordinary job.
+  assert!(f.shell.jobs().is_empty());
+  let (exit, text) = f.run("rcal");
+  assert_eq!((exit, text.as_str()), (0, "from-rc"));
+  assert_eq!(f.shell.jobs().len(), 1);
+}
+
+#[test]
+fn startup_sees_a_terminal_of_the_right_size() {
+  need_zsh!();
+  let mut f = Fixture::new("[[ -t 1 ]] && print tty $COLUMNS || print notty\n");
+  f.wait_startup();
+  assert_eq!(f.shell.startup().unwrap().emulator.text(), format!("tty {}", SIZE.cols));
+}
+
+#[test]
+fn startup_errors_are_shown_and_the_shell_works() {
+  need_zsh!();
+  let mut f = Fixture::new("alias ok='echo fine'\nnonexistentcmd\nexport AFTER=1\n");
+  f.wait_startup();
+  let text = f.shell.startup().unwrap().emulator.text();
+  assert!(text.contains("command not found: nonexistentcmd"), "{text}");
+  // The rc went on after the error.
+  assert_eq!(f.run("ok $AFTER"), (0, "fine 1".into()));
+}
+
+#[test]
+fn aborting_the_startup_falls_back() {
+  need_zsh!();
+  let mut f = Fixture::new("alias gone='echo x'\nsleep 30\n");
+  std::thread::sleep(Duration::from_millis(300));
+  assert!(f.shell.startup_running());
+  f.shell.send_input(STARTUP_ID, &[3]);
+  f.wait_startup();
+  // Nothing was left running, and the shell uses what it had.
+  assert!(!f.shell.startup_running());
+  assert!(!f.shell.has_running());
+  let (exit, _) = f.run("true");
+  assert_eq!(exit, 0);
+}
+
+#[test]
+fn nothing_is_left_running() {
+  need_zsh!();
+  let mut f = Fixture::new("print hi\n");
+  f.wait_startup();
+  assert!(!f.shell.has_running());
+  assert!(!f.shell.needs_poll());
+  assert!(!f.shell.startup().unwrap().is_running());
 }
 
 #[test]

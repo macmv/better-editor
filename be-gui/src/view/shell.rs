@@ -30,8 +30,8 @@ use std::{
 use be_input::{Action, Clipboard, Direction, Edit, KeyStroke, Mode, Move};
 use be_shared::SharedHandle;
 use be_shell::{
-  GitHead, Job, JobId, JobState, PromptContext, Shell, ShellEvent, SubmitResult, UiCommand,
-  format_duration, format_local_time,
+  GitHead, Job, JobId, JobState, PromptContext, STARTUP_ID, Shell, ShellEvent, SubmitResult,
+  UiCommand, format_duration, format_local_time,
 };
 use be_terminal::{Arrow, InputModes, Position, keys, mouse};
 use kurbo::{Point, Rect, RoundedRect, Size, Stroke};
@@ -309,10 +309,13 @@ impl ShellView {
   pub fn new(clipboard: &SharedHandle<Clipboard>, path: &Path) -> io::Result<Self> {
     let shell = Shell::new(path)?;
     let prompt = shell.prompt();
+    let mut blocks = Blocks::default();
+    // The first block: what the rc files print when the shell starts.
+    blocks.push(BlockKind::Startup(STARTUP_ID));
     Ok(ShellView {
       shell,
       clipboard: clipboard.clone(),
-      blocks: Blocks::default(),
+      blocks,
       scroll: ScrollState::default(),
       input: InputLine::default(),
       history: HistoryNav::default(),
@@ -429,6 +432,15 @@ impl ShellView {
   }
 
   pub fn perform_action(&mut self, action: Action) {
+    // Typing while the rc files run goes to the command line, except Ctrl-C,
+    // which stops a rc that hangs.
+    if self.shell.startup_running()
+      && let Action::Control { char: 'c' } = action
+    {
+      self.shell.send_input(STARTUP_ID, &[0x03]);
+      return;
+    }
+
     if let Some(job) = self.running() {
       let id = job.id;
       let modes = job.emulator.input_modes();
@@ -469,6 +481,8 @@ impl ShellView {
     match edit_line(&mut self.input, &action) {
       LineCmd::None => {}
       LineCmd::Edited => self.history.reset(),
+      // The prompt is hidden while the rc files run; keep what was typed.
+      LineCmd::Submit if self.shell.startup_running() => {}
       LineCmd::Submit => self.submit(),
       LineCmd::HistoryPrev => {
         let shell = &self.shell;
@@ -504,7 +518,7 @@ impl ShellView {
   }
 
   fn enter_blocks(&mut self) {
-    if self.blocks.list().is_empty() {
+    if self.blocks.list().iter().all(|b| matches!(b.kind, BlockKind::Startup(_))) {
       return;
     }
     self.mode = ShellMode::Blocks;
@@ -808,10 +822,15 @@ impl ShellView {
     let fullscreen =
       self.running().filter(|j| is_fullscreen(j.is_running(), &j.emulator)).map(|j| j.id);
     let grid = pty_grid(size, char_size, PAD_X, fullscreen.is_some());
+    // The startup output is run at the size the view has at first.
+    self.shell.start(grid);
     if grid != self.grid {
       self.grid = grid;
       if let Some(id) = self.running().map(|j| j.id) {
         self.shell.resize(id, grid);
+      }
+      if self.shell.startup_running() {
+        self.shell.resize(STARTUP_ID, grid);
       }
     }
 
@@ -859,12 +878,16 @@ impl ShellView {
           None => (0, 0, 0),
         },
         BlockKind::Notice(lines) => (0, 0, lines.len()),
+        BlockKind::Startup(id) => {
+          let rows = self.shell.job(*id).map_or(0, output_rows);
+          (rows, 0, rows)
+        }
       };
       rows.push(output_rows);
       header_rows.push(header);
       heights.push((block.key, height as f64 * char_size.height));
     }
-    let prompt_height = if self.running().is_some() {
+    let prompt_height = if self.running().is_some() || self.shell.startup_running() {
       0.0
     } else {
       header_rows_for(self.input.text(), grid.cols) as f64 * char_size.height
@@ -929,6 +952,7 @@ impl ShellView {
         let height = match block.kind {
           BlockKind::Job(_) => self.header_height(i),
           BlockKind::Notice(_) => item.height,
+          BlockKind::Startup(_) => 0.0,
         };
         let tint = render.theme().mode_normal.multiply_alpha(FOCUS_ALPHA);
         render.fill(&Rect::new(0.0, y, size.width, y + height), tint);
@@ -936,6 +960,16 @@ impl ShellView {
 
       match &block.kind {
         BlockKind::Notice(lines) => self.draw_notice(render, y, lines),
+        BlockKind::Startup(id) => {
+          let rows = self.geom.rows[i];
+          if rows > 0
+            && let Some(job) = self.shell.job(*id)
+          {
+            drawn.push(*id);
+            let painter = self.painters.entry(*id).or_default();
+            draw_output(render, painter, job, y, rows, None, self.focused, self.geom.char_size);
+          }
+        }
         BlockKind::Job(id) => {
           let Some(job) = self.shell.job(*id) else { continue };
           let over = hover.is_some_and(|(j, _)| j == i);

@@ -13,6 +13,9 @@ pub const PROMPT_KEY: u64 = u64::MAX;
 
 pub enum BlockKind {
   Job(JobId),
+  /// The output of the shell's startup (what the rc files printed), which has
+  /// no prompt and is never collapsed.
+  Startup(JobId),
   /// A message from the view itself, such as "jobs: not supported yet".
   Notice(Vec<String>),
 }
