@@ -64,6 +64,20 @@ impl RemoteTarget {
   }
 }
 
+/// Whether `host` (`[user@]name`) is a machine the local user `user` would
+/// log in to as themselves. Without a `user@`, ssh uses the local user.
+pub fn same_user(host: &str, user: &str) -> bool {
+  match host.split_once('@') {
+    Some((u, _)) => u == user,
+    None => true,
+  }
+}
+
+/// `path` relative to `home`, if it is inside it.
+pub fn under_home(path: &Path, home: &Path) -> Option<PathBuf> {
+  path.strip_prefix(home).ok().map(Path::to_path_buf)
+}
+
 #[derive(Default, Clone)]
 struct Interest {
   read:     Vec<RawFd>,
@@ -293,6 +307,13 @@ impl RemoteHandle {
     OpeningWorkspace { handle: self.clone(), stage: OpenStage::Canonicalize(call) }
   }
 
+  /// Starts opening the workspace at `rel` under the host's home directory.
+  pub fn open_workspace_in_home(&self, rel: &Path) -> OpeningWorkspace {
+    let call = self.link.host.borrow().info();
+    self.link.rearm();
+    OpeningWorkspace { handle: self.clone(), stage: OpenStage::Home(rel.to_path_buf(), call) }
+  }
+
   /// Starts opening the workspace at the directory terminal `id`'s shell is in
   /// now. The directory is asked of this connection, and the workspace is
   /// opened on `into`.
@@ -325,6 +346,8 @@ impl RemoteHandle {
 }
 
 enum OpenStage {
+  /// Waiting for the host's home directory, to open this path under it.
+  Home(PathBuf, Pending<HostInfo, HostError>),
   TerminalCwd(Pending<String, HostError>),
   Canonicalize(Pending<String, HostError>),
   Head(PathBuf, Pending<Option<String>, HostError>),
@@ -343,6 +366,18 @@ impl OpeningWorkspace {
   pub fn poll(&mut self) -> Option<io::Result<(PathBuf, Backend)>> {
     loop {
       match &mut self.stage {
+        OpenStage::Home(rel, call) => {
+          let res = call.try_take()?;
+          let home = match res {
+            Ok(info) if !info.home.is_empty() => info.home,
+            Ok(_) => return Some(Err(io::Error::other("the host does not know its home"))),
+            Err(e) => return Some(Err(call_error(e))),
+          };
+          let path = Path::new(&home).join(&*rel);
+          let canon = self.handle.link.host.borrow().canonicalize(&path.to_string_lossy());
+          self.handle.link.rearm();
+          self.stage = OpenStage::Canonicalize(canon);
+        }
         OpenStage::TerminalCwd(call) => {
           let res = call.try_take()?;
           let path = match res {
@@ -815,6 +850,19 @@ mod tests {
     assert!(!missing.loading());
 
     let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn home_translation() {
+    assert!(same_user("me@box", "me"));
+    assert!(same_user("box", "me"));
+    assert!(!same_user("you@box", "me"));
+    assert_eq!(
+      under_home(Path::new("/Users/me/src/x"), Path::new("/Users/me")),
+      Some(PathBuf::from("src/x"))
+    );
+    assert_eq!(under_home(Path::new("/Users/me"), Path::new("/Users/me")), Some(PathBuf::new()));
+    assert_eq!(under_home(Path::new("/opt/x"), Path::new("/Users/me")), None);
   }
 
   #[test]

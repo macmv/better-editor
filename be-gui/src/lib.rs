@@ -841,7 +841,20 @@ impl State {
         error!("ws: no host named '{name}' in the config");
         return;
       };
-      // An empty path is the host's working directory.
+      // An empty path is where we are now. If that is inside our home
+      // directory, and the same user is logging in over there, it is the same
+      // place under their home directory. Otherwise it is the host's working
+      // directory.
+      let home_rel = (path.is_empty() && handle.is_none())
+        .then(|| {
+          let user = std::env::var("USER").ok()?;
+          let home = std::env::home_dir()?;
+          if !remote::same_user(&host.host, &user) {
+            return None;
+          }
+          remote::under_home(&here, &home)
+        })
+        .flatten();
       let path = PathBuf::from(if path.is_empty() { "." } else { path });
       let target = remote::RemoteTarget {
         host:    host.host,
@@ -859,7 +872,10 @@ impl State {
       });
       let label = name.to_string();
       let open_path = path.clone();
-      self.begin_loading(path, &label, session, |h| h.open_workspace(&open_path));
+      self.begin_loading(path, &label, session, |h| match &home_rel {
+        Some(rel) => h.open_workspace_in_home(rel),
+        None => h.open_workspace(&open_path),
+      });
       return;
     }
 
