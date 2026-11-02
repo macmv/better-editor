@@ -796,8 +796,18 @@ impl State {
   /// Handles an event. Returns `true` if the app should close.
   pub fn on_event(&mut self, event: Event, store: &mut RenderStore) -> bool {
     if let Event::Remote(id, wake) = event {
+      let mut refusal = None;
       if let Some(session) = self.session_mut(id) {
         session.on_wake(wake);
+        refusal = session.refusal().map(String::from);
+      }
+      // A host that can't be talked to ends the load that was waiting on it.
+      if let (Some(why), Some(loading)) = (refusal, &mut self.loading) {
+        if loading.session.as_ref().is_some_and(|s| s.id() == id) {
+          loading.error = Some(why);
+          loading.opening = None;
+          loading.session = None;
+        }
       }
       self.poll_loading(store);
       return false;

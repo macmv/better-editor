@@ -64,6 +64,20 @@ impl RemoteTarget {
   }
 }
 
+/// `Err` with something the user can act on, if a host speaking protocol
+/// `host` can't be talked to.
+pub fn check_version(host: u32) -> Result<(), String> {
+  if host == be_remote::PROTOCOL_VERSION {
+    return Ok(());
+  }
+  let ours = be_remote::PROTOCOL_VERSION;
+  let which = if host < ours { "older" } else { "newer" };
+  Err(format!(
+    "the host's be-host is {which} than this editor (protocol {host}, expected {ours}); install \
+     a matching be-host there"
+  ))
+}
+
 /// Whether `host` (`[user@]name`) is a machine the local user `user` would
 /// log in to as themselves. Without a `user@`, ssh uses the local user.
 pub fn same_user(host: &str, user: &str) -> bool {
@@ -256,6 +270,8 @@ pub struct RemoteSession {
   path:     Option<String>,
   stage:    Stage,
   reported: bool,
+  /// Why the session was cut off, if the host is not one we can talk to.
+  refusal:  Option<String>,
 }
 
 /// Starts things on a host: terminals, and workspaces. Cheap to clone, and
@@ -483,10 +499,23 @@ impl RemoteSession {
       next_id: Cell::new(1),
     });
     link.rearm();
-    Ok(RemoteSession { id, link, host_cmd, path, stage, reported: false })
+    Ok(RemoteSession { id, link, host_cmd, path, stage, reported: false, refusal: None })
   }
 
   pub fn id(&self) -> u64 { self.id }
+
+  /// Why this session refused to talk to its host, if it did.
+  pub fn refusal(&self) -> Option<&str> { self.refusal.as_deref() }
+
+  /// Gives up on the host: kills the connection, and remembers why.
+  fn refuse(&mut self, why: String) {
+    error!("remote: {why}");
+    self.refusal = Some(why);
+    self.stage = Stage::Failed;
+    if let Some(child) = self.link.host.borrow_mut().connection_mut().child_mut() {
+      let _ = child.kill();
+    }
+  }
 
   /// The directory the session was pointed at, if it was given one.
   pub fn path(&self) -> Option<&str> { self.path.as_deref() }
@@ -531,6 +560,9 @@ impl RemoteSession {
     if !matches!(self.stage, Stage::Done) {
       self.stage = Stage::Failed;
     }
+    if self.refusal.is_some() {
+      return;
+    }
 
     let mut host = self.link.host.borrow_mut();
     debug!("remote: connection closed: {:?}", host.connection().close_reason());
@@ -566,12 +598,26 @@ impl RemoteSession {
       Stage::Info(p) if p.is_ready() => match p.try_take().unwrap() {
         Ok(info) => {
           info!("remote: connected, protocol {}, cwd {}", info.version, info.cwd);
+          if let Err(why) = check_version(info.version) {
+            self.refuse(why);
+            return;
+          }
           let path = self.path.clone().unwrap_or(info.cwd);
           self.stage = Stage::List(path.clone(), self.link.host.borrow().list_dir(&path));
         }
         Err(e) => {
-          log_call_error("info", &e);
-          self.stage = Stage::Failed;
+          // A host with a different protocol may not even decode the call.
+          if matches!(e, CallError::App(_)) || !self.link.host.borrow().connection().is_finished()
+          {
+            self.refuse(format!(
+              "the host did not answer the version check ({e:?}); its be-host is probably not \
+               protocol {}, so install a matching one there",
+              be_remote::PROTOCOL_VERSION
+            ));
+          } else {
+            log_call_error("info", &e);
+            self.stage = Stage::Failed;
+          }
         }
       },
       Stage::List(path, p) if p.is_ready() => {
@@ -850,6 +896,13 @@ mod tests {
     assert!(!missing.loading());
 
     let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn version_check() {
+    assert!(check_version(be_remote::PROTOCOL_VERSION).is_ok());
+    assert!(check_version(be_remote::PROTOCOL_VERSION - 1).unwrap_err().contains("older"));
+    assert!(check_version(be_remote::PROTOCOL_VERSION + 1).unwrap_err().contains("newer"));
   }
 
   #[test]
