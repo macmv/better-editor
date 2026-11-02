@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io, path::PathBuf};
+use std::{cell::Cell, collections::HashMap, io, path::PathBuf};
 
 use be_animation::Animation;
 use be_doc::Cursor;
@@ -11,7 +11,7 @@ use kurbo::{Arc, Circle, Insets, Line, Point, Rect, RoundedRect, Size, Stroke, T
 
 use crate::{
   CursorMode, Font, Layout, LayoutBuilder, MouseButton, MouseEvent, Render, RenderStore,
-  TextLayout, theme::Underline, view::Scroll,
+  TextLayout, spinner::Spinner, theme::Underline, view::Scroll,
 };
 
 pub struct EditorView {
@@ -43,8 +43,16 @@ pub struct EditorView {
 
   progress_animation: Animation,
 
+  /// Frames drawn while the file is loading. A load that finishes quickly
+  /// never shows the spinner.
+  loading_frames: Cell<u32>,
+  spinner:        Spinner,
+
   completions_popup: Option<CompletionsPopup>,
 }
+
+/// Frames a loading file stays blank before the spinner appears.
+const BLANK_FRAMES: u32 = 3;
 
 #[derive(Default)]
 struct CompletionsPopup {
@@ -89,6 +97,9 @@ impl EditorView {
 
       progress_animation: Animation::linear(2.0),
 
+      loading_frames: Cell::new(0),
+      spinner:        Spinner::new(),
+
       completions_popup: None,
     };
 
@@ -123,7 +134,9 @@ impl EditorView {
     Ok(())
   }
 
-  pub fn animated(&self) -> bool { self.progress_animation.is_running() }
+  pub fn animated(&self) -> bool {
+    self.progress_animation.is_running() || self.editor.loading()
+  }
 
   pub fn layout(&mut self, layout: &mut Layout) {
     puffin::profile_function!();
@@ -407,6 +420,17 @@ impl EditorView {
       &Rect::new(0.0, 0.0, render.size().width, render.size().height),
       render.theme().background,
     );
+
+    if self.editor.loading() {
+      let frames = self.loading_frames.get();
+      self.loading_frames.set(frames.saturating_add(1));
+      if frames >= BLANK_FRAMES {
+        let size = render.size();
+        self.spinner.draw_sized(render, Point::new(size.width / 2.0, size.height / 2.0), 60.0);
+      }
+      return;
+    }
+    self.loading_frames.set(0);
 
     let line_height = render.store.text.font_metrics(Font::Editor).line_height;
     let start_y = self.vertical_scroll.first_line_offset();
