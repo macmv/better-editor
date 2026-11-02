@@ -32,9 +32,9 @@ pub struct TerminalView {
 }
 
 impl TerminalView {
-  pub fn new(clipboard: &SharedHandle<Clipboard>, path: &Path) -> Self {
-    let terminal = Terminal::new(be_terminal::Size { rows: 40, cols: 80 }, path);
-    TerminalView::from_handle(clipboard, SharedHandle::new(terminal))
+  pub fn new(clipboard: &SharedHandle<Clipboard>, path: &Path) -> std::io::Result<Self> {
+    let terminal = Terminal::new(be_terminal::Size { rows: 40, cols: 80 }, path)?;
+    Ok(TerminalView::from_handle(clipboard, SharedHandle::new(terminal)))
   }
 
   pub fn from_handle(

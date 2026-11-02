@@ -277,7 +277,13 @@ impl State {
       }
       None => {
         let path = std::env::current_dir().unwrap();
-        crate::view::TerminalView::new(&store.clipboard, &path)
+        match crate::view::TerminalView::new(&store.clipboard, &path) {
+          Ok(terminal) => terminal,
+          Err(e) => {
+            error!("failed to start a shell in {}: {e}", path.display());
+            std::process::exit(1);
+          }
+        }
       }
     };
     terminal.on_focus(true);
@@ -905,11 +911,11 @@ impl WorkspaceLayout {
           })
         }
         be_config::TabSettings::Terminal => {
-          let terminal = state.terminal_view();
+          let Some(terminal) = state.terminal_view() else { std::process::exit(1) };
           Pane::View(state.views.new_view(terminal))
         }
         be_config::TabSettings::Shell => {
-          let shell = state.shell_content();
+          let Some(shell) = state.shell_content() else { std::process::exit(1) };
           Pane::View(state.views.new_view(shell))
         }
         be_config::TabSettings::Editor => {
@@ -1302,10 +1308,15 @@ impl WorkspaceLayout {
         self.views.get_mut(self.tabs[new_active].content.active()).unwrap().on_focus(true);
       }
       Action::Navigate { nav: Navigation::NewTerminal } => {
-        let view = self.views.new_view(view::TerminalView::new(
-          &self.workspace.clipboard,
-          self.workspace.root.as_path(),
-        ));
+        let root = self.workspace.root.as_path();
+        let terminal = match view::TerminalView::new(&self.workspace.clipboard, root) {
+          Ok(terminal) => terminal,
+          Err(e) => {
+            error!("failed to start a shell in {}: {e}", root.display());
+            return;
+          }
+        };
+        let view = self.views.new_view(terminal);
         self.tabs.push(Tab {
           title:   "terminal".into(),
           content: Pane::View(view),
@@ -1317,7 +1328,7 @@ impl WorkspaceLayout {
         self.perform_action(Action::Navigate { nav: Navigation::Tab(index as u8) }, store);
       }
       Action::Navigate { nav: Navigation::NewShell } => {
-        let content = self.shell_content();
+        let Some(content) = self.shell_content() else { return };
         let view = self.views.new_view(content);
         self.tabs.push(Tab {
           title:   "shell".into(),
@@ -1392,7 +1403,7 @@ impl WorkspaceLayout {
         )));
       }
       Action::Navigate { nav: Navigation::Split(axis) } => {
-        let new_view = self.split_active_view(store);
+        let Some(new_view) = self.split_active_view(store) else { return };
         self.tabs[self.active].content.split(
           match axis {
             be_input::Axis::Horizontal => kurbo::Axis::Horizontal,
@@ -1562,7 +1573,7 @@ impl WorkspaceLayout {
             }
           }
           "vs" => {
-            let new_view = self.split_active_view(store);
+            let Some(new_view) = self.split_active_view(store) else { return false };
             self.tabs[self.active].content.split(
               Axis::Vertical,
               &mut self.views.views,
@@ -1571,7 +1582,7 @@ impl WorkspaceLayout {
             );
           }
           "hs" => {
-            let new_view = self.split_active_view(store);
+            let Some(new_view) = self.split_active_view(store) else { return false };
             self.tabs[self.active].content.split(
               Axis::Horizontal,
               &mut self.views.views,
@@ -1598,8 +1609,8 @@ impl WorkspaceLayout {
     false
   }
 
-  fn split_active_view(&mut self, store: &mut RenderStore) -> ViewId {
-    match self.views.get(self.tabs[self.active].content.active()).unwrap().content {
+  fn split_active_view(&mut self, store: &mut RenderStore) -> Option<ViewId> {
+    Some(match self.views.get(self.tabs[self.active].content.active()).unwrap().content {
       ViewContent::Editor(ref e) => {
         let mut editor = crate::view::EditorView::new(&mut self.workspace);
         editor.split_from(e);
@@ -1608,19 +1619,26 @@ impl WorkspaceLayout {
       ViewContent::FileTree(_) => {
         self.views.new_view(crate::view::FileTree::new(store.notifier(), &mut self.workspace))
       }
-      ViewContent::Terminal(_) => self.views.new_view(crate::view::TerminalView::new(
-        &self.workspace.clipboard,
-        self.workspace.root.as_path(),
-      )),
+      ViewContent::Terminal(_) => {
+        let root = self.workspace.root.as_path();
+        match view::TerminalView::new(&self.workspace.clipboard, root) {
+          Ok(terminal) => self.views.new_view(terminal),
+          Err(e) => {
+            error!("failed to start a shell in {}: {e}", root.display());
+            return None;
+          }
+        }
+      }
       ViewContent::Shell(_) => {
-        let content = self.shell_content();
+        let content = self.shell_content()?;
         self.views.new_view(content)
       }
-    }
+    })
   }
 
   /// A terminal in the workspace root, on the host for a remote workspace.
-  fn terminal_view(&mut self) -> view::TerminalView {
+  /// Logs and returns `None` if the shell can't be started.
+  fn terminal_view(&mut self) -> Option<view::TerminalView> {
     let clipboard = &self.workspace.clipboard;
     let root = self.workspace.root.as_path();
     match &mut self.remote {
@@ -1628,21 +1646,27 @@ impl WorkspaceLayout {
         let size = be_terminal::Size { rows: 40, cols: 80 };
         let pty = remote.new_pty(size, root.to_string_lossy().into_owned());
         let terminal = be_terminal::Terminal::with_host(size, Box::new(pty));
-        view::TerminalView::from_handle(clipboard, SharedHandle::new(terminal))
+        Some(view::TerminalView::from_handle(clipboard, SharedHandle::new(terminal)))
       }
-      None => view::TerminalView::new(clipboard, root),
+      None => match view::TerminalView::new(clipboard, root) {
+        Ok(terminal) => Some(terminal),
+        Err(e) => {
+          error!("failed to start a shell in {}: {e}", root.display());
+          None
+        }
+      },
     }
   }
 
   /// A shell view in the workspace root. Remote workspaces don't have one yet,
   /// so they get a plain terminal.
-  fn shell_content(&mut self) -> ViewContent {
+  fn shell_content(&mut self) -> Option<ViewContent> {
     if self.remote.is_some() {
       warn!("the shell view is not available in remote workspaces yet, opening a terminal");
-      return self.terminal_view().into();
+      return self.terminal_view().map(Into::into);
     }
 
-    view::ShellView::new(&self.workspace.clipboard, self.workspace.root.as_path()).into()
+    Some(view::ShellView::new(&self.workspace.clipboard, self.workspace.root.as_path()).into())
   }
 }
 

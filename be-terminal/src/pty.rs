@@ -54,12 +54,8 @@ impl AsRawFd for Pty {
 }
 
 impl Pty {
-  pub fn new(size: Size, path: &Path) -> Self {
-    Pty::try_new(size, path).expect("failed to start a shell")
-  }
-
   /// Starts `$SHELL` (or `/bin/zsh`) in `path`.
-  pub fn try_new(size: Size, path: &Path) -> io::Result<Self> {
+  pub fn new(size: Size, path: &Path) -> io::Result<Self> {
     let shell = std::env::var_os("SHELL").unwrap_or_else(|| "/bin/zsh".into());
     Pty::spawn(SpawnSpec {
       program: shell,

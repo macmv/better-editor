@@ -134,5 +134,5 @@ impl Terms {
 
 pub fn spawn(size: Size, cwd: &str) -> io::Result<Pty> {
   let cwd = if cwd.is_empty() { std::env::current_dir()? } else { cwd.into() };
-  Pty::try_new(size, &cwd)
+  Pty::new(size, &cwd)
 }

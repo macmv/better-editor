@@ -281,8 +281,10 @@ pub struct Size {
 }
 
 impl Terminal {
-  pub fn new(size: Size, path: &Path) -> Self {
-    Terminal::with_host(size, Box::new(Pty::new(size, path)))
+  /// Starts a shell on this machine, in `path`. Fails if the shell cannot be
+  /// started, for example because `path` does not exist here.
+  pub fn new(size: Size, path: &Path) -> io::Result<Self> {
+    Ok(Terminal::with_host(size, Box::new(Pty::new(size, path)?)))
   }
 
   pub fn with_host(size: Size, pty: Box<dyn PtyHost>) -> Self {
