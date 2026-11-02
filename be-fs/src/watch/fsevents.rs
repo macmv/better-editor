@@ -6,12 +6,13 @@ use objc2_core_foundation::{CFArray, CFString};
 use objc2_core_services::*;
 
 use super::Watcher;
-use crate::{DirectoryChanges, Waker, WorkspacePathBuf, WorkspaceRoot};
+use crate::{DirectoryChanges, Waker, WorkspacePathBuf, WorkspaceRoot, ignore::Ignores};
 
 pub struct FSEventsWatcher {
-  root:   WorkspaceRoot,
-  rx:     Receiver<Box<[Event]>>,
-  stream: FSEventStreamRef,
+  root:    WorkspaceRoot,
+  rx:      Receiver<Box<[Event]>>,
+  stream:  FSEventStreamRef,
+  ignores: Ignores,
 }
 
 struct Event {
@@ -75,7 +76,7 @@ impl FSEventsWatcher {
       FSEventStreamStart(stream);
     }
 
-    FSEventsWatcher { root: root.clone(), rx, stream }
+    FSEventsWatcher { root: root.clone(), rx, stream, ignores: Ignores::new(root.as_path()) }
   }
 }
 
@@ -127,7 +128,21 @@ impl Watcher for FSEventsWatcher {
         let Ok(rel) = path.strip_prefix(root) else { continue };
         let Some(rel) = rel.to_str() else { continue };
 
-        changes.insert(WorkspacePathBuf::from(&rel));
+        let path = WorkspacePathBuf::from(&rel);
+        let is_dir = ev.flags & kFSEventStreamEventFlagItemIsDir != 0;
+
+        // A changed `.gitignore` invalidates what was read of it.
+        if rel.rsplit('/').next() == Some(".gitignore") {
+          let parent = rel.rsplit_once('/').map_or("", |(p, _)| p);
+          self.ignores.forget(&WorkspacePathBuf::from(parent));
+        }
+
+        // Ignored paths are left alone.
+        if self.ignores.is_ignored(&path, is_dir) {
+          continue;
+        }
+
+        changes.insert(path);
       }
     }
 
