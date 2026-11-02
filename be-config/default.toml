@@ -58,6 +58,14 @@ pane = "terminal"
 #
 # Actions can be replaced by setting a keybind to an empty table, {}.
 
+# Machines the `ws` command can open workspaces on, as `:ws name:path`. Each
+# one runs `be-host`, reached over ssh. For example:
+#
+# [hosts.desktop]
+# host = "me@desktop"
+# ssh-options = ["-p", "2222", "-i", "~/.ssh/desktop"]
+[hosts]
+
 [keybinds.settings]
 # To enter any navigation bind, first press this key. Applies in any mode. This
 # is on the right hand so that the left hand can press the bind that follows.

@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::{keybind::Keybinds, parse::ParseResult};
 
 use be_config_macros::Config;
@@ -9,6 +11,17 @@ pub struct Settings {
   pub terminal: TerminalSettings,
   pub layout:   LayoutSettings,
   pub keybinds: Keybinds,
+  /// Machines the `ws` command can open workspaces on, by name.
+  pub hosts:    BTreeMap<String, HostSettings>,
+}
+
+/// A machine reached over ssh, running `be-host`.
+#[derive(Default, Config, Clone)]
+pub struct HostSettings {
+  /// What `ssh` connects to, such as `user@desktop`.
+  pub host:        String,
+  /// Extra arguments for `ssh`, such as `["-p", "2222"]`.
+  pub ssh_options: Vec<String>,
 }
 
 #[derive(Default, Config, Clone)]

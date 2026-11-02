@@ -255,6 +255,25 @@ impl<T: ParseValue + Default> ParseValue for Vec<T> {
   }
 }
 
+impl<T: ParseValue + Default> ParseValue for std::collections::BTreeMap<String, T> {
+  fn parse(&mut self, value: Spanned<DeValue>, de: &mut Parser) -> Result<(), String> {
+    match value.into_inner() {
+      DeValue::Table(table) => {
+        for (k, v) in table {
+          // Entries merge key by key, so a later config can tweak one field of
+          // an earlier entry.
+          let mut entry = self.remove(&**k.get_ref()).unwrap_or_default();
+          de.partial_value(&mut entry, v);
+          self.insert(k.get_ref().to_string(), entry);
+        }
+      }
+      _ => return Err("expected table".to_string()),
+    }
+
+    Ok(())
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use be_config_macros::Config;
