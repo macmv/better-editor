@@ -32,15 +32,12 @@ pub struct TerminalView {
 }
 
 impl TerminalView {
-  pub fn new(clipboard: &SharedHandle<Clipboard>, path: &Path) -> std::io::Result<Self> {
-    let terminal = Terminal::new(be_terminal::Size { rows: 40, cols: 80 }, path)?;
-    Ok(TerminalView::from_handle(clipboard, SharedHandle::new(terminal)))
+  pub fn new_local(clipboard: &SharedHandle<Clipboard>, path: &Path) -> std::io::Result<Self> {
+    let terminal = Terminal::new_local(be_terminal::Size { rows: 40, cols: 80 }, path)?;
+    Ok(TerminalView::new_remote(clipboard, SharedHandle::new(terminal)))
   }
 
-  pub fn from_handle(
-    clipboard: &SharedHandle<Clipboard>,
-    terminal: SharedHandle<Terminal>,
-  ) -> Self {
+  pub fn new_remote(clipboard: &SharedHandle<Clipboard>, terminal: SharedHandle<Terminal>) -> Self {
     TerminalView {
       terminal,
       set_waker: false,
