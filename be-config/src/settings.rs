@@ -19,7 +19,7 @@ pub struct Settings {
 #[derive(Default, Config, Clone)]
 pub struct HostSettings {
   /// What `ssh` connects to, such as `user@desktop`.
-  pub host:        String,
+  pub ssh:         String,
   /// Extra arguments for `ssh`, such as `["-p", "2222"]`.
   pub ssh_options: Vec<String>,
   /// The command that runs `be-host` there, such as

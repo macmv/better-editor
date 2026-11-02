@@ -852,7 +852,7 @@ impl State {
 
     if let Some((name, path)) = hosted {
       let host = store.config.borrow().settings.hosts.get(name).cloned();
-      let Some(host) = host.filter(|h| !h.host.is_empty()) else {
+      let Some(host) = host.filter(|h| !h.ssh.is_empty()) else {
         error!("ws: no host named '{name}' in the config");
         return;
       };
@@ -864,7 +864,7 @@ impl State {
         .then(|| {
           let user = std::env::var("USER").ok()?;
           let home = std::env::home_dir()?;
-          if !remote::same_user(&host.host, &user) {
+          if !remote::same_user(&host.ssh, &user) {
             return None;
           }
           remote::under_home(&here, &home)
@@ -872,7 +872,7 @@ impl State {
         .flatten();
       let path = PathBuf::from(if path.is_empty() { "." } else { path });
       let target =
-        remote::RemoteTarget { host: host.host, options: host.ssh_options, path: None };
+        remote::RemoteTarget { host: host.ssh, options: host.ssh_options, path: None };
       let host_cmd = host.host_cmd;
 
       let id = self.next_session;
