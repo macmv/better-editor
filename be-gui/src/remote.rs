@@ -43,7 +43,9 @@ pub struct RemoteWake {
 /// `ssh://[user@]host[/path]`, or a bare `[user@]host`.
 #[derive(Debug, PartialEq)]
 pub struct RemoteTarget {
-  pub host: String,
+  pub host:    String,
+  /// Extra arguments for `ssh`.
+  pub options: Vec<String>,
   /// `None`: the host's working directory.
   pub path: Option<String>,
 }
@@ -52,8 +54,12 @@ impl RemoteTarget {
   pub fn parse(s: &str) -> RemoteTarget {
     let rest = s.strip_prefix("ssh://").unwrap_or(s);
     match rest.split_once('/') {
-      Some((host, path)) => RemoteTarget { host: host.into(), path: Some(format!("/{path}")) },
-      None => RemoteTarget { host: rest.into(), path: None },
+      Some((host, path)) => RemoteTarget {
+        host:    host.into(),
+        options: vec![],
+        path:    Some(format!("/{path}")),
+      },
+      None => RemoteTarget { host: rest.into(), options: vec![], path: None },
     }
   }
 }
@@ -206,6 +212,8 @@ struct Link {
   /// What `ssh` was told to connect to, for starting other things on the same
   /// machine.
   target:   String,
+  /// Extra arguments `ssh` was given.
+  options:  Vec<String>,
   /// The command that runs `be-host` there.
   host_cmd: String,
   /// Names this connection's terminals and watches.
@@ -246,6 +254,9 @@ pub struct RemoteHandle {
 impl RemoteHandle {
   /// What `ssh` connects to, such as `user@box`.
   pub fn target(&self) -> &str { &self.link.target }
+
+  /// Extra arguments `ssh` was given.
+  pub fn options(&self) -> &[String] { &self.link.options }
 
   fn next_id(&self) -> u64 {
     let id = self.link.next_id.get();
@@ -298,11 +309,12 @@ impl RemoteHandle {
     let t = self.transport();
     let git = has_git.then(|| Box::new(RemoteGit::new(t.clone(), root)) as _);
     let target = self.link.target.clone();
+    let options = self.link.options.clone();
     Backend {
       fs: Rc::new(RemoteFs::new(t.clone())),
       git,
       watcher: Box::new(RemoteWatcher::new(&t, self.next_id(), root)),
-      launcher: Box::new(move |cmd, dir| be_remote::ssh_exec_command(&target, dir, cmd)),
+      launcher: Box::new(move |cmd, dir| be_remote::ssh_exec_command(&target, &options, dir, cmd)),
     }
   }
 
@@ -382,8 +394,8 @@ impl RemoteSession {
     host_cmd: &str,
     on_wake: impl Fn(RemoteWake) + Send + 'static,
   ) -> io::Result<RemoteSession> {
-    let host = RemoteHost::connect_ssh(&target.host, host_cmd, Instant::now())?;
-    RemoteSession::new(id, host, target.host, host_cmd.into(), target.path, on_wake)
+    let host = RemoteHost::connect_ssh(&target.host, &target.options, host_cmd, Instant::now())?;
+    RemoteSession::new(id, host, target.host, target.options, host_cmd.into(), target.path, on_wake)
   }
 
   /// A new connection to the machine `handle` is connected to.
@@ -392,7 +404,11 @@ impl RemoteSession {
     handle: &RemoteHandle,
     on_wake: impl Fn(RemoteWake) + Send + 'static,
   ) -> io::Result<RemoteSession> {
-    let target = RemoteTarget { host: handle.target().into(), path: None };
+    let target = RemoteTarget {
+      host:    handle.target().into(),
+      options: handle.options().to_vec(),
+      path:    None,
+    };
     RemoteSession::connect(id, target, &handle.link.host_cmd, on_wake)
   }
 
@@ -406,6 +422,7 @@ impl RemoteSession {
       0,
       RemoteHost::spawn(cmd, Instant::now())?,
       String::new(),
+      vec![],
       String::new(),
       None,
       on_wake,
@@ -416,6 +433,7 @@ impl RemoteSession {
     id: u64,
     host: RemoteHost,
     target: String,
+    options: Vec<String>,
     host_cmd: String,
     path: Option<String>,
     on_wake: impl Fn(RemoteWake) + Send + 'static,
@@ -425,6 +443,7 @@ impl RemoteSession {
       poller: Poller::new(on_wake)?,
       host: RefCell::new(host),
       target,
+      options,
       host_cmd: host_cmd.clone(),
       next_id: Cell::new(1),
     });
@@ -801,12 +820,16 @@ mod tests {
   #[test]
   fn parse_targets() {
     let t = |s| RemoteTarget::parse(s);
-    assert_eq!(t("host"), RemoteTarget { host: "host".into(), path: None });
-    assert_eq!(t("me@host"), RemoteTarget { host: "me@host".into(), path: None });
-    assert_eq!(t("ssh://me@host"), RemoteTarget { host: "me@host".into(), path: None });
+    assert_eq!(t("host"), RemoteTarget { host: "host".into(), options: vec![], path: None });
+    assert_eq!(t("me@host"), RemoteTarget { host: "me@host".into(), options: vec![], path: None });
+    assert_eq!(t("ssh://me@host"), RemoteTarget { host: "me@host".into(), options: vec![], path: None });
     assert_eq!(
       t("ssh://me@host/home/me/src"),
-      RemoteTarget { host: "me@host".into(), path: Some("/home/me/src".into()) }
+      RemoteTarget {
+        host:    "me@host".into(),
+        options: vec![],
+        path:    Some("/home/me/src".into())
+      }
     );
   }
 }

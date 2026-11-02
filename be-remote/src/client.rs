@@ -8,13 +8,16 @@ use lode_poll::{
 
 use crate::{DirEntry, Host, HostError, HostInfo};
 
-/// `ssh <target> <host_cmd> --stdio`. `target` is anything `ssh` accepts, such
-/// as `user@machine`.
-pub fn ssh_command(target: &str, host_cmd: &str) -> Command {
+/// `ssh <options> <target> <host_cmd> --stdio`. `target` is anything `ssh`
+/// accepts, such as `user@machine`. `options` are extra arguments for `ssh`,
+/// such as `["-p", "2222"]`.
+pub fn ssh_command(target: &str, options: &[String], host_cmd: &str) -> Command {
   let mut cmd = Command::new("ssh");
   // No tty: the channel is binary. BatchMode: a password prompt would hang
   // the editor, so fail instead.
-  cmd.args(["-T", "-o", "BatchMode=yes", "--", target, host_cmd, "--stdio"]);
+  cmd.args(["-T", "-o", "BatchMode=yes"]);
+  cmd.args(options);
+  cmd.args(["--", target, host_cmd, "--stdio"]);
   cmd
 }
 
@@ -25,9 +28,16 @@ fn shell_quote(s: &str) -> String { format!("'{}'", s.replace('\'', "'\\''")) }
 /// `ssh_command`. Used to run a language server next to the files it reads;
 /// its stdio is the command's stdio. `cmd` is run by the remote shell, so it
 /// may carry arguments.
-pub fn ssh_exec_command(target: &str, dir: &std::path::Path, cmd: &str) -> Command {
+pub fn ssh_exec_command(
+  target: &str,
+  options: &[String],
+  dir: &std::path::Path,
+  cmd: &str,
+) -> Command {
   let mut ssh = Command::new("ssh");
-  ssh.args(["-T", "-o", "BatchMode=yes", "--", target]);
+  ssh.args(["-T", "-o", "BatchMode=yes"]);
+  ssh.args(options);
+  ssh.args(["--", target]);
   ssh.arg(format!("cd {} && exec {cmd}", shell_quote(&dir.to_string_lossy())));
   ssh
 }
@@ -45,8 +55,13 @@ impl RemoteHost {
     Ok(RemoteHost { conn: Connection::spawn(cmd, now)? })
   }
 
-  pub fn connect_ssh(target: &str, host_cmd: &str, now: Instant) -> io::Result<RemoteHost> {
-    RemoteHost::spawn(ssh_command(target, host_cmd), now)
+  pub fn connect_ssh(
+    target: &str,
+    options: &[String],
+    host_cmd: &str,
+    now: Instant,
+  ) -> io::Result<RemoteHost> {
+    RemoteHost::spawn(ssh_command(target, options, host_cmd), now)
   }
 
   /// Waits up to `max_ms` for the connection to have something to do, and does
@@ -128,7 +143,8 @@ mod tests {
 
   #[test]
   fn exec_command_quotes_the_directory() {
-    let cmd = ssh_exec_command("me@box", Path::new("/home/a b/it's"), "rust-analyzer");
+    let options = ["-p".to_string(), "2222".to_string()];
+    let cmd = ssh_exec_command("me@box", &options, Path::new("/home/a b/it's"), "rust-analyzer");
     let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
     assert_eq!(
       args,
@@ -136,6 +152,8 @@ mod tests {
         "-T",
         "-o",
         "BatchMode=yes",
+        "-p",
+        "2222",
         "--",
         "me@box",
         r"cd '/home/a b/it'\''s' && exec rust-analyzer"
