@@ -829,7 +829,7 @@ impl State {
     }
   }
 
-  /// `:ws [[host:]path]`. With no argument, opens a workspace at the active
+  /// `:ws [host | [host:]path]`. With no argument, opens a workspace at the active
   /// file's directory (or the workspace's root). A path without a host is on
   /// the machine the current workspace is on.
   fn run_ws(&mut self, arg: &str, store: &mut RenderStore) {
@@ -843,7 +843,12 @@ impl State {
 
     // `name:path` names a configured host, unless the part before the colon
     // is a path itself.
-    let hosted = arg.split_once(':').filter(|(h, _)| !h.is_empty() && !h.contains('/'));
+    let mut hosted = arg.split_once(':').filter(|(h, _)| !h.is_empty() && !h.contains('/'));
+    // A bare host name is that host, with no path. A directory with the same
+    // name can be reached as `./name`.
+    if hosted.is_none() && store.config.borrow().settings.hosts.contains_key(arg) {
+      hosted = Some((arg, ""));
+    }
 
     if let Some((name, path)) = hosted {
       let host = store.config.borrow().settings.hosts.get(name).cloned();
