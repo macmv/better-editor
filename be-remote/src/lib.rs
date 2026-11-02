@@ -24,12 +24,14 @@ pub use transport::Transport;
 pub use watch::RemoteWatcher;
 
 /// Bumped when the `Host` interface changes in a way old peers cannot read.
-pub const PROTOCOL_VERSION: u32 = 4;
+pub const PROTOCOL_VERSION: u32 = 5;
 
 #[derive(Debug, Clone, PartialEq, lode::Message)]
 pub struct HostInfo {
   pub version: u32,
   pub cwd:     String,
+  /// The user's home directory, or empty if the host doesn't know it.
+  pub home:    String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, lode::Message)]
