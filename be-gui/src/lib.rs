@@ -1308,14 +1308,7 @@ impl WorkspaceLayout {
         self.views.get_mut(self.tabs[new_active].content.active()).unwrap().on_focus(true);
       }
       Action::Navigate { nav: Navigation::NewTerminal } => {
-        let root = self.workspace.root.as_path();
-        let terminal = match view::TerminalView::new_local(&self.workspace.clipboard, root) {
-          Ok(terminal) => terminal,
-          Err(e) => {
-            error!("failed to start a shell in {}: {e}", root.display());
-            return;
-          }
-        };
+        let Some(terminal) = self.terminal_view() else { return };
         let view = self.views.new_view(terminal);
         self.tabs.push(Tab {
           title:   "terminal".into(),
@@ -1620,14 +1613,8 @@ impl WorkspaceLayout {
         self.views.new_view(crate::view::FileTree::new(store.notifier(), &mut self.workspace))
       }
       ViewContent::Terminal(_) => {
-        let root = self.workspace.root.as_path();
-        match view::TerminalView::new_local(&self.workspace.clipboard, root) {
-          Ok(terminal) => self.views.new_view(terminal),
-          Err(e) => {
-            error!("failed to start a shell in {}: {e}", root.display());
-            return None;
-          }
-        }
+        let terminal = self.terminal_view()?;
+        self.views.new_view(terminal)
       }
       ViewContent::Shell(_) => {
         let content = self.shell_content()?;
