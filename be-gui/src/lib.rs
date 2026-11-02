@@ -100,6 +100,9 @@ struct State {
   corner_hover: Option<CornerButton>,
   /// The command palette, if it is open. It floats over whatever is showing.
   palette:      Option<palette::Palette>,
+  /// The `:` command prompt, when it is open over the terminal. Workspaces
+  /// keep theirs on the tab.
+  command:      Option<view::Popup>,
 }
 
 #[derive(Clone)]
@@ -306,6 +309,7 @@ impl State {
       list_return: AppView::Terminal,
       corner_hover: None,
       palette: None,
+      command: None,
     };
 
     if let Some(root) = args.editor {
@@ -671,6 +675,10 @@ impl State {
       which_key::draw(render, &entries);
     }
 
+    if let Some(command) = &mut self.command {
+      render.clipped(command.bounds(render.size()), |render| command.draw(render));
+    }
+
     if let Some(palette) = &self.palette {
       palette.draw(render);
     }
@@ -816,6 +824,7 @@ impl State {
     if let Event::Workspace(WorkspaceEvent::Editor(be_editor::EditorEvent::RunCommand(cmd))) =
       &event
     {
+      self.command = None;
       let (name, args) = cmd.split_once(' ').unwrap_or((cmd, ""));
       if name == "ws" {
         self.run_ws(args.trim(), store);
@@ -926,6 +935,7 @@ impl State {
       }
 
       Action::Navigate { nav: Navigation::OpenWorkspace } => {
+        self.command = None;
         if matches!(self.active, AppView::Terminal) {
           let path = if let Some(id) = self.terminal_remote_id {
             let Some(handle) = self.remote.as_ref().map(|r| r.handle()) else { return };
@@ -946,6 +956,18 @@ impl State {
           self.loading = None;
           self.terminal.on_focus(true);
           self.active = AppView::Terminal;
+        }
+      }
+
+      Action::SetMode { mode: Mode::Command, .. } if matches!(self.active, AppView::Terminal) => {
+        self.command = Some(view::Popup::Command(view::CommandView::new(store.notifier())));
+      }
+      Action::SetMode { mode: Mode::Normal, .. } if self.command.is_some() => {
+        self.command = None;
+      }
+      _ if self.command.is_some() => {
+        if let Some(command) = &mut self.command {
+          command.perform_action(action);
         }
       }
 
