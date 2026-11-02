@@ -88,6 +88,8 @@ struct State {
   remote:       Option<remote::RemoteSession>,
   /// The id of the next remote session. The terminal's is 0.
   next_session: u64,
+  /// The command that runs `be-host` on hosts from the config.
+  host_cmd:     String,
 
   /// The row selected on the workspace list.
   list_selected: usize,
@@ -299,6 +301,7 @@ impl State {
       loading: None,
       remote,
       next_session: 1,
+      host_cmd: args.remote_host_cmd.clone().unwrap_or_else(|| "be-host".into()),
       list_selected: 0,
       list_return: AppView::Terminal,
       corner_hover: None,
@@ -353,22 +356,35 @@ impl State {
     self.next_session += 1;
 
     let notify = store.notifier();
-    let (session, opening, error) =
-      match remote::RemoteSession::connect_like(id, from, move |wake| notify.remote_wake(id, wake))
-      {
-        Ok(session) => {
-          let handle = session.handle();
-          let opening = match terminal {
-            Some(term) => from.open_terminal_workspace(term, &handle),
-            None => handle.open_workspace(&path),
-          };
-          (Some(session), Some(opening), None)
-        }
-        Err(e) => {
-          error!("failed to connect to {}: {e}", from.target());
-          (None, None, Some(e.to_string()))
-        }
-      };
+    let session =
+      remote::RemoteSession::connect_like(id, from, move |wake| notify.remote_wake(id, wake));
+    let open_path = path.clone();
+    self.begin_loading(path, from.target(), session, |handle| match terminal {
+      Some(term) => from.open_terminal_workspace(term, handle),
+      None => handle.open_workspace(&open_path),
+    });
+  }
+
+  /// Shows a loading screen for the workspace at `path` on `host`, once
+  /// `session` is connected. `open` starts the workspace on the new
+  /// connection.
+  fn begin_loading(
+    &mut self,
+    path: PathBuf,
+    host: &str,
+    session: std::io::Result<remote::RemoteSession>,
+    open: impl FnOnce(&remote::RemoteHandle) -> remote::OpeningWorkspace,
+  ) {
+    let (session, opening, error) = match session {
+      Ok(session) => {
+        let opening = open(&session.handle());
+        (Some(session), Some(opening), None)
+      }
+      Err(e) => {
+        error!("failed to connect to {host}: {e}");
+        (None, None, Some(e.to_string()))
+      }
+    };
 
     self.loading = Some(Loading {
       path,
@@ -787,9 +803,85 @@ impl State {
       return false;
     }
 
+    if let Event::Workspace(WorkspaceEvent::Editor(be_editor::EditorEvent::RunCommand(cmd))) =
+      &event
+    {
+      let (name, args) = cmd.split_once(' ').unwrap_or((cmd, ""));
+      if name == "ws" {
+        self.run_ws(args.trim(), store);
+        return false;
+      }
+    }
+
     match &mut self.active {
       AppView::Workspace(w) => self.workspaces.get_mut(w).unwrap().on_event(event, store),
       AppView::Terminal | AppView::Loading | AppView::Workspaces => false,
+    }
+  }
+
+  /// `:ws [[host:]path]`. With no argument, opens a workspace at the active
+  /// file's directory (or the workspace's root). A path without a host is on
+  /// the machine the current workspace is on.
+  fn run_ws(&mut self, arg: &str, store: &mut RenderStore) {
+    let AppView::Workspace(current) = self.active.clone() else { return };
+    let layout = self.workspaces.get_mut(&current).unwrap();
+    let here = layout
+      .active_editor()
+      .and_then(|e| e.editor.file().and_then(|f| f.parent().map(|p| p.to_path_buf())));
+    let here = here.unwrap_or_else(|| current.as_path().to_path_buf());
+    let handle = layout.remote.as_ref().map(|r| r.handle());
+
+    // `name:path` names a configured host, unless the part before the colon
+    // is a path itself.
+    let hosted = arg.split_once(':').filter(|(h, _)| !h.is_empty() && !h.contains('/'));
+
+    if let Some((name, path)) = hosted {
+      let host = store.config.borrow().settings.hosts.get(name).cloned();
+      let Some(host) = host.filter(|h| !h.host.is_empty()) else {
+        error!("ws: no host named '{name}' in the config");
+        return;
+      };
+      // An empty path is the host's working directory.
+      let path = PathBuf::from(if path.is_empty() { "." } else { path });
+      let target = remote::RemoteTarget {
+        host:    host.host,
+        options: host.ssh_options,
+        path:    None,
+      };
+
+      let id = self.next_session;
+      self.next_session += 1;
+      let notify = store.notifier();
+      let session = remote::RemoteSession::connect(id, target, &self.host_cmd, move |wake| {
+        notify.remote_wake(id, wake)
+      });
+      let label = name.to_string();
+      let open_path = path.clone();
+      self.begin_loading(path, &label, session, |h| h.open_workspace(&open_path));
+      return;
+    }
+
+    let path = if arg.is_empty() {
+      here
+    } else {
+      let p = Path::new(arg);
+      if p.is_absolute() { p.to_path_buf() } else { current.as_path().join(p) }
+    };
+
+    match handle {
+      Some(handle) => self.start_remote_workspace(store, &handle, None, path),
+      None => {
+        if !path.exists() {
+          error!("ws: path does not exist: {}", path.display());
+          return;
+        }
+        let root = WorkspaceRoot::from_path(path.canonicalize().unwrap_or(path));
+        if !self.workspaces.contains_key(&root) {
+          self.workspaces.insert(root.clone(), WorkspaceLayout::new(root.clone(), store, None));
+        }
+        self.terminal.on_focus(false);
+        self.active = AppView::Workspace(root);
+      }
     }
   }
 
