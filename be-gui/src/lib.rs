@@ -829,9 +829,9 @@ impl State {
     }
   }
 
-  /// `:ws [host | [host:]path]`. With no argument, opens a workspace at the active
-  /// file's directory (or the workspace's root). A path without a host is on
-  /// the machine the current workspace is on.
+  /// `:ws [host | [host:]path]`. With no argument, opens a workspace at the
+  /// active file's directory (or the workspace's root). A path without a host
+  /// is on the machine the current workspace is on.
   fn run_ws(&mut self, arg: &str, store: &mut RenderStore) {
     let AppView::Workspace(current) = self.active.clone() else { return };
     let layout = self.workspaces.get_mut(&current).unwrap();
@@ -871,11 +871,8 @@ impl State {
         })
         .flatten();
       let path = PathBuf::from(if path.is_empty() { "." } else { path });
-      let target = remote::RemoteTarget {
-        host:    host.host,
-        options: host.ssh_options,
-        path:    None,
-      };
+      let target =
+        remote::RemoteTarget { host: host.host, options: host.ssh_options, path: None };
       let host_cmd = host.host_cmd;
 
       let id = self.next_session;

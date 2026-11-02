@@ -213,7 +213,11 @@ impl<'a> CapturesIter<'a> {
     let name = self.query.capture_names().get(cap.index as usize).unwrap();
 
     Some((
-      Highlight { start: range.start, end: range.end, key: crate::HighlightKey::TreeSitter(name) },
+      Highlight {
+        start: range.start,
+        end:   range.end,
+        key:   crate::HighlightKey::TreeSitter(name),
+      },
       pattern,
     ))
   }
@@ -224,9 +228,9 @@ impl<'a> Iterator for CapturesIter<'a> {
 
   fn next(&mut self) -> Option<Self::Item> {
     // When multiple patterns capture the exact same node, only the one defined
-    // last in the query applies. This matches tree-sitter's own highlighter, and
-    // is how queries make specific patterns (`@type`) override generic ones
-    // (`@constructor` on every capitalized identifier).
+    // last in the query applies. This matches tree-sitter's own highlighter,
+    // and is how queries make specific patterns (`@type`) override generic
+    // ones (`@constructor` on every capitalized identifier).
     loop {
       let Some((hl, pattern)) = self.next_raw() else {
         return self.pending.take().map(|(h, _)| h);

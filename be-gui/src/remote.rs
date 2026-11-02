@@ -47,18 +47,16 @@ pub struct RemoteTarget {
   /// Extra arguments for `ssh`.
   pub options: Vec<String>,
   /// `None`: the host's working directory.
-  pub path: Option<String>,
+  pub path:    Option<String>,
 }
 
 impl RemoteTarget {
   pub fn parse(s: &str) -> RemoteTarget {
     let rest = s.strip_prefix("ssh://").unwrap_or(s);
     match rest.split_once('/') {
-      Some((host, path)) => RemoteTarget {
-        host:    host.into(),
-        options: vec![],
-        path:    Some(format!("/{path}")),
-      },
+      Some((host, path)) => {
+        RemoteTarget { host: host.into(), options: vec![], path: Some(format!("/{path}")) }
+      }
       None => RemoteTarget { host: rest.into(), options: vec![], path: None },
     }
   }
@@ -607,8 +605,7 @@ impl RemoteSession {
         }
         Err(e) => {
           // A host with a different protocol may not even decode the call.
-          if matches!(e, CallError::App(_)) || !self.link.host.borrow().connection().is_finished()
-          {
+          if matches!(e, CallError::App(_)) || !self.link.host.borrow().connection().is_finished() {
             self.refuse(format!(
               "the host did not answer the version check ({e:?}); its be-host is probably not \
                protocol {}, so install a matching one there",
@@ -923,13 +920,16 @@ mod tests {
     let t = |s| RemoteTarget::parse(s);
     assert_eq!(t("host"), RemoteTarget { host: "host".into(), options: vec![], path: None });
     assert_eq!(t("me@host"), RemoteTarget { host: "me@host".into(), options: vec![], path: None });
-    assert_eq!(t("ssh://me@host"), RemoteTarget { host: "me@host".into(), options: vec![], path: None });
+    assert_eq!(
+      t("ssh://me@host"),
+      RemoteTarget { host: "me@host".into(), options: vec![], path: None }
+    );
     assert_eq!(
       t("ssh://me@host/home/me/src"),
       RemoteTarget {
         host:    "me@host".into(),
         options: vec![],
-        path:    Some("/home/me/src".into())
+        path:    Some("/home/me/src".into()),
       }
     );
   }

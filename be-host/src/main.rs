@@ -54,11 +54,7 @@ impl Host for Service {
   fn info(&self) -> Result<HostInfo, HostError> {
     let cwd = std::env::current_dir().map_err(io_error)?;
     let home = std::env::home_dir().map(|h| h.to_string_lossy().into_owned()).unwrap_or_default();
-    Ok(HostInfo {
-      version: PROTOCOL_VERSION,
-      cwd: cwd.to_string_lossy().into_owned(),
-      home,
-    })
+    Ok(HostInfo { version: PROTOCOL_VERSION, cwd: cwd.to_string_lossy().into_owned(), home })
   }
 
   fn list_dir(&self, path: String) -> Result<Vec<DirEntry>, HostError> {
