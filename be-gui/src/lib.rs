@@ -1584,6 +1584,9 @@ impl WorkspaceLayout {
       }
       _ => {}
     }
+    if let Some(remote) = &self.remote {
+      right.push(tab_layout.add_widget(crate::widget::Text::new(remote.handle().target())).id);
+    }
     right.push(
       tab_layout
         .add_widget(
