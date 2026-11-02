@@ -64,6 +64,7 @@ pane = "terminal"
 # [hosts.desktop]
 # host = "me@desktop"
 # ssh-options = ["-p", "2222", "-i", "~/.ssh/desktop"]
+# host-cmd = "/home/me/.cargo/bin/be-host"  # defaults to `be-host` on the PATH
 [hosts]
 
 [keybinds.settings]

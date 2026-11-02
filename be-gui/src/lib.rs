@@ -848,11 +848,13 @@ impl State {
         options: host.ssh_options,
         path:    None,
       };
+      let host_cmd = host.host_cmd;
 
       let id = self.next_session;
       self.next_session += 1;
       let notify = store.notifier();
-      let session = remote::RemoteSession::connect(id, target, &self.host_cmd, move |wake| {
+      let host_cmd = if host_cmd.is_empty() { self.host_cmd.clone() } else { host_cmd };
+      let session = remote::RemoteSession::connect(id, target, &host_cmd, move |wake| {
         notify.remote_wake(id, wake)
       });
       let label = name.to_string();

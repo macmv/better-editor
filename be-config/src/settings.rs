@@ -22,6 +22,9 @@ pub struct HostSettings {
   pub host:        String,
   /// Extra arguments for `ssh`, such as `["-p", "2222"]`.
   pub ssh_options: Vec<String>,
+  /// The command that runs `be-host` there, such as
+  /// `"/home/me/.cargo/bin/be-host"`. Empty: `be-host` from the `PATH`.
+  pub host_cmd:    String,
 }
 
 #[derive(Default, Config, Clone)]
