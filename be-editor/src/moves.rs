@@ -522,4 +522,14 @@ mod tests {
       4
     "#]);
   }
+
+  #[test]
+  fn search_next_multibyte() {
+    use be_input::ChangeDirection;
+
+    let mut editor = editor("\u{e9} foo foo");
+    editor.search.query = Some("foo".to_string());
+    editor.perform_move(Move::Result(ChangeDirection::Next), None);
+    editor.perform_move(Move::Result(ChangeDirection::Next), None);
+  }
 }
