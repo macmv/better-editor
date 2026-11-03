@@ -134,9 +134,7 @@ impl EditorView {
     Ok(())
   }
 
-  pub fn animated(&self) -> bool {
-    self.progress_animation.is_running() || self.editor.loading()
-  }
+  pub fn animated(&self) -> bool { self.progress_animation.is_running() || self.editor.loading() }
 
   pub fn layout(&mut self, layout: &mut Layout) {
     puffin::profile_function!();
