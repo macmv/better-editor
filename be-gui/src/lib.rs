@@ -842,13 +842,31 @@ impl State {
   /// active file's directory (or the workspace's root). A path without a host
   /// is on the machine the current workspace is on.
   fn run_ws(&mut self, arg: &str, store: &mut RenderStore) {
-    let AppView::Workspace(current) = self.active.clone() else { return };
-    let layout = self.workspaces.get_mut(&current).unwrap();
-    let here = layout
-      .active_editor()
-      .and_then(|e| e.editor.file().and_then(|f| f.parent().map(|p| p.to_path_buf())));
-    let here = here.unwrap_or_else(|| current.as_path().to_path_buf());
-    let handle = layout.remote.as_ref().map(|r| r.handle());
+    // `base` is where relative paths start, and `here` is what an empty
+    // argument means. `term` is set in a remote terminal, whose directory is
+    // only known on the host.
+    let (base, here, handle, term) = match self.active.clone() {
+      AppView::Workspace(current) => {
+        let layout = self.workspaces.get_mut(&current).unwrap();
+        let here = layout
+          .active_editor()
+          .and_then(|e| e.editor.file().and_then(|f| f.parent().map(|p| p.to_path_buf())));
+        let here = here.unwrap_or_else(|| current.as_path().to_path_buf());
+        let handle = layout.remote.as_ref().map(|r| r.handle());
+        (current.as_path().to_path_buf(), here, handle, None)
+      }
+      AppView::Terminal => match self.terminal_remote_id {
+        Some(id) => {
+          let Some(handle) = self.remote.as_ref().map(|r| r.handle()) else { return };
+          (PathBuf::from("."), PathBuf::from("."), Some(handle), Some(id))
+        }
+        None => {
+          let dir = self.terminal.current_dir();
+          (dir.clone(), dir, None, None)
+        }
+      },
+      _ => return,
+    };
 
     // `name:path` names a configured host, unless the part before the colon
     // is a path itself.
@@ -904,11 +922,15 @@ impl State {
       here
     } else {
       let p = Path::new(arg);
-      if p.is_absolute() { p.to_path_buf() } else { current.as_path().join(p) }
+      if p.is_absolute() { p.to_path_buf() } else { base.join(p) }
     };
 
     match handle {
-      Some(handle) => self.start_remote_workspace(store, &handle, None, path),
+      Some(handle) => {
+        // With no argument in a remote terminal, open where its shell is.
+        let term = term.filter(|_| arg.is_empty());
+        self.start_remote_workspace(store, &handle, term, path)
+      }
       None => {
         if !path.exists() {
           error!("ws: path does not exist: {}", path.display());
