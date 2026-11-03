@@ -476,6 +476,56 @@ impl LspCommand for DocumentFormat {
   }
 }
 
+pub struct PrepareRename {
+  pub path:   PathBuf,
+  pub cursor: Cursor,
+}
+
+impl LspCommand for PrepareRename {
+  type Result = Option<Range<Position>>;
+
+  fn is_capable(&self, caps: &types::ServerCapabilities) -> bool {
+    caps.rename_provider.as_ref().is_some_and(|r| match r {
+      types::Or2::A(_) => false,
+      types::Or2::B(v) => v.prepare_provider.is_some_and(|v| v),
+    })
+  }
+
+  fn send(&self, client: &mut LspClient) -> Option<Task<Self::Result>> {
+    let (position, encoding, doc) = {
+      let state = client.state.lock();
+      let file = state.file(&self.path)?;
+      (state.encode_cursor(&file.doc, self.cursor), state.position_encoding(), file.doc.clone())
+    };
+
+    Some(
+      client
+        .request::<types::request::TextDocumentPrepareRename>(types::PrepareRenameParams {
+          text_document_position_params: types::TextDocumentPositionParams {
+            text_document: doc_id(&self.path),
+            position,
+          },
+          ..Default::default()
+        })
+        .map(move |r| match r {
+          Some(types::PrepareRenameResult::Range(r)) => {
+            let r = decode_range(encoding, &doc, r);
+            Some(r)
+          }
+          Some(types::PrepareRenameResult::RangeRangePlaceholderString { range, .. }) => {
+            let r = decode_range(encoding, &doc, range);
+            Some(r)
+          }
+
+          // TODO: Return Some() and make up our own range.
+          Some(types::PrepareRenameResult::DefaultBehaviorBoolean { .. }) => None,
+
+          None => None,
+        }),
+    )
+  }
+}
+
 impl LspWorker {
   pub fn handle_request(
     &self,
