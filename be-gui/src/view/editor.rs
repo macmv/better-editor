@@ -272,7 +272,7 @@ impl EditorView {
 
           if pos.x >= self.gutter_width() {
             let column_byte = layout.index(pos.x - self.gutter_width(), cursor_mode);
-            let column = self.doc().line(line).byte_slice(..column_byte).graphemes().count();
+            let column = self.doc().line(line).byte_slice(..column_byte).grapheme_len();
 
             self.editor.move_to(Cursor {
               line,
@@ -455,7 +455,7 @@ impl EditorView {
         let end_column = if line == end.line {
           self.doc().cursor_column_offset(be_doc::Cursor {
             column: end.column.clamp(be_doc::Column(
-              self.editor.doc().line(end.line).graphemes().count().saturating_sub(1),
+              self.editor.doc().line(end.line).grapheme_len().saturating_sub(1),
             )),
             ..end
           })

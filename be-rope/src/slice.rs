@@ -110,6 +110,12 @@ impl<'a> RopeSlice<'a> {
     b.utf16 - a.utf16
   }
 
+  /// The number of `\n` bytes in the slice.
+  pub fn newline_len(&self) -> usize {
+    let (a, b) = self.bounds();
+    b.newlines - a.newlines
+  }
+
   /// The UTF-16 offset of a byte.
   #[track_caller]
   pub fn utf16_of_byte(&self, byte: usize) -> usize { self.byte_slice(..byte).utf16_len() }

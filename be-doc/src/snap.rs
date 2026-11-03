@@ -143,7 +143,7 @@ impl DocumentSnapshot {
     }
 
     let line = Line(self.line_of_byte(offset).0.clamp(0, self.len_lines().saturating_sub(1)));
-    let column = Column(self.range(self.byte_of_line(line)..offset).graphemes().count());
+    let column = Column(self.range(self.byte_of_line(line)..offset).grapheme_len());
     let mut cursor = Cursor { line, column, target_column: VisualColumn(0) };
     cursor.target_column = self.visual_column(cursor);
     cursor
@@ -155,7 +155,7 @@ impl DocumentSnapshot {
     }
 
     let line = Line(self.line_of_byte(offset).0.clamp(0, self.len_lines().saturating_sub(1)));
-    let column = Column(self.range(self.byte_of_line(line)..offset).graphemes().count());
+    let column = Column(self.range(self.byte_of_line(line)..offset).grapheme_len());
     Position { offset, line, column }
   }
 
@@ -171,38 +171,21 @@ impl DocumentSnapshot {
 
   pub fn cursor_column_offset(&self, cursor: Cursor) -> usize {
     let line = self.line(cursor.line);
-    line.graphemes().take(cursor.column.0).map(|g| g.byte_len()).sum()
+    line.byte_of_grapheme(cursor.column.0.min(line.grapheme_len()))
   }
 
   pub fn offset_by_graphemes(&self, index: usize, offset: isize) -> usize {
-    if offset > 0 {
-      index
-        + self
-          .rope
-          .byte_slice(index..)
-          .graphemes()
-          .take(offset as usize)
-          .map(|g| g.byte_len())
-          .sum::<usize>()
-    } else {
-      index
-        - self
-          .rope
-          .byte_slice(..index)
-          .graphemes()
-          .rev()
-          .take(-offset as usize)
-          .map(|g| g.byte_len())
-          .sum::<usize>()
-    }
+    let current = self.rope.grapheme_of_byte(index);
+    let target = current.saturating_add_signed(offset).min(self.rope.grapheme_len());
+    self.rope.byte_of_grapheme(target)
   }
 
   #[track_caller]
   pub fn grapheme_slice(&self, cursor: Cursor, len: usize) -> Range<usize> {
     let offset = self.cursor_offset(cursor);
-    let count =
-      self.rope.byte_slice(offset..).graphemes().take(len).map(|g| g.byte_len()).sum::<usize>();
-    offset..offset + count
+    let target =
+      self.rope.grapheme_of_byte(offset).saturating_add(len).min(self.rope.grapheme_len());
+    offset..self.rope.byte_of_grapheme(target)
   }
 
   #[track_caller]

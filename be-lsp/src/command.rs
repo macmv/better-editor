@@ -40,8 +40,8 @@ impl LspState {
     let character = match self.position_encoding() {
       PositionEncoding::Utf8 => (pos - doc.byte_of_line(line)) as u32,
       PositionEncoding::Utf16 => {
-        doc.range(pos - doc.byte_of_line(line)..pos).chars().map(|c| c.len_utf16()).sum::<usize>()
-          as u32
+        // `pos` may be at the very end of the file, which `range()` rejects.
+        doc.line_with_terminator(line).utf16_of_byte(pos - doc.byte_of_line(line)) as u32
       }
     };
 
@@ -56,11 +56,8 @@ impl LspState {
           PositionEncoding::Utf8 => doc.cursor_column_offset(cursor) as u32,
           PositionEncoding::Utf16 => {
             let line = doc.line(cursor.line);
-            line
-              .graphemes()
-              .take(cursor.column.0)
-              .map(|g| g.chars().map(|c| c.len_utf16()).sum::<usize>())
-              .sum::<usize>() as u32
+            let byte = line.byte_of_grapheme(cursor.column.0.min(line.grapheme_len()));
+            line.utf16_of_byte(byte) as u32
           }
         }
       },
@@ -115,16 +112,9 @@ pub fn decode_position(
     PositionEncoding::Utf8 => pos.character as usize,
     PositionEncoding::Utf16 => {
       let line = doc.line(line);
-      let mut total = 0;
-      let mut character = 0;
-      for c in line.chars() {
-        if total + c.len_utf16() > pos.character as usize {
-          break;
-        }
-        total += c.len_utf16();
-        character += c.len_utf8();
-      }
-      character
+      // Out of range positions clamp to the end of the line. A position in the
+      // middle of a surrogate pair rounds down to the start of the character.
+      line.byte_of_utf16((pos.character as usize).min(line.utf16_len()))
     }
   };
 
@@ -133,7 +123,7 @@ pub fn decode_position(
   // the `clamp()` calls above should catch this.
   assert!(offset <= doc.len(), "offset out of bounds");
 
-  let column = doc.line(line).byte_slice(0..character).graphemes().count();
+  let column = doc.line(line).byte_slice(0..character).grapheme_len();
 
   Position { offset, line, column: be_doc::Column(column) }
 }

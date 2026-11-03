@@ -211,18 +211,16 @@ impl EditorState {
 
       self.cursor.column.0 = 0;
       self.cursor.line.0 -= 1;
-      target_column += self.doc.line_with_terminator(self.cursor.line).graphemes().count() as isize;
+      target_column += self.doc.line_with_terminator(self.cursor.line).grapheme_len() as isize;
     }
 
-    while target_column
-      >= self.doc.line_with_terminator(self.cursor.line).graphemes().count() as isize
-    {
+    while target_column >= self.doc.line_with_terminator(self.cursor.line).grapheme_len() as isize {
       if self.cursor.line == self.max_line() {
         self.move_to_col(self.max_column());
         return;
       }
 
-      target_column -= self.doc.line_with_terminator(self.cursor.line).graphemes().count() as isize;
+      target_column -= self.doc.line_with_terminator(self.cursor.line).grapheme_len() as isize;
       self.cursor.column.0 = 0;
       self.cursor.line.0 += 1;
     }
@@ -279,7 +277,7 @@ impl EditorState {
   fn max_column(&self) -> Column {
     let line = self.doc.line(self.cursor.line);
 
-    let mut max_col = line.graphemes().count();
+    let mut max_col = line.grapheme_len();
     if self.mode == Mode::Normal {
       max_col = max_col.saturating_sub(1);
     }
@@ -295,14 +293,14 @@ impl EditorState {
 
     let current_offset = self.doc.cursor_offset(self.cursor);
     if current_offset >= change.range.end {
-      let line_delta = change.text.chars().filter(|c| *c == '\n').count() as isize
-        - self.doc.range(change.range.clone()).chars().filter(|c| *c == '\n').count() as isize;
+      let line_delta = change.text.matches('\n').count() as isize
+        - self.doc.range(change.range.clone()).newline_len() as isize;
 
       if line_delta == 0 {
         let target_line = self.doc.line_of_byte(change.range.end);
         if self.cursor.line == target_line {
           let column_delta = change.text.graphemes(true).count() as isize
-            - self.doc.range(change.range.clone()).graphemes().count() as isize;
+            - self.doc.range(change.range.clone()).grapheme_len() as isize;
           self.move_col_rel(column_delta as i32);
         }
       } else {
