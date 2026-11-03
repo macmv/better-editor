@@ -210,9 +210,15 @@ impl EditorState {
       Move::Result(dir) => {
         if let Some(search) = self.search.query.as_ref() {
           for _ in 0..count.unwrap_or(1) {
-            let offset = self.doc.cursor_offset(self.cursor) + 1;
+            let offset = self.doc.cursor_offset(self.cursor);
             if let Some(res) = match dir {
-              ChangeDirection::Next => self.doc.find_from(offset, search).next(),
+              ChangeDirection::Next => {
+                // Skip past the character under the cursor, so we don't re-find
+                // the current match. This must land on a char
+                // boundary.
+                let width = self.doc.range(offset..).chars().next().map_or(0, char::len_utf8);
+                self.doc.find_from(offset + width, search).next()
+              }
               ChangeDirection::Prev => self.doc.rfind_from(offset, search).next(),
             } {
               let cursor = self.doc.offset_to_cursor(res);
@@ -524,12 +530,43 @@ mod tests {
   }
 
   #[test]
-  fn search_next_multibyte() {
+  fn search_multibyte() {
     use be_input::ChangeDirection;
 
+    // The e-acute is 2 bytes, so "foo" matches are at byte offsets 3 and 7.
     let mut editor = editor("\u{e9} foo foo");
     editor.search.query = Some("foo".to_string());
     editor.perform_move(Move::Result(ChangeDirection::Next), None);
+    assert_eq!(editor.doc.cursor_offset(editor.cursor), 3);
     editor.perform_move(Move::Result(ChangeDirection::Next), None);
+    assert_eq!(editor.doc.cursor_offset(editor.cursor), 7);
+    editor.perform_move(Move::Result(ChangeDirection::Prev), None);
+    assert_eq!(editor.doc.cursor_offset(editor.cursor), 3);
+  }
+
+  #[test]
+  fn search_next_from_multibyte_char() {
+    use be_input::ChangeDirection;
+
+    // The cursor starts on the 2 byte character, so skipping one byte would
+    // land mid-character.
+    let mut editor = editor("\u{e9}foo");
+    editor.search.query = Some("foo".to_string());
+    editor.perform_move(Move::Result(ChangeDirection::Next), None);
+    assert_eq!(editor.doc.cursor_offset(editor.cursor), 2);
+  }
+
+  #[test]
+  fn search_prev_single_byte() {
+    use be_input::ChangeDirection;
+
+    let mut editor = editor("a a a");
+    editor.search.query = Some("a".to_string());
+    editor.perform_move(Move::Result(ChangeDirection::Next), None);
+    editor.check(expect![@"a ⟦a⟧ a"]);
+    editor.perform_move(Move::Result(ChangeDirection::Next), None);
+    editor.check(expect![@"a a ⟦a⟧"]);
+    editor.perform_move(Move::Result(ChangeDirection::Prev), None);
+    editor.check(expect![@"a ⟦a⟧ a"]);
   }
 }
