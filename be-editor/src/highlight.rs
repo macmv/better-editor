@@ -317,4 +317,34 @@ mod tests {
       &[stack(1, ["long"]), stack(2, ["y", "long"]), stack(3, ["z", "long"]), stack(4, ["z"])],
     );
   }
+
+  #[test]
+  fn search_highlights_repro() {
+    let mut e = EditorState::from("foo bar foo baz");
+    e.search.query = Some("foo".to_string());
+    let out: Vec<_> = e.highlights(0..15).collect();
+    println!("{out:?}");
+    assert!(!out.is_empty());
+  }
+
+  #[test]
+  fn search_highlights_second_line() {
+    let mut e = EditorState::from("foo\nbar foo\n\nfoo\n");
+    e.search.query = Some("foo".to_string());
+    for r in [0..3, 4..11, 12..12, 13..16, 17..17] {
+      let out: Vec<_> = e.highlights(r.clone()).collect();
+      println!("{r:?} {out:?}");
+    }
+  }
+
+  #[test]
+  fn search_highlights_emoji() {
+    let mut e = EditorState::from("\u{1f600}\u{1f600} foo \u{1f600} foo\n");
+    e.search.query = Some("foo".to_string());
+    println!("{:?}", e.doc.find("foo").collect::<Vec<_>>());
+    println!("{:?}", e.highlights(0..22).collect::<Vec<_>>());
+    e.search.query = Some("\u{1f600}".to_string());
+    println!("{:?}", e.doc.find("\u{1f600}").collect::<Vec<_>>());
+    println!("{:?}", e.highlights(0..22).collect::<Vec<_>>());
+  }
 }

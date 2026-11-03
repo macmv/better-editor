@@ -229,27 +229,31 @@ impl Render<'_> {
         let mut x = rect.x0 as f32 + glyph_run.offset();
         let baseline = (rect.y0 as f32 + glyph_run.baseline()).round();
 
-        if let Some((next_change, next_background)) = text.backgrounds.get(background_idx) {
-          if let Some(cluster) = run.clusters().find(|c| c.text_range().contains(next_change)) {
-            let next_x = cluster.visual_offset().unwrap_or_default() as f64;
+        // A single run can contain several background boundaries (for example
+        // a search match in text with no syntax highlighting), so consume all
+        // of them.
+        while let Some((next_change, next_background)) = text.backgrounds.get(background_idx) {
+          let Some(cluster) = run.clusters().find(|c| c.text_range().contains(next_change)) else {
+            break;
+          };
+          let next_x = cluster.visual_offset().unwrap_or_default() as f64;
 
-            if let Some((background_x, Some(background_brush))) = current_background.as_ref() {
-              let line = cluster.line();
-              let metrics = line.metrics();
+          if let Some((background_x, Some(background_brush))) = current_background.as_ref() {
+            let line = cluster.line();
+            let metrics = line.metrics();
 
-              let rect = Rect::new(
-                *background_x,
-                metrics.block_min_coord as f64,
-                next_x,
-                metrics.block_max_coord as f64,
-              )
-              .expand();
-              self.scene.fill(Fill::NonZero, transform, background_brush, None, &rect);
-            }
-
-            current_background = Some((next_x, next_background.clone()));
-            background_idx += 1;
+            let rect = Rect::new(
+              *background_x,
+              metrics.block_min_coord as f64,
+              next_x,
+              metrics.block_max_coord as f64,
+            )
+            .expand();
+            self.scene.fill(Fill::NonZero, transform, background_brush, None, &rect);
           }
+
+          current_background = Some((next_x, next_background.clone()));
+          background_idx += 1;
         }
 
         if let Some(underline) = &style.underline {
@@ -308,6 +312,19 @@ impl Render<'_> {
             .draw(Fill::NonZero, glyphs);
         }
       }
+    }
+
+    // A background that runs to the end of the text has no closing boundary
+    // inside any cluster, so close it here.
+    if let Some((background_x, Some(background_brush))) = current_background.as_ref() {
+      let rect = Rect::new(
+        *background_x,
+        0.0,
+        f64::from(text.layout.full_width()),
+        f64::from(text.layout.height()),
+      )
+      .expand();
+      self.scene.fill(Fill::NonZero, transform, background_brush, None, &rect);
     }
   }
 
@@ -697,5 +714,56 @@ where
     WhiteSpaceCollapse(v) => WhiteSpaceCollapse(v),
     OverflowWrap(v) => OverflowWrap(v),
     TextWrapMode(v) => TextWrapMode(v),
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  /// Mirrors the background-consumption loop in `draw_text`, and returns how
+  /// many background boundaries it consumed.
+  fn consumed_boundaries(text: &str, range: Range<usize>) -> (usize, usize) {
+    let config = Rc::new(RefCell::new(Config::default()));
+    let mut store = TextStore::new(&config);
+    let mut builder = store.layout_builder(Font::Editor, text, Color::WHITE, 1.0);
+    builder.background(range, Color::WHITE);
+    let (mut layout, backgrounds) = builder.build(text);
+    layout.break_all_lines(None);
+    layout.align(parley::Alignment::Start, parley::AlignmentOptions::default());
+
+    let mut idx = 0;
+    let mut runs = 0;
+    for line in layout.lines() {
+      for item in line.items() {
+        let parley::PositionedLayoutItem::GlyphRun(glyph_run) = item else { continue };
+        runs += 1;
+        let run = glyph_run.run();
+        while let Some((next_change, _)) = backgrounds.get(idx) {
+          if run.clusters().any(|c| c.text_range().contains(next_change)) {
+            idx += 1;
+          } else {
+            break;
+          }
+        }
+      }
+    }
+    (idx, runs)
+  }
+
+  #[test]
+  fn background_ascii() {
+    let (consumed, runs) = consumed_boundaries("foo bar foo baz", 8..11);
+    println!("ascii: consumed {consumed}, runs {runs}");
+    assert_eq!(consumed, 2);
+  }
+
+  #[test]
+  fn background_with_emoji() {
+    let text = "\u{1f600}\u{1f600} foo bar\nfoo \u{1f389} foo baz";
+    let start = text.rfind("foo").unwrap();
+    let (consumed, runs) = consumed_boundaries(text, start..start + 3);
+    println!("emoji: consumed {consumed}, runs {runs}");
+    assert_eq!(consumed, 2);
   }
 }
