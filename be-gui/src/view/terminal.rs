@@ -216,8 +216,13 @@ impl TerminalView {
       DrawOptions::screen(state, Rect::from_origin_size((0.0, 0.0), size), self.size.rows);
     options.pixel_offset = self.viewport_offset;
     options.selection = self.selection;
-    options.cursor =
-      state.cursor.visible.then(|| CursorDraw { pos: state.cursor.pos, focused: self.focused });
+    // The cursor is in screen rows, but we may be scrolled back into history.
+    // Shift it down by the scroll amount, and hide it if it fell off the
+    // bottom.
+    let mut cursor_pos = state.cursor.pos;
+    cursor_pos.row += self.terminal.viewport_offset();
+    options.cursor = (state.cursor.visible && cursor_pos.row < self.size.rows)
+      .then(|| CursorDraw { pos: cursor_pos, focused: self.focused });
 
     self.painter.draw(render, state, &options);
   }

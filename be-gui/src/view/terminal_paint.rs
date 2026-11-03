@@ -36,7 +36,7 @@ pub fn grid_size(size: Size, character: Size) -> be_terminal::Size {
 #[derive(Clone, Copy)]
 pub struct CursorDraw {
   /// The cursor position, in displayed rows and columns (relative to the
-  /// first drawn row, and not affected by `pixel_offset`).
+  /// first drawn row). `pixel_offset` is applied on top of this.
   pub pos:     Position,
   /// Focused cursors are filled, unfocused ones are an outline.
   pub focused: bool,
@@ -148,7 +148,9 @@ impl TerminalPainter {
       let cursor = Rect::from_origin_size(
         (
           origin.x + (pos.col as f64 * character_size.width).round(),
-          origin.y + (pos.row as f64 * character_size.height).round(),
+          origin.y
+            + (pos.row as f64 * character_size.height + options.pixel_offset * SCROLL_LINE_HEIGHT)
+              .round(),
         ),
         (character_size.width.ceil(), character_size.height.ceil()),
       );
