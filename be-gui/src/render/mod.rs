@@ -207,23 +207,27 @@ impl App {
 
     let scene = render.scene;
 
-    self
-      .store
-      .render
-      .render_to_texture(
-        &device,
-        &queue,
-        &scene,
-        &self.texture_view,
-        &vello::RenderParams {
-          base_color:          encode_color(Color::WHITE),
-          width:               surface.texture.width(),
-          height:              surface.texture.height(),
-          antialiasing_method: vello::AaConfig::Msaa16,
-        },
-      )
-      .unwrap();
+    {
+      puffin::profile_scope!("vello render_to_texture");
+      self
+        .store
+        .render
+        .render_to_texture(
+          &device,
+          &queue,
+          &scene,
+          &self.texture_view,
+          &vello::RenderParams {
+            base_color:          encode_color(Color::WHITE),
+            width:               surface.texture.width(),
+            height:              surface.texture.height(),
+            antialiasing_method: vello::AaConfig::Msaa16,
+          },
+        )
+        .unwrap();
+    }
 
+    puffin::profile_scope!("blit + submit");
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
     self.blitter.copy(
       device,

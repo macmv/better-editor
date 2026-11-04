@@ -262,26 +262,36 @@ impl winit::application::ApplicationHandler<Event> for App {
       WindowEvent::RedrawRequested => {
         if let Some(init) = &mut self.init {
           use wgpu::CurrentSurfaceTexture::*;
-          let texture = match init.surface.get_current_texture() {
-            Success(texture) | Suboptimal(texture) => texture,
-            Outdated | Lost => {
-              init.surface.configure(&init.device, &init.config);
-              init.window.request_redraw();
-              return;
+          puffin::GlobalProfiler::lock().new_frame();
+
+          let texture = {
+            puffin::profile_scope!("get_current_texture");
+            match init.surface.get_current_texture() {
+              Success(texture) | Suboptimal(texture) => texture,
+              Outdated | Lost => {
+                init.surface.configure(&init.device, &init.config);
+                init.window.request_redraw();
+                return;
+              }
+              Timeout | Occluded => return,
+              Validation => panic!("surface validation error"),
             }
-            Timeout | Occluded => return,
-            Validation => panic!("surface validation error"),
           };
 
-          puffin::GlobalProfiler::lock().new_frame();
           init.app.render(&texture, &init.device, &init.queue, init.scale);
 
           init.window.pre_present_notify();
-          init.queue.present(texture);
+          {
+            puffin::profile_scope!("present");
+            init.queue.present(texture);
+          }
 
           // We'd like to stay up to date with events, so lets avoid buffering a
           // bunch of frames.
-          init.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+          {
+            puffin::profile_scope!("device.poll (GPU wait)");
+            init.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+          }
 
           if init.app.state.should_exit() {
             event_loop.exit();
