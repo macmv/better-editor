@@ -158,22 +158,20 @@ impl Perform for TerminalState {
       // Also used for taskbar progress: OSC 9 ; 4 ; n  (n=0-100).
       // Seen in log as params=[[57],[52],[48],[]] = "9;4;0" (progress indicator).
       b"9" => unhandled!("desktop notification / progress"),
-      b"10" => unhandled!("set foreground color"),
-      b"11" => {
+      b"10" | b"11" => {
         if params.len() == 2 {
           if params[1] == b"?" {
+            let code = str::from_utf8(params[0]).unwrap();
+            let [r, g, b] =
+              if params[0] == b"10" { self.default_foreground } else { self.default_background };
             self.send_text(&format!(
-              "\x1b]11;rgb:{r:02x}{r:02x}/{g:02x}{g:02x}/{b:02x}{b:02x}{terminator}",
-              // TODO: Report background color.
-              r = 0,
-              g = 0,
-              b = 0,
+              "\x1b]{code};rgb:{r:02x}{r:02x}/{g:02x}{g:02x}/{b:02x}{b:02x}{terminator}",
             ));
           } else {
-            unhandled!("set background color");
+            unhandled!("set default color");
           }
         } else {
-          unhandled!("background color");
+          unhandled!("default color");
         }
       }
       b"12" => unhandled!("set cursor color"),

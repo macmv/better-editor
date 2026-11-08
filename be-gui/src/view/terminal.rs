@@ -182,6 +182,9 @@ impl TerminalView {
   pub fn layout(&mut self, layout: &mut Layout) {
     puffin::profile_function!();
 
+    let [r, g, b, _] = layout.store.theme.text.to_rgba8().to_u8_array();
+    let [br, bg, bb, _] = layout.store.theme.background.to_rgba8().to_u8_array();
+    self.terminal.set_default_colors([r, g, b], [br, bg, bb]);
     if self.terminal.update() {
       layout.close_view();
     }

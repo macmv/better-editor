@@ -144,8 +144,10 @@ pub struct TerminalState {
   kitty_flags: u8,
   kitty_stack: Vec<u8>,
 
-  pending_writes: Vec<u8>,
-  charsets:       [Charset; 4],
+  pending_writes:     Vec<u8>,
+  default_foreground: [u8; 3],
+  default_background: [u8; 3],
+  charsets:           [Charset; 4],
 
   // Whether the parser is known to be between sequences, so printable ASCII can skip it. This is
   // conservative: it is false whenever we can't be sure. The parser doesn't expose its state, so
@@ -297,6 +299,13 @@ impl Terminal {
   }
 
   pub fn state(&self) -> &TerminalState { &self.emu.state }
+
+  /// Sets the rendered default colors reported to applications through OSC
+  /// 10/11.
+  pub fn set_default_colors(&mut self, foreground: [u8; 3], background: [u8; 3]) {
+    self.emu.state.default_foreground = foreground;
+    self.emu.state.default_background = background;
+  }
   pub fn has_pending_writes(&self) -> bool { self.pty.has_pending_writes() }
 
   pub fn current_dir(&self) -> PathBuf { self.pty.current_dir() }
@@ -556,6 +565,8 @@ impl TerminalState {
       kitty_stack: vec![],
 
       pending_writes: vec![],
+      default_foreground: [255; 3],
+      default_background: [0; 3],
       charsets: [Charset::Ascii; 4],
 
       ground: true,

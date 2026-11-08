@@ -87,6 +87,20 @@ struct Vt {
   parser: Parser,
 }
 
+#[test]
+fn default_color_queries_report_rendered_colors() {
+  let mut vt = Vt::new(3, 80);
+  vt.state.default_foreground = [240, 230, 220];
+  vt.state.default_background = [24, 20, 36];
+  // Codex queries both colors before choosing its composer background.
+  // Preserve the query's terminator, whether ST or BEL.
+  vt.feed_bytes(b"\x1b]10;?\x1b\\\x1b]11;?\x07");
+  assert_eq!(
+    vt.state.pending_writes,
+    b"\x1b]10;rgb:f0f0/e6e6/dcdc\x1b\\\x1b]11;rgb:1818/1414/2424\x07"
+  );
+}
+
 impl Vt {
   fn new(rows: usize, cols: usize) -> Self {
     Vt { state: TerminalState::new(Size { rows, cols }), parser: Parser::<Utf8Parser>::new() }
