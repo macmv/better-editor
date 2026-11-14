@@ -10,10 +10,6 @@ use peniko::color::AlphaColor;
 
 use crate::{Color, Render, RenderStore, TextLayout, oklch, theme::Theme};
 
-/// How many pixels a whole row of `DrawOptions::pixel_offset` is worth. This
-/// matches the scroll step used by the terminal view.
-const SCROLL_LINE_HEIGHT: f64 = 20.0;
-
 /// How opaque `SGR 2` (dim) text is drawn.
 const DIM_ALPHA: f32 = 0.55;
 
@@ -51,7 +47,7 @@ pub struct DrawOptions {
   pub first_row:    usize,
   /// The number of rows to draw, starting at `first_row`.
   pub rows:         usize,
-  /// A pixel shift applied to every row. If positive, the row above
+  /// A shift, in rows, applied to every row. If positive, the row above
   /// `first_row` is drawn as well, as it is partially visible.
   pub pixel_offset: f64,
   /// Selected cells, in displayed rows. Rows above `first_row` are never
@@ -124,7 +120,7 @@ impl TerminalPainter {
 
     let start = if options.pixel_offset > 0.0 { -1 } else { 0 };
     for line in start..=options.rows as isize {
-      let y = line as f64 * character_size.height + options.pixel_offset * SCROLL_LINE_HEIGHT;
+      let y = line as f64 * character_size.height + options.pixel_offset * character_size.height;
       let Some(layout) = self.layout_line(render, state, options, line) else { continue };
 
       for range in &layout.background {
@@ -149,7 +145,8 @@ impl TerminalPainter {
         (
           origin.x + (pos.col as f64 * character_size.width).round(),
           origin.y
-            + (pos.row as f64 * character_size.height + options.pixel_offset * SCROLL_LINE_HEIGHT)
+            + (pos.row as f64 * character_size.height
+              + options.pixel_offset * character_size.height)
               .round(),
         ),
         (character_size.width.ceil(), character_size.height.ceil()),
