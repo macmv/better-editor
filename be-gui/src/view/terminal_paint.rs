@@ -123,7 +123,7 @@ impl TerminalPainter {
     let origin = options.rect.origin();
 
     let start = if options.pixel_offset > 0.0 { -1 } else { 0 };
-    for line in start..options.rows as isize {
+    for line in start..=options.rows as isize {
       let y = line as f64 * character_size.height + options.pixel_offset * SCROLL_LINE_HEIGHT;
       let Some(layout) = self.layout_line(render, state, options, line) else { continue };
 
