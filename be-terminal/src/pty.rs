@@ -4,7 +4,10 @@ use std::{
   io::{self, Read, Write},
   os::{
     fd::{AsRawFd, RawFd},
-    unix::process::{CommandExt, ExitStatusExt},
+    unix::{
+      ffi::OsStrExt,
+      process::{CommandExt, ExitStatusExt},
+    },
   },
   path::{Path, PathBuf},
   process::Command,
@@ -185,7 +188,27 @@ impl PtyHost for Pty {
     {
       std::fs::read_link(format!("/proc/{}/cwd", self.child.id())).unwrap()
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    {
+      let mut info: libc::proc_vnodepathinfo = unsafe { std::mem::zeroed() };
+      let size = std::mem::size_of::<libc::proc_vnodepathinfo>() as libc::c_int;
+      let ret = unsafe {
+        libc::proc_pidinfo(
+          self.child.id() as libc::c_int,
+          libc::PROC_PIDVNODEPATHINFO,
+          0,
+          &mut info as *mut _ as *mut libc::c_void,
+          size,
+        )
+      };
+      if ret == size {
+        let path = unsafe { std::ffi::CStr::from_ptr(info.pvi_cdir.vip_path.as_ptr().cast()) };
+        return PathBuf::from(std::ffi::OsStr::from_bytes(path.to_bytes()));
+      }
+      warn!("failed to read the shell's working directory");
+      std::env::current_dir().unwrap()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
       warn!("current_dir not implemented on platform");
       std::env::current_dir().unwrap()

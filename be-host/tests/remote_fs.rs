@@ -22,7 +22,7 @@ fn connect() -> Session {
   let mut cmd = Command::new(env!("CARGO_BIN_EXE_be-host"));
   cmd.arg("--stdio");
   let host = Rc::new(RefCell::new(RemoteHost::spawn(cmd, Instant::now()).unwrap()));
-  let local = host.borrow().connection().local().clone();
+  let local = host.borrow().connection().channel();
   Session { t: Transport::new(local, Rc::new(|| {})), host }
 }
 

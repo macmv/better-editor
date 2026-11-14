@@ -339,7 +339,6 @@ dependencies = [
  "fern",
  "ignore",
  "kurbo",
- "lode-local",
  "lode-poll",
  "log",
  "nucleo",
@@ -371,7 +370,6 @@ dependencies = [
  "ignore",
  "libc",
  "lode",
- "lode-local",
  "lode-poll",
 ]
 
@@ -420,7 +418,6 @@ dependencies = [
  "be-task",
  "be-terminal",
  "lode",
- "lode-local",
  "lode-poll",
  "log",
 ]
@@ -1959,14 +1956,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lode-local"
-version = "0.1.0"
-dependencies = [
- "lode-core",
- "lode-wire",
-]
-
-[[package]]
 name = "lode-macros"
 version = "0.1.0"
 dependencies = [
@@ -1981,7 +1970,6 @@ version = "0.1.0"
 dependencies = [
  "libc",
  "lode-core",
- "lode-local",
  "lode-wire",
 ]
 

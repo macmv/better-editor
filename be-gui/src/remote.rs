@@ -30,8 +30,10 @@ use be_remote::{
   Transport,
 };
 use be_workspace::Backend;
-use lode_local::{CallError, Pending, RpcError};
-use lode_poll::sys::{self, PollFd};
+use lode_poll::{
+  CallError, Pending, RpcError,
+  sys::{self, PollFd},
+};
 
 /// What the poller thread saw. Handed to `RemoteSession::on_wake`.
 #[derive(Debug, Clone, Copy)]
@@ -175,26 +177,17 @@ fn poll_thread(
       s.interest.clone()
     };
 
-    let mut fds = vec![PollFd { fd: wake_rx.as_raw_fd(), readable: true, writable: false }];
-    fds.extend(interest.read.iter().map(|&fd| PollFd { fd, readable: true, writable: false }));
-    fds.extend(interest.write.iter().map(|&fd| PollFd { fd, readable: false, writable: true }));
+    let mut fds = vec![PollFd::read(wake_rx.as_raw_fd())];
+    fds.extend(interest.read.iter().map(|&fd| PollFd::read(fd)));
+    fds.extend(interest.write.iter().map(|&fd| PollFd::write(fd)));
 
-    let timeout = match interest.deadline {
-      None => -1,
-      Some(d) => {
-        let left = d.saturating_duration_since(Instant::now());
-        left.as_micros().div_ceil(1000).min(i32::MAX as u128) as i32
-      }
-    };
-    let ready = match sys::poll(&fds, timeout) {
-      Ok(r) => r,
-      Err(e) => {
-        error!("remote poller: poll failed: {e}");
-        return;
-      }
-    };
+    let timeout = interest.deadline.map(|d| d.saturating_duration_since(Instant::now()));
+    if let Err(e) = sys::poll(&mut fds, timeout) {
+      error!("remote poller: poll failed: {e}");
+      return;
+    }
 
-    if ready[0].readable {
+    if fds[0].ready().readable {
       // The interest changed (or we are stopping): start over with it.
       let mut buf = [0u8; 64];
       while matches!(wake_rx.read(&mut buf), Ok(n) if n > 0) {}
@@ -202,8 +195,8 @@ fn poll_thread(
     }
 
     let reads = interest.read.len();
-    let readable = ready[1..1 + reads].iter().any(|r| r.readable);
-    let writable = ready[1 + reads..].iter().any(|r| r.writable);
+    let readable = fds[1..1 + reads].iter().any(|f| f.ready().readable);
+    let writable = fds[1 + reads..].iter().any(|f| f.ready().writable);
     let timed_out = interest.deadline.is_some_and(|d| Instant::now() >= d);
     if !(readable || writable || timed_out) {
       continue;
@@ -295,7 +288,7 @@ impl RemoteHandle {
   /// Calls over this connection. They return pending answers, which arrive
   /// as the session is driven by its wakes.
   fn transport(&self) -> Transport {
-    let local = self.link.host.borrow().connection().local().clone();
+    let local = self.link.host.borrow().connection().channel();
     let on_io = {
       let link = self.link.clone();
       Rc::new(move || link.rearm())
@@ -308,7 +301,7 @@ impl RemoteHandle {
   /// A shell on the host, in `cwd` (empty: the host's working directory).
   pub fn new_pty(&self, size: be_terminal::Size, cwd: String) -> RemotePty {
     let id = self.next_id();
-    let local = self.link.host.borrow().connection().local().clone();
+    let local = self.link.host.borrow().connection().channel();
     let link = self.link.clone();
     RemotePty::new(local, id, size, cwd, Rc::new(move || link.rearm()))
   }

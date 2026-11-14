@@ -10,5 +10,4 @@ be-git = { path = "../be-git" }
 be-task = { path = "../be-task" }
 log = "0.4.34"
 lode = { version = "*", default-features = false }
-lode-local = { version = "*" }
 lode-poll = { version = "*" }

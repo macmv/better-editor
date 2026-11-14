@@ -15,8 +15,7 @@ use be_remote::{
   PROTOCOL_VERSION, TermSize, WrittenFile,
 };
 use be_terminal::{PtyHost, Size};
-use lode_local::{Event, Reply, Sink, Token};
-use lode_poll::{ChannelFds, Connection, sys};
+use lode_poll::{Connection, Event, Reply, Sink, StreamFds, Token, sys};
 
 use crate::{
   terminal::{SharedTerms, Term},
@@ -205,23 +204,15 @@ fn main() {
       let watches = watches.clone();
       move |_| Service { terms, watches, repos: Default::default() }
     })
-    .accept(vec![ChannelFds::stdio().expect("stdio")], Instant::now())
+    .accept(vec![StreamFds::stdio().expect("stdio")], Instant::now())
     .expect("accept");
 
   while !conn.is_finished() {
     terms.borrow_mut().pump();
     watches.borrow_mut().pump();
 
-    let mut fds: Vec<_> = conn
-      .read_fds()
-      .into_iter()
-      .map(|fd| sys::PollFd { fd, readable: true, writable: false })
-      .collect();
-    fds.extend(conn.write_fds().into_iter().map(|fd| sys::PollFd {
-      fd,
-      readable: false,
-      writable: true,
-    }));
+    let mut fds: Vec<_> = conn.read_fds().into_iter().map(sys::PollFd::read).collect();
+    fds.extend(conn.write_fds().into_iter().map(sys::PollFd::write));
     if fds.is_empty() {
       break;
     }
@@ -229,8 +220,8 @@ fn main() {
     fds.extend(terms.borrow().poll_fds());
     fds.push(watches.borrow().poll_fd());
 
-    let ready = match sys::poll(&fds, conn.poll_timeout_ms(Instant::now())) {
-      Ok(r) => r,
+    match sys::poll(&mut fds, conn.poll_timeout(Instant::now())) {
+      Ok(()) => {}
       Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
       Err(e) => {
         eprintln!("be-host: poll failed: {e}");
@@ -238,11 +229,11 @@ fn main() {
       }
     };
     let now = Instant::now();
-    let on_conn = || ready[..conn_fds].iter().zip(&fds[..conn_fds]);
-    if on_conn().any(|(r, f)| r.readable && f.readable) {
+    let on_conn = || fds[..conn_fds].iter().map(|f| f.ready());
+    if on_conn().any(|r| r.readable) {
       conn.handle_readable(now);
     }
-    if on_conn().any(|(r, f)| r.writable && f.writable) {
+    if on_conn().any(|r| r.writable) {
       conn.handle_writable();
     }
     // Pty and watcher readiness need no handling of their own: the next `pump`

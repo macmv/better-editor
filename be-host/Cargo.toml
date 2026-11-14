@@ -9,7 +9,6 @@ be-remote = { path = "../be-remote" }
 be-fs = { path = "../be-fs" }
 be-git = { path = "../be-git" }
 lode = { version = "*", default-features = false }
-lode-local = { version = "*" }
 lode-poll = { version = "*" }
 libc = "0.2"
 ignore = "0.4"

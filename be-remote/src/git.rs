@@ -7,7 +7,7 @@ use std::{
 
 use be_git::{GitBackend, PathStatus};
 use be_task::Task;
-use lode_local::Pending;
+use lode_poll::Pending;
 
 use crate::{GitFileStatus, Host, HostError, Transport};
 

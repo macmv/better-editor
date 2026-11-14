@@ -1,5 +1,5 @@
 use be_fs::{DirectoryChanges, Watcher, WorkspacePathBuf};
-use lode_local::{Pending, Stream, TryRecvError};
+use lode_poll::{Pending, Stream, TryRecvError};
 
 use crate::{Host, HostError, Transport};
 

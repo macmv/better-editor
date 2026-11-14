@@ -25,23 +25,15 @@ fn run_until(host: &RemoteHost, mut done: impl FnMut() -> bool) {
   let start = Instant::now();
   while !done() {
     assert!(start.elapsed() < Duration::from_secs(20), "the loop made no progress");
-    let mut fds: Vec<_> = conn
-      .read_fds()
-      .into_iter()
-      .map(|fd| sys::PollFd { fd, readable: true, writable: false })
-      .collect();
-    fds.extend(conn.write_fds().into_iter().map(|fd| sys::PollFd {
-      fd,
-      readable: false,
-      writable: true,
-    }));
+    let mut fds: Vec<_> = conn.read_fds().into_iter().map(sys::PollFd::read).collect();
+    fds.extend(conn.write_fds().into_iter().map(sys::PollFd::write));
     assert!(!fds.is_empty(), "the connection closed");
-    let ready = sys::poll(&fds, 20).unwrap();
+    sys::poll(&mut fds, Some(Duration::from_millis(20))).unwrap();
     let now = Instant::now();
-    if ready.iter().zip(&fds).any(|(r, f)| r.readable && f.readable) {
+    if fds.iter().any(|f| f.ready().readable) {
       conn.handle_readable(now);
     }
-    if ready.iter().zip(&fds).any(|(r, f)| r.writable && f.writable) {
+    if fds.iter().any(|f| f.ready().writable) {
       conn.handle_writable();
     }
     conn.handle_timeout(now);
@@ -81,11 +73,11 @@ fn info_list_and_read_over_stdio() {
   assert_eq!(read.try_take().unwrap().unwrap(), "hello\n");
   assert_eq!(
     missing.try_take().unwrap().unwrap_err(),
-    lode_local::CallError::App(HostError::NotFound)
+    lode_poll::CallError::App(HostError::NotFound)
   );
   assert_eq!(
     binary.try_take().unwrap().unwrap_err(),
-    lode_local::CallError::App(HostError::NotUtf8)
+    lode_poll::CallError::App(HostError::NotUtf8)
   );
 
   fs::remove_dir_all(dir).unwrap();
@@ -94,7 +86,7 @@ fn info_list_and_read_over_stdio() {
 const SIZE: Size = Size { rows: 24, cols: 80 };
 
 fn terminal(host: &RemoteHost, id: u64, cwd: &str) -> RemotePty {
-  RemotePty::new(host.connection().local().clone(), id, SIZE, cwd.into(), Rc::new(|| {}))
+  RemotePty::new(host.connection().channel(), id, SIZE, cwd.into(), Rc::new(|| {}))
 }
 
 /// Reads everything the terminal has sent so far.

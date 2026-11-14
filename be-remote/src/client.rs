@@ -1,8 +1,11 @@
-use std::{io, process::Command, time::Instant};
+use std::{
+  io,
+  process::Command,
+  time::{Duration, Instant},
+};
 
-use lode_local::Pending;
 use lode_poll::{
-  Connection,
+  Connection, Pending,
   sys::{self, PollFd},
 };
 
@@ -73,32 +76,22 @@ impl RemoteHost {
       return false;
     }
 
-    let mut fds: Vec<_> = conn
-      .read_fds()
-      .into_iter()
-      .map(|fd| PollFd { fd, readable: true, writable: false })
-      .collect();
-    fds.extend(conn.write_fds().into_iter().map(|fd| PollFd {
-      fd,
-      readable: false,
-      writable: true,
-    }));
+    let mut fds: Vec<_> = conn.read_fds().into_iter().map(PollFd::read).collect();
+    fds.extend(conn.write_fds().into_iter().map(PollFd::write));
 
-    let timeout = match conn.poll_timeout_ms(Instant::now()) {
-      t if t < 0 => max_ms,
-      t => t.min(max_ms),
-    };
-    let ready = match sys::poll(&fds, timeout) {
-      Ok(r) => r,
+    let max = Duration::from_millis(max_ms.max(0) as u64);
+    let timeout = conn.poll_timeout(Instant::now()).map_or(max, |t| t.min(max));
+    match sys::poll(&mut fds, Some(timeout)) {
+      Ok(()) => {}
       Err(e) if e.kind() == io::ErrorKind::Interrupted => return true,
       Err(_) => return false,
-    };
+    }
 
     let now = Instant::now();
-    if ready.iter().zip(&fds).any(|(r, f)| r.readable && f.readable) {
+    if fds.iter().any(|f| f.ready().readable) {
       conn.handle_readable(now);
     }
-    if ready.iter().zip(&fds).any(|(r, f)| r.writable && f.writable) {
+    if fds.iter().any(|f| f.ready().writable) {
       conn.handle_writable();
     }
     conn.handle_timeout(now);
@@ -110,28 +103,28 @@ impl RemoteHost {
   pub fn connection(&self) -> &Connection { &self.conn }
   pub fn connection_mut(&mut self) -> &mut Connection { &mut self.conn }
 
-  pub fn info(&self) -> Pending<HostInfo, HostError> { self.conn.local().proxy::<Host>().info() }
+  pub fn info(&self) -> Pending<HostInfo, HostError> { self.conn.channel().proxy::<Host>().info() }
 
   pub fn list_dir(&self, path: &str) -> Pending<Vec<DirEntry>, HostError> {
-    self.conn.local().proxy::<Host>().list_dir(path.to_string())
+    self.conn.channel().proxy::<Host>().list_dir(path.to_string())
   }
 
   pub fn canonicalize(&self, path: &str) -> Pending<String, HostError> {
-    self.conn.local().proxy::<Host>().canonicalize(path.to_string())
+    self.conn.channel().proxy::<Host>().canonicalize(path.to_string())
   }
 
   /// The directory terminal `id`'s shell is in now.
   pub fn terminal_cwd(&self, id: u64) -> Pending<String, HostError> {
-    self.conn.local().proxy::<Host>().terminal_cwd(id)
+    self.conn.channel().proxy::<Host>().terminal_cwd(id)
   }
 
   /// The commit `root` is at, or `None` if it isn't a git repository.
   pub fn git_head(&self, root: &str) -> Pending<Option<String>, HostError> {
-    self.conn.local().proxy::<Host>().git_head(root.to_string())
+    self.conn.channel().proxy::<Host>().git_head(root.to_string())
   }
 
   pub fn read_file(&self, path: &str) -> Pending<String, HostError> {
-    self.conn.local().proxy::<Host>().read_file(path.to_string())
+    self.conn.channel().proxy::<Host>().read_file(path.to_string())
   }
 }
 

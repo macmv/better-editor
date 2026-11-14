@@ -21,8 +21,7 @@ use std::{
 
 use be_fs::{DirectoryChanges, Watcher, WorkspacePathBuf, WorkspaceRoot};
 use be_remote::HostError;
-use lode_local::{Reply, Sink, TrySendError};
-use lode_poll::sys::PollFd;
+use lode_poll::{Reply, Sink, TrySendError, sys::PollFd};
 
 enum State {
   /// The watcher is still being set up.
@@ -84,9 +83,7 @@ impl Watches {
   pub fn remove(&mut self, id: u64) { self.watches.remove(&id); }
 
   /// What the poll loop must wait on for the watches.
-  pub fn poll_fd(&self) -> PollFd {
-    PollFd { fd: self.wake_rx.as_raw_fd(), readable: true, writable: false }
-  }
+  pub fn poll_fd(&self) -> PollFd { PollFd::read(self.wake_rx.as_raw_fd()) }
 
   /// Tells every watch that this host is the one who wrote `path`.
   pub fn notify_saved(&mut self, path: &Path) {

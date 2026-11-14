@@ -26,7 +26,6 @@ be-shell = { path = "../be-shell" }
 be-animation = { path = "../be-animation" }
 be-workspace = { path = "../be-workspace" }
 be-remote = { path = "../be-remote" }
-lode-local = { version = "*" }
 lode-poll = { version = "*" }
 
 bytemuck = "1.25.2"

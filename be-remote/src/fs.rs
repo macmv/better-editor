@@ -40,8 +40,8 @@ impl Fs for RemoteFs {
         Ok(f) => {
           Ok(FileData { path: PathBuf::from(f.path), mtime: f.mtime, data: f.data.to_vec() })
         }
-        Err(lode_local::CallError::App(e)) => Err(transport::io_error(e)),
-        Err(lode_local::CallError::Rpc(e)) => Err(transport::rpc_error(e)),
+        Err(lode_poll::CallError::App(e)) => Err(transport::io_error(e)),
+        Err(lode_poll::CallError::Rpc(e)) => Err(transport::rpc_error(e)),
       })
     })
   }
@@ -52,8 +52,8 @@ impl Fs for RemoteFs {
     PendingWrite::new(move || {
       Some(match call.try_take()? {
         Ok(w) => Ok(WriteResult { prev_mtime: w.prev_mtime, mtime: w.mtime }),
-        Err(lode_local::CallError::App(e)) => Err(transport::io_error(e)),
-        Err(lode_local::CallError::Rpc(e)) => Err(transport::rpc_error(e)),
+        Err(lode_poll::CallError::App(e)) => Err(transport::io_error(e)),
+        Err(lode_poll::CallError::Rpc(e)) => Err(transport::rpc_error(e)),
       })
     })
   }
@@ -66,8 +66,8 @@ impl Fs for RemoteFs {
         Ok(entries) => {
           Ok(entries.into_iter().map(|e| DirEntry { name: e.name, kind: kind(e.kind) }).collect())
         }
-        Err(lode_local::CallError::App(e)) => Err(transport::io_error(e)),
-        Err(lode_local::CallError::Rpc(e)) => Err(transport::rpc_error(e)),
+        Err(lode_poll::CallError::App(e)) => Err(transport::io_error(e)),
+        Err(lode_poll::CallError::Rpc(e)) => Err(transport::rpc_error(e)),
       })
     })
   }
@@ -82,8 +82,8 @@ impl RemoteFs {
     Pending::new(move || {
       Some(match call.try_take()? {
         Ok(files) => Ok(files),
-        Err(lode_local::CallError::App(e)) => Err(transport::io_error(e)),
-        Err(lode_local::CallError::Rpc(e)) => Err(transport::rpc_error(e)),
+        Err(lode_poll::CallError::App(e)) => Err(transport::io_error(e)),
+        Err(lode_poll::CallError::Rpc(e)) => Err(transport::rpc_error(e)),
       })
     })
   }

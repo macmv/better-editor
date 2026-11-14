@@ -6,7 +6,7 @@ extern crate log;
 
 // The interface macro names `Stream` but only inside the trait it consumes.
 #[allow(unused_imports)]
-use lode_local::Stream;
+use lode_poll::Stream;
 
 mod client;
 mod fs;

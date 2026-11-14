@@ -2,7 +2,7 @@ use std::{io, path::PathBuf, rc::Rc};
 
 use be_terminal::{PtyHost, Size};
 use lode::Bytes;
-use lode_local::{CallError, Local, Pending, Stream, TryRecvError};
+use lode_poll::{CallError, Channel, Pending, Stream, TryRecvError};
 
 use crate::{Host, HostError, TermSize};
 
@@ -13,7 +13,7 @@ use crate::{Host, HostError, TermSize};
 /// has delivered. Input is sent as soon as it is written, so a write only
 /// waits (inside the connection) when the kernel's socket buffer is full.
 pub struct RemotePty {
-  local: Local,
+  local: Channel,
   id:    u64,
   cwd:   PathBuf,
 
@@ -31,7 +31,7 @@ pub struct RemotePty {
 impl RemotePty {
   /// Asks the host for a shell in `cwd` (empty: the host's working directory).
   /// `id` must be unique among this connection's terminals.
-  pub fn new(local: Local, id: u64, size: Size, cwd: String, on_io: Rc<dyn Fn()>) -> RemotePty {
+  pub fn new(local: Channel, id: u64, size: Size, cwd: String, on_io: Rc<dyn Fn()>) -> RemotePty {
     let (call, stream) = local.proxy::<Host>().spawn_terminal(id, term_size(size), cwd.clone());
     on_io();
     RemotePty { local, id, cwd: cwd.into(), call, stream, unread: Bytes::new(), on_io }

@@ -8,8 +8,7 @@ use std::{cell::RefCell, collections::HashMap, io, os::fd::AsRawFd, rc::Rc};
 
 use be_remote::{Bytes, HostError};
 use be_terminal::{Pty, PtyHost, Size};
-use lode_local::{Reply, Sink, TrySendError};
-use lode_poll::sys::PollFd;
+use lode_poll::{Reply, Sink, TrySendError, sys::PollFd};
 
 /// The most bytes read from a pty at once.
 const CHUNK: usize = 4096;
@@ -115,11 +114,13 @@ impl Terms {
     self
       .terms
       .values()
-      .map(|t| PollFd {
-        fd:       t.pty.as_raw_fd(),
-        // Only listen for output we have room to forward.
-        readable: t.unsent.is_none() && t.room() > 0,
-        writable: t.pty.has_pending_writes(),
+      .map(|t| {
+        PollFd::new(
+          t.pty.as_raw_fd(),
+          // Only listen for output we have room to forward.
+          t.unsent.is_none() && t.room() > 0,
+          t.pty.has_pending_writes(),
+        )
       })
       .collect()
   }
