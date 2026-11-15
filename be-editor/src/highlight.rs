@@ -89,10 +89,10 @@ impl EditorState {
   pub fn highlights(&self, range: Range<usize>) -> impl Iterator<Item = HighlightStack<'_>> {
     let mut iterators = vec![];
 
-    if let Some(highlighter) = &self.highligher
-      && let Some(highlights) = highlighter.highlights(&self.doc, range.clone())
-    {
-      iterators.push(HighlightIter::TreeSitter(highlights));
+    if let Some(highlighter) = &self.highligher {
+      for highlights in highlighter.highlights(&self.doc, range.clone()) {
+        iterators.push(HighlightIter::TreeSitter(highlights));
+      }
     }
 
     iterators.push(HighlightIter::Diagnostics(DiagnosticIter {

@@ -1,0 +1,7 @@
+# Not opened directly: markdown injects this grammar into inline content.
+display-name = "Markdown Inline"
+extensions = []
+
+[tree-sitter]
+repo = "https://github.com/tree-sitter-grammars/tree-sitter-markdown"
+path = "tree-sitter-markdown-inline"
