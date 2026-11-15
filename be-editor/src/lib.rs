@@ -52,10 +52,11 @@ pub struct EditorState {
 
   pub search: SharedHandle<SearchState>,
 
-  filetype:   Option<LanguageName>,
-  highligher: Option<treesitter::Highlighter>,
-  damages:    HashSet<Line>,
-  damage_all: bool,
+  filetype:        Option<LanguageName>,
+  highligher:      Option<treesitter::Highlighter>,
+  pending_grammar: Option<treesitter::PendingGrammar>,
+  damages:         HashSet<Line>,
+  damage_all:      bool,
 
   current_edit:     Option<Edit>,
   history_position: usize,
@@ -146,7 +147,13 @@ impl EditorState {
   pub fn file_type(&self) -> Option<LanguageName> { self.filetype }
   pub fn is_damage_all(&self) -> bool { self.damage_all }
   pub fn damages(&self) -> impl Iterator<Item = &Line> { self.damages.iter() }
-  pub fn progress(&self) -> Vec<String> { self.lsp.progress() }
+  pub fn progress(&self) -> Vec<String> {
+    let mut progress = self.lsp.progress();
+    if let Some(pending) = &self.pending_grammar {
+      progress.push(pending.status());
+    }
+    progress
+  }
   pub fn selection(&self) -> Option<&Selection> { self.selection.as_ref() }
 
   pub fn clear_damage(&mut self) {
@@ -162,6 +169,8 @@ impl EditorState {
     if let Err(e) = self.update_save() {
       self.status = Some(Status::for_error(e));
     }
+
+    self.update_grammar();
 
     if let Some(repo) = &mut *self.repo {
       repo.update();
