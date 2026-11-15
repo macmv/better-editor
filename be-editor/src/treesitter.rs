@@ -62,10 +62,19 @@ pub fn load_grammar(config: &Config, ft: LanguageName) -> Option<Highlighter> {
   )?;
 
   let spec = std::fs::read_to_string(grammar_path.join("tree-sitter.json")).fatal()?;
-  let spec = serde_json::from_str::<TreeSitterSpec>(&spec).fatal()?;
+  let mut spec = serde_json::from_str::<TreeSitterSpec>(&spec).fatal()?;
 
+  // Some grammars (such as typst) ship a `tree-sitter.json` with no grammars
+  // listed. Fall back to the conventional layout: a `tree_sitter_<lang>`
+  // symbol, and queries in `queries/<lang>/highlights.scm`.
   if spec.grammars.is_empty() {
-    return None;
+    spec.grammars.push(GrammarSpec {
+      name:       ft.name().to_string(),
+      highlights: StringOrStrings::Vec(vec![
+        format!("queries/{}/highlights.scm", ft.name()),
+        "queries/highlights.scm".to_string(),
+      ]),
+    });
   }
 
   let grammar = &spec.grammars[0];

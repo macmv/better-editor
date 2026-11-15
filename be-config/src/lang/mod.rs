@@ -10,7 +10,7 @@ macro_rules! builtin {
   }
 }
 
-builtin!["c", "cpp", "markdown", "rust", "toml"];
+builtin!["c", "cpp", "markdown", "rust", "toml", "typst"];
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LanguageName {

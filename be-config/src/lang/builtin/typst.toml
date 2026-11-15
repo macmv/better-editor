@@ -1,0 +1,5 @@
+display-name = "Typst"
+extensions = ["typ"]
+
+[tree-sitter]
+repo = "https://github.com/uben0/tree-sitter-typst"
