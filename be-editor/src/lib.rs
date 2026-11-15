@@ -88,9 +88,9 @@ pub struct Selection {
 pub enum EditorEvent {
   RunCommand(String),
   OpenFile(PathBuf, Option<CursorOrLsp>),
-  // NB: This is moderately dumb. Ideally, we'd pick the 'goto definition' even up in
-  // `EditorView::layout` and do it directly in there. But also, this nicely only affects the
-  // active view, so maybe it's fine as-is.
+  // NB: This is moderately dumb. Ideally, we'd pick the 'goto definition' even
+  // up in `EditorView::layout` and do it directly in there. But also, this
+  // nicely only affects the active view, so maybe it's fine as-is.
   RecordDefinition(PathBuf, Cursor),
   SavedFile(PathBuf),
 }

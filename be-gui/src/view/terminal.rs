@@ -13,9 +13,10 @@ pub struct TerminalView {
   set_waker: bool,
   focused:   bool,
 
-  // Scroll offset. Note that this is inverted compared to the editor. Terminals scroll backwards
-  // as much as they want, but always have a fixed bottom. So 0 means no scroll, and 1 means shift
-  // everything _down_ 1 line (which would be offset=-1 in the editor).
+  // Scroll offset. Note that this is inverted compared to the editor. Terminals
+  // scroll backwards as much as they want, but always have a fixed bottom. So 0
+  // means no scroll, and 1 means shift everything _down_ 1 line (which would be
+  // offset=-1 in the editor).
   viewport_offset: f64, // 0..1, partial line offset
 
   size:           be_terminal::Size,

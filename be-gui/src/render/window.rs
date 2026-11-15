@@ -123,8 +123,8 @@ impl winit::application::ApplicationHandler<Event> for App {
         event_loop.exit();
       }
 
-      // The release of a modifier can go to another window (such as when switching workspaces), so
-      // drop all modifiers when focus is lost.
+      // The release of a modifier can go to another window (such as when
+      // switching workspaces), so drop all modifiers when focus is lost.
       WindowEvent::Focused(false) => {
         if let Some(init) = &mut self.init {
           init.keys = KeyState::default();

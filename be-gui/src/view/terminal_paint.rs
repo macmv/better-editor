@@ -92,8 +92,9 @@ struct CachedLine {
 /// with a single emulator. Use one painter per emulator.
 #[derive(Default)]
 pub struct TerminalPainter {
-  // Layouts of lines we have already drawn, by `OwnedLine::id`. Terminal lines keep their id as
-  // they scroll, so scrolling and redraws of unchanged lines never rebuild a layout.
+  // Layouts of lines we have already drawn, by `OwnedLine::id`. Terminal lines
+  // keep their id as they scroll, so scrolling and redraws of unchanged lines
+  // never rebuild a layout.
   cached_layouts:   HashMap<u64, CachedLine>,
   cached_scale:     f64,
   cached_char_size: Size,

@@ -346,8 +346,8 @@ impl EditorState {
     if let Some(edit) = &item.text_edit {
       let (range, new_text) = match edit {
         types::Or2::A(edit) => (edit.range.clone(), &edit.new_text),
-        // TODO: Insert/replace support. We don't advertise this capability, so we shouldn't receive
-        // any insert/replace edits anyway.
+        // TODO: Insert/replace support. We don't advertise this capability, so
+        // we shouldn't receive any insert/replace edits anyway.
         types::Or2::B(edit) => (edit.replace.clone(), &edit.new_text),
       };
       let start = be_lsp::command::decode_position(

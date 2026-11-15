@@ -156,7 +156,8 @@ impl Perform for TerminalState {
       // OSC 9: desktop notifications (ConEmu/Windows Terminal style).
       // Format: OSC 9 ; message ST  (notification text)
       // Also used for taskbar progress: OSC 9 ; 4 ; n  (n=0-100).
-      // Seen in log as params=[[57],[52],[48],[]] = "9;4;0" (progress indicator).
+      // Seen in log as params=[[57],[52],[48],[]] = "9;4;0" (progress
+      // indicator).
       b"9" => unhandled!("desktop notification / progress"),
       b"10" | b"11" => {
         if params.len() == 2 {
@@ -382,7 +383,8 @@ impl Perform for TerminalState {
         19 => self.send_text(&format!("\x1b[9;{};{}t", self.size.rows, self.size.cols)),
         _ => unhandled!(),
       },
-      // Kitty keyboard protocol: query, set, push and pop the keyboard mode flags.
+      // Kitty keyboard protocol: query, set, push and pop the keyboard mode
+      // flags.
       (b'u', [b'?']) => self.send_text(&format!("\x1b[?{}u", self.kitty_flags)),
       (b'u', [b'=']) => {
         let flags = next_param_or(0) as u8;
@@ -598,9 +600,9 @@ impl TerminalState {
       1042 => unhandled!("urgency hints"),
       1049 => self.set_alt_screen(set),
       2004 => self.flags.set(TerminalFlags::BRACKETED_PASTE, set),
-      // 2026: synchronized output. Output between setting and resetting this is held back, and
-      // shown all at once, so that full-screen redraws don't flicker or tear. See
-      // `Terminal::consume`.
+      // 2026: synchronized output. Output between setting and resetting this is
+      // held back, and shown all at once, so that full-screen redraws don't
+      // flicker or tear. See `Terminal::consume`.
       2026 => {
         self.synchronized = set;
         self.sync_started |= set;

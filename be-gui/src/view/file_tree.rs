@@ -440,8 +440,8 @@ impl Directory {
           let Some(items) = curr.items.as_mut() else { return None };
 
           match items.iter_mut().find(|it| *it.name() == *name) {
-            // If we're done with the path, then break and update `active`. Otherwise, we
-            // found a file early, and the path is invalid.
+            // If we're done with the path, then break and update `active`.
+            // Otherwise, we found a file early, and the path is invalid.
             Some(it) if components.peek().is_none() => return Some(it.as_mut()),
             Some(Item::Directory(dir)) => {
               curr = dir;

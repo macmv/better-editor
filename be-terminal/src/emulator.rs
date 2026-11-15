@@ -27,8 +27,9 @@ pub struct Emulator {
   pub(crate) state: TerminalState,
   parser:           Parser,
 
-  // Output received during a synchronized update, which isn't parsed until the update ends, so
-  // that the screen never shows half of a frame. Held until `hold_deadline`, if it is set.
+  // Output received during a synchronized update, which isn't parsed until the
+  // update ends, so that the screen never shows half of a frame. Held until
+  // `hold_deadline`, if it is set.
   held:                     Vec<u8>,
   held_scanned:             usize,
   pub(crate) hold_deadline: Option<Instant>,

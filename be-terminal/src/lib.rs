@@ -123,15 +123,16 @@ pub struct TerminalState {
 
   // A line to reuse the allocation of the next time the screen scrolls.
   spare: Option<OwnedLine>,
-  // Bumped before each batch of changes, so that renderers can tell which lines changed. See
-  // `OwnedLine::stamp`.
+  // Bumped before each batch of changes, so that renderers can tell which lines
+  // changed. See `OwnedLine::stamp`.
   epoch: u64,
 
   // VT100 "scroll region" concept. Used by htop.
   scroll_start: usize,
   scroll_end:   usize,
 
-  // Alternate screen. Used by most fullscreen apps. Disables scrolling while active.
+  // Alternate screen. Used by most fullscreen apps. Disables scrolling while
+  // active.
   alt_grid:         Grid,
   alt_screen:       bool,
   alt_cursor:       Cursor,
@@ -140,7 +141,8 @@ pub struct TerminalState {
   pub title: String,
   flags:     TerminalFlags,
 
-  // Kitty keyboard protocol: the active flags, and the flags saved by `CSI > flags u` pushes.
+  // Kitty keyboard protocol: the active flags, and the flags saved by `CSI >
+  // flags u` pushes.
   kitty_flags: u8,
   kitty_stack: Vec<u8>,
 
@@ -149,16 +151,18 @@ pub struct TerminalState {
   default_background: [u8; 3],
   charsets:           [Charset; 4],
 
-  // Whether the parser is known to be between sequences, so printable ASCII can skip it. This is
-  // conservative: it is false whenever we can't be sure. The parser doesn't expose its state, so
-  // `Perform` callbacks that always leave it in the ground state set this, and `advance` clears it
-  // for every byte that goes through the parser.
+  // Whether the parser is known to be between sequences, so printable ASCII can
+  // skip it. This is conservative: it is false whenever we can't be sure. The
+  // parser doesn't expose its state, so `Perform` callbacks that always leave
+  // it in the ground state set this, and `advance` clears it for every byte
+  // that goes through the parser.
   ground:        bool,
   ground_before: bool,
 
   // Mode 2026: the program is drawing a frame, and wants it shown all at once.
   synchronized: bool,
-  // Set when that mode was just turned on, so `Terminal` can stop parsing and hold the frame.
+  // Set when that mode was just turned on, so `Terminal` can stop parsing and
+  // hold the frame.
   sync_started: bool,
 }
 

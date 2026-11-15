@@ -11,9 +11,11 @@ pub fn client_capabilities() -> lsp::ClientCapabilities {
       completion: Some(lsp::CompletionClientCapabilities {
         dynamic_registration: None,
         completion_item:      Some(lsp::CompletionItemCapabilities {
-          // Snippts allow the client to fill in a portion (like a variable name).
+          // Snippts allow the client to fill in a portion (like a variable
+          // name).
           snippet_support:           Some(true),
-          // Commit characters fill in the completion when typed (like '.' or '(')
+          // Commit characters fill in the completion when typed (like '.' or
+          // '(')
           commit_characters_support: None,
           // Allows the server to preselect a specific item.
           preselect_support:         None,
@@ -24,11 +26,12 @@ pub fn client_capabilities() -> lsp::ClientCapabilities {
             lsp::MarkupKind::PlainText,
           ]),
           deprecated_support:        Some(true),
-          // Adds a whole 'tagging' scheme, which in practice is just another way of saying
-          // something is deprecated.
+          // Adds a whole 'tagging' scheme, which in practice is just another
+          // way of saying something is deprecated.
           tag_support:               None,
           resolve_support:           Some(lsp::ResolveSupportCapabilities {
-            // rust-analyzer is picky, and needs `additionalTextEdits` for auto-imports to show up.
+            // rust-analyzer is picky, and needs `additionalTextEdits` for
+            // auto-imports to show up.
             properties: ["additionalTextEdits", "detail", "documentation"]
               .iter()
               .map(|s| s.to_string())
@@ -40,7 +43,8 @@ pub fn client_capabilities() -> lsp::ClientCapabilities {
         }),
         // Has the client tell the server what triggered the completion.
         context_support:      Some(true),
-        // Default insert mode (ie, how to handle whitespace) if not selected by the server.
+        // Default insert mode (ie, how to handle whitespace) if not selected by
+        // the server.
         insert_text_mode:     None,
         completion_list:      Some(lsp::CompletionListCapabilities {
           // Default items to fill in. Not really used AFAICT.

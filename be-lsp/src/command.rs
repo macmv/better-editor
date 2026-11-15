@@ -201,8 +201,8 @@ pub struct DidChangeTextDocument {
   pub version: u32,
   pub changes: Vec<Change>,
 
-  // This is real dumb, but: we need the doc before to encode ranges, and we need the doc after to
-  // update the `FileState`.
+  // This is real dumb, but: we need the doc before to encode ranges, and we
+  // need the doc after to update the `FileState`.
   //
   // TODO: Get rid of one of these.
   pub doc_before_change: DocumentSnapshot,
@@ -754,8 +754,8 @@ impl LspCommand for WorkspaceSymbols {
               .into_iter()
               .map(|s| match s.location {
                 types::Or2::A(loc) => symbol(s.base_symbol_information, loc.uri, loc.range.start),
-                // We don't advertise `resolveSupport`, so servers shouldn't send these. If one
-                // does anyway, jump to the top of the file.
+                // We don't advertise `resolveSupport`, so servers shouldn't
+                // send these. If one does anyway, jump to the top of the file.
                 types::Or2::B(loc) => {
                   symbol(s.base_symbol_information, loc.uri, types::Position::default())
                 }
