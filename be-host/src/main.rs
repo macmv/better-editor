@@ -199,7 +199,7 @@ fn main() {
   let watches: SharedWatches = Rc::new(RefCell::new(Default::default()));
 
   let conn = Connection::builder()
-    .serve::<Host, _>({
+    .handle::<Host>({
       let terms = terms.clone();
       let watches = watches.clone();
       move |_| Service { terms, watches, repos: Default::default() }
