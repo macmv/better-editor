@@ -144,3 +144,13 @@ fn move_graphemes_handles_graphemes() {
     &[expect![@"⟦f⟧éo"], expect![@"f⟦é⟧o"], expect![@"fé⟦o⟧"]],
   );
 }
+
+#[test]
+fn offset_to_ts_point_accepts_end_of_doc() {
+  let mut a = EditorState::from("ab\ncd");
+  let p = a.offset_to_ts_point(5);
+  assert_eq!((p.row, p.column), (1, 2));
+  let mut b = EditorState::from("ab\n");
+  let p = b.offset_to_ts_point(3);
+  assert_eq!((p.row, p.column), (1, 0));
+}

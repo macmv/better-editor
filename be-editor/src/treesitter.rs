@@ -253,6 +253,19 @@ impl EditorState {
   }
 
   pub(crate) fn offset_to_ts_point(&mut self, offset: usize) -> tree_sitter::Point {
+    let len = self.doc.len();
+    let offset = offset.min(len);
+
+    // The end of a document that ends in a newline is the start of an
+    // (empty) line after the last one, which the line index does not have.
+    if len > 0
+      && offset == len
+      && self.doc.line_with_terminator(be_doc::Line(self.doc.len_lines() - 1)).chars().last()
+        == Some('\n')
+    {
+      return tree_sitter::Point { row: self.doc.len_lines(), column: 0 };
+    }
+
     let row = self.doc.line_of_byte(offset);
     let column = offset - self.doc.byte_of_line(row);
 
