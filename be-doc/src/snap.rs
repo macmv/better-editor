@@ -33,7 +33,16 @@ impl DocumentSnapshot {
 
   pub fn len(&self) -> usize { self.rope.byte_len() }
 
-  pub fn len_lines(&self) -> usize { self.rope.line_len() }
+  /// The number of lines. An empty document has one empty line, so that a
+  /// cursor always has a line to be on. (The rope has no lines at all in that
+  /// case.)
+  pub fn len_lines(&self) -> usize { self.rope.line_len().max(1) }
+
+  /// The line without its terminator. `line` must be in bounds, and the empty
+  /// document's only line is empty.
+  fn rope_line(&self, line: usize) -> RopeSlice<'_> {
+    if self.rope.byte_len() == 0 { self.rope.byte_slice(0..0) } else { self.rope.line(line) }
+  }
 
   // TODO: Should Document impl Display?
   pub fn to_string(&self) -> String { self.rope.to_string() }
@@ -47,13 +56,17 @@ impl DocumentSnapshot {
       return self.rope.byte_slice(0..0);
     }
 
-    self.rope.line(line.0)
+    self.rope_line(line.0)
   }
 
   #[track_caller]
   pub fn line_with_terminator(&self, line: Line) -> RopeSlice<'_> {
     if line.0 >= self.len_lines() {
       fatal!("line {} is out of bounds", line.0);
+      return self.rope.byte_slice(0..0);
+    }
+
+    if self.rope.byte_len() == 0 {
       return self.rope.byte_slice(0..0);
     }
 
@@ -65,6 +78,10 @@ impl DocumentSnapshot {
     if line.0 > self.len_lines() {
       fatal!("line {} is out of bounds", line.0);
       return self.rope.byte_len();
+    }
+
+    if self.rope.byte_len() == 0 {
+      return 0;
     }
 
     self.rope.byte_of_line(line.0)
@@ -99,7 +116,7 @@ impl DocumentSnapshot {
     }
 
     let mut offset = 0;
-    for g in self.rope.line(cursor.line.0).graphemes().take(cursor.column.0) {
+    for g in self.rope_line(cursor.line.0).graphemes().take(cursor.column.0) {
       offset += grapheme_width(g);
     }
     VisualColumn(offset)
@@ -115,8 +132,7 @@ impl DocumentSnapshot {
     let mut offset = 0;
     Column(
       self
-        .rope
-        .line(line.0)
+        .rope_line(line.0)
         .graphemes()
         .take_while(|g| {
           offset += grapheme_width(*g);
@@ -190,6 +206,12 @@ impl DocumentSnapshot {
 
   #[track_caller]
   pub fn range(&self, range: impl RangeBounds<usize>) -> RopeSlice<'_> {
+    // Every range of an empty document is empty, even `0..=0`, which would
+    // otherwise be out of bounds.
+    if self.rope.byte_len() == 0 {
+      return self.rope.byte_slice(0..0);
+    }
+
     let start = match range.start_bound() {
       std::ops::Bound::Unbounded => 0,
       std::ops::Bound::Included(start) => self.clamp_inclusive(*start),

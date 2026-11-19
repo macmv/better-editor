@@ -238,4 +238,18 @@ mod tests {
     let doc = Document::from("💖a💖");
     assert_eq!(doc.line_of_byte(1), 0);
   }
+
+  #[test]
+  fn empty_document_has_one_empty_line() {
+    let doc = Document::from("");
+    assert_eq!(doc.len_lines(), 1);
+    assert_eq!(doc.line(Line(0)), "");
+    assert_eq!(doc.line_with_terminator(Line(0)), "");
+    assert_eq!(doc.byte_of_line(Line(0)), 0);
+    assert_eq!(doc.byte_of_line_end(Line(0)), 0);
+    assert_eq!(doc.visual_column(Cursor::START), VisualColumn(0));
+    assert_eq!(doc.column_from_visual(Line(0), VisualColumn(3)), Column(0));
+    assert_eq!(doc.range(0..=0), "");
+    assert_eq!(doc.range(..), "");
+  }
 }
