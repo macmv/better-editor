@@ -1,0 +1,5 @@
+display-name = "Python"
+extensions = ["py"]
+
+[tree-sitter]
+repo = "https://github.com/tree-sitter/tree-sitter-python"
