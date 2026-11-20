@@ -333,8 +333,7 @@ fn similarity_diff<'a>(
 
   // Fill DP with deterministic tie-breaks:
   // 1) lower cost
-  // 2) prefer Sub over Del over Ins (but Sub is only allowed if sim >=
-  //    threshold)
+  // 2) prefer Sub over Del over Ins (but Sub is only allowed if sim >= threshold)
   // 3) if Sub ties, prefer higher sim
   for i in 1..=before.len() {
     for j in 1..=after.len() {
