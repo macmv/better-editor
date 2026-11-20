@@ -270,17 +270,19 @@ fn encode_action(action: &Action, modes: InputModes) -> Option<Vec<u8>> {
       },
       modes,
     ),
-    Action::Edit { e: Edit::Insert('\n'), .. } => keys::input('\r'),
-    Action::Edit { e: Edit::Insert(c), .. } => keys::input(*c),
-    Action::Edit { e: Edit::Backspace, .. } => keys::backspace(),
+    Action::Edit { e: Edit::Insert('\n'), .. } => keys::input_with('\r', modes),
+    Action::Edit { e: Edit::Insert(c), .. } => keys::input_with(*c, modes),
+    Action::Edit { e: Edit::Backspace, .. } => keys::encode(keys::Key::Backspace, 0, modes),
     Action::Edit { e: Edit::Delete(_), .. } => keys::delete(),
     Action::Control { char: '\n' } => keys::ctrl_enter(modes),
-    Action::Control { char: c @ 'a'..='z' } => keys::control(*c as u8 - b'a' + 1),
-    Action::Control { char: c @ ('[' | '\\' | ']' | '^' | '_') } => keys::control(*c as u8 & 0x1f),
+    Action::Control { char: c @ 'a'..='z' } => keys::control_with(*c as u8 - b'a' + 1, modes),
+    Action::Control { char: c @ ('[' | '\\' | ']' | '^' | '_') } => {
+      keys::control_with(*c as u8 & 0x1f, modes)
+    }
     // We are in insert mode, so escape arrives as this.
-    Action::SetMode { mode: Mode::Normal, .. } => keys::escape(),
-    Action::Tab { shift: false } => keys::tab(),
-    Action::Tab { shift: true } => keys::shift_tab(),
+    Action::SetMode { mode: Mode::Normal, .. } => keys::encode(keys::Key::Escape, 0, modes),
+    Action::Tab { shift: false } => keys::encode(keys::Key::Tab, 0, modes),
+    Action::Tab { shift: true } => keys::encode(keys::Key::Tab, keys::mods::SHIFT, modes),
     _ => return None,
   })
 }

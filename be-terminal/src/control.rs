@@ -314,12 +314,6 @@ impl Perform for TerminalState {
         self.cursor.col = 0;
       }
       (b'm', []) => self.set_graphics_mode(params),
-      // Kitty keyboard protocol: set/push/pop/query keyboard mode flags.
-      // These control how key events are encoded (e.g. distinguish modifiers,
-      // report key releases, etc.). To support KKP properly we'd need to
-      // maintain a mode-flag stack and encode key events accordingly.
-      // For now we acknowledge them silently; apps that require KKP (e.g.
-      // neovim with 'set termguicolors' + kitty term) may misbehave.
       // XTMODIFYOTHERKEYS (`CSI > 4 ; Ps m`): apps enable this opportunistically,
       // and we don't support it, so ignore it without logging.
       (b'm', [b'>']) => {}
@@ -408,9 +402,6 @@ impl Perform for TerminalState {
           self.kitty_flags = self.kitty_stack.pop().unwrap_or(0);
         }
       }
-      // Kitty keyboard protocol: query current keyboard mode flags.
-      // Should respond with CSI ? flags u (where flags is a bitmask of active
-      // KKP flags). Until KKP is implemented, reply with 0 (no flags set).
       (b'q', [b'>']) => unhandled!("XTVERSION query"),
       (b'u', []) => {
         if let Some(saved) = self.saved_cursor {

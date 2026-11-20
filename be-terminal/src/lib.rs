@@ -182,6 +182,16 @@ bitflags::bitflags! {
 /// Kitty keyboard protocol flag: report keys like Ctrl+Enter with `CSI u`
 /// escape codes.
 pub(crate) const KITTY_DISAMBIGUATE: u8 = 1;
+/// Kitty keyboard protocol flag: report key release and repeat events. We only
+/// ever see presses, so this changes nothing.
+#[allow(dead_code)]
+pub(crate) const KITTY_REPORT_EVENTS: u8 = 2;
+/// Kitty keyboard protocol flag: report the shifted key as an alternate.
+pub(crate) const KITTY_ALTERNATE_KEYS: u8 = 4;
+/// Kitty keyboard protocol flag: report every key as `CSI u`, even plain text.
+pub(crate) const KITTY_ALL_AS_ESCAPES: u8 = 8;
+/// Kitty keyboard protocol flag: include the typed text in `CSI u` reports.
+pub(crate) const KITTY_ASSOCIATED_TEXT: u8 = 16;
 /// The most keyboard mode pushes we remember, so a misbehaving program can't
 /// grow the stack forever.
 const KITTY_STACK_LIMIT: usize = 16;
@@ -327,19 +337,31 @@ impl Terminal {
 
   fn write_keys(&mut self, bytes: Vec<u8>) { self.pty.write_bytes(&bytes); }
 
-  pub fn perform_input(&mut self, c: char) { self.write_keys(keys::input(c)); }
-  pub fn perform_backspace(&mut self) { self.write_keys(keys::backspace()); }
+  pub fn perform_input(&mut self, c: char) {
+    self.write_keys(keys::input_with(c, self.emu.input_modes()));
+  }
+  pub fn perform_backspace(&mut self) {
+    self.write_keys(keys::encode(keys::Key::Backspace, 0, self.emu.input_modes()));
+  }
   pub fn perform_delete(&mut self) { self.write_keys(keys::delete()); }
-  pub fn perform_control(&mut self, b: u8) { self.write_keys(keys::control(b)); }
+  pub fn perform_control(&mut self, b: u8) {
+    self.write_keys(keys::control_with(b, self.emu.input_modes()));
+  }
   /// Sends Ctrl+Enter. Plain terminals can't tell this apart from Enter, so it
   /// only gets a distinct encoding if the program asked for it with the kitty
   /// keyboard protocol.
   pub fn perform_ctrl_enter(&mut self) {
     self.write_keys(keys::ctrl_enter(self.emu.input_modes()));
   }
-  pub fn perform_escape(&mut self) { self.write_keys(keys::escape()); }
-  pub fn perform_tab(&mut self) { self.write_keys(keys::tab()); }
-  pub fn perform_shift_tab(&mut self) { self.write_keys(keys::shift_tab()); }
+  pub fn perform_escape(&mut self) {
+    self.write_keys(keys::encode(keys::Key::Escape, 0, self.emu.input_modes()));
+  }
+  pub fn perform_tab(&mut self) {
+    self.write_keys(keys::encode(keys::Key::Tab, 0, self.emu.input_modes()));
+  }
+  pub fn perform_shift_tab(&mut self) {
+    self.write_keys(keys::encode(keys::Key::Tab, keys::mods::SHIFT, self.emu.input_modes()));
+  }
   pub fn perform_up(&mut self) { self.write_keys(keys::arrow(Arrow::Up, self.emu.input_modes())); }
   pub fn perform_down(&mut self) {
     self.write_keys(keys::arrow(Arrow::Down, self.emu.input_modes()));
