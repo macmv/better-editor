@@ -388,11 +388,12 @@ impl EditorState {
       self.change(change);
     }
 
-    self.lsp.completions.show = false;
-    self.lsp.completions.active = 0;
-    self.lsp.completions.tasks.clear();
-    self.lsp.completions.visible_completions.clear();
+    self.lsp.completions.reset();
   }
+
+  /// Closes the completions popup and forgets its state, including requests
+  /// that have not been answered. This is for when the view loses focus.
+  pub fn dismiss_completions(&mut self) { self.lsp.completions.reset(); }
 
   pub fn active_completion(&self) -> Option<usize> {
     if self.lsp.completions.show && !self.lsp.completions.visible_completions.is_empty() {
@@ -539,6 +540,19 @@ impl LspState {
 
 impl CompletionsState {
   pub fn hide(&mut self) { self.show = false; }
+
+  /// Hides the popup and drops everything behind it: the list, the selection,
+  /// and any request still in flight, so that a late answer can't bring it
+  /// back.
+  pub fn reset(&mut self) {
+    self.show = false;
+    self.clear_on_message = false;
+    self.active = 0;
+    self.tasks.clear();
+    self.resolve_task = None;
+    self.completions.items.clear();
+    self.visible_completions.clear();
+  }
 }
 
 impl Diagnostic {
@@ -610,5 +624,30 @@ mod tests {
   #[test]
   fn remove_snippets_works() {
     assert_eq!(remove_snippets("hello$0(${1:foo});"), ("hello();".into(), 5));
+  }
+
+  #[test]
+  fn dismiss_completions_resets_everything() {
+    let mut state = crate::EditorState::from("abc\n");
+    let item = types::CompletionItem { label: "foo".into(), ..Default::default() };
+    let c = &mut state.lsp.completions;
+    c.completions.items.push(item.clone());
+    c.visible_completions.push(Completion { item });
+    c.tasks.push(Task::new());
+    c.resolve_task = Some(Task::new());
+    c.show = true;
+    c.active = 1;
+    assert!(state.completions().is_some());
+
+    state.dismiss_completions();
+
+    assert!(state.completions().is_none());
+    assert!(state.active_completion().is_none());
+    let c = &state.lsp.completions;
+    assert!(c.visible_completions.is_empty());
+    assert!(c.completions.items.is_empty());
+    assert!(c.tasks.is_empty());
+    assert!(c.resolve_task.is_none());
+    assert_eq!(c.active, 0);
   }
 }

@@ -196,6 +196,11 @@ impl EditorView {
       self.focus = Focus::Focused;
     } else {
       self.focus = Focus::Unfocused { cursor: self.editor.cursor() };
+
+      // The popup belongs to the focused view. It stays closed when focus
+      // comes back, and can be triggered again.
+      self.editor.dismiss_completions();
+      self.completions_popup = None;
     }
   }
 
