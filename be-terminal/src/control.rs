@@ -411,7 +411,7 @@ impl Perform for TerminalState {
       // Kitty keyboard protocol: query current keyboard mode flags.
       // Should respond with CSI ? flags u (where flags is a bitmask of active
       // KKP flags). Until KKP is implemented, reply with 0 (no flags set).
-      (b'q', [b'>']) => unhandled!("query keyboard mode"),
+      (b'q', [b'>']) => unhandled!("XTVERSION query"),
       (b'u', []) => {
         if let Some(saved) = self.saved_cursor {
           self.cursor = saved;
