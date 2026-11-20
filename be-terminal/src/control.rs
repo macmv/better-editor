@@ -320,7 +320,9 @@ impl Perform for TerminalState {
       // maintain a mode-flag stack and encode key events accordingly.
       // For now we acknowledge them silently; apps that require KKP (e.g.
       // neovim with 'set termguicolors' + kitty term) may misbehave.
-      (b'm', [b'>']) => unhandled!("set keyboard mode"),
+      // XTMODIFYOTHERKEYS (`CSI > 4 ; Ps m`): apps enable this opportunistically,
+      // and we don't support it, so ignore it without logging.
+      (b'm', [b'>']) => {}
       (b'm', [b'?']) => unhandled!("report graphics mode"),
       (b'n', []) => {
         match next_param_or(0) {
