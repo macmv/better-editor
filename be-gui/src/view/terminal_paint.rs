@@ -3,7 +3,7 @@
 
 use std::{collections::HashMap, ops::Range};
 
-use be_terminal::{BuiltinColor, OwnedLine, Position, StyleFlags, TerminalColor, TerminalState};
+use be_terminal::{BuiltinColor, Lines, OwnedLine, Position, StyleFlags, TerminalColor};
 use kurbo::{Rect, Size, Stroke};
 use parley::FontWeight;
 use peniko::color::AlphaColor;
@@ -59,7 +59,7 @@ pub struct DrawOptions {
 impl DrawOptions {
   /// Draws the live screen of `state`, the way a terminal does: the bottom
   /// `rows` lines, shifted by the viewport scroll.
-  pub fn screen(state: &TerminalState, rect: Rect, rows: usize) -> Self {
+  pub fn screen(state: &impl Lines, rect: Rect, rows: usize) -> Self {
     DrawOptions {
       rect,
       first_row: state.scrollback_len() - state.viewport_offset().min(state.scrollback_len()),
@@ -105,7 +105,7 @@ pub struct TerminalPainter {
 impl TerminalPainter {
   pub fn new() -> Self { TerminalPainter::default() }
 
-  pub fn draw(&mut self, render: &mut Render, state: &TerminalState, options: &DrawOptions) {
+  pub fn draw(&mut self, render: &mut Render, state: &impl Lines, options: &DrawOptions) {
     puffin::profile_function!();
 
     let character_size = character_size(render.store);
@@ -202,7 +202,7 @@ impl TerminalPainter {
   fn layout_line(
     &mut self,
     render: &mut Render,
-    state: &TerminalState,
+    state: &impl Lines,
     options: &DrawOptions,
     i: isize,
   ) -> Option<&LineLayout> {
@@ -228,7 +228,7 @@ impl TerminalPainter {
 
 /// The line drawn at displayed row `i`.
 fn display_line<'a>(
-  state: &'a TerminalState,
+  state: &'a impl Lines,
   options: &DrawOptions,
   i: isize,
 ) -> Option<&'a OwnedLine> {

@@ -15,6 +15,7 @@ pub use crate::{
   keys::{Arrow, InputModes},
   mouse::MouseModes,
   pty::{Pty, SpawnSpec},
+  screen::{Lines, Screen},
 };
 
 mod control;
@@ -23,6 +24,7 @@ mod grid;
 pub mod keys;
 pub mod mouse;
 mod pty;
+mod screen;
 
 #[cfg(test)]
 mod tests;
@@ -312,7 +314,15 @@ impl Terminal {
     }
   }
 
-  pub fn state(&self) -> &TerminalState { &self.emu.state }
+  /// Copies what is on screen into `screen`. Call this once per frame, before
+  /// drawing. Lines that haven't changed since the last snapshot keep their
+  /// `stamp`, and lines that have are marked as changed.
+  pub fn snapshot(&mut self, screen: &mut Screen) {
+    screen.capture(&self.emu.state);
+    // Lines written from now on get a new stamp, so that the copy can tell they
+    // changed.
+    self.emu.state.begin_frame();
+  }
 
   /// Sets the rendered default colors reported to applications through OSC
   /// 10/11.
@@ -426,25 +436,6 @@ impl Terminal {
 
   pub fn perform_paste(&mut self, s: &str) {
     self.write_keys(keys::paste(s, self.emu.input_modes()));
-  }
-
-  pub fn visible_line(&self, index: usize) -> Option<&OwnedLine> {
-    let abs_line = self.emu.state.scrollback.len() + index - self.emu.state.viewport_offset;
-    if abs_line < self.emu.state.scrollback.len() {
-      Some(&self.emu.state.scrollback[abs_line])
-    } else {
-      self.emu.state.grid.line(abs_line - self.emu.state.scrollback.len())
-    }
-  }
-
-  /// Returns a line from the scrollback. The most recent line is index 0. Used
-  /// to render partial lines.
-  pub fn scrollback_line(&self, index: usize) -> Option<&OwnedLine> {
-    if index < self.emu.state.scrollback.len() {
-      Some(&self.emu.state.scrollback[self.emu.state.scrollback.len() - index - 1])
-    } else {
-      None
-    }
   }
 
   fn send_replies(&mut self) {

@@ -11,7 +11,7 @@ use std::{
 use anstyle_parse::{Parser, Utf8Parser};
 use expect_test::Expect;
 
-use crate::{BuiltinColor, PtyHost, Size, Terminal, TerminalState};
+use crate::{BuiltinColor, Lines, PtyHost, Screen, Size, Terminal, TerminalState};
 
 // --- Sequence builder ---
 
@@ -796,5 +796,39 @@ mod pty {
     // The background sleep dies with the group, so EOF follows.
     let (_, took) = read_to_eof(&mut pty);
     assert!(took < Duration::from_secs(5));
+  }
+}
+
+#[test]
+fn screen_capture_matches_the_state_across_scrolling() {
+  let mut vt = Vt::new(4, 8);
+  let mut screen = Screen::new();
+
+  // Whatever mix of scrolling and rewriting happens between snapshots, the
+  // screen has to end up showing the same text as the state.
+  let steps = [
+    s().print("one").crlf().print("two"),
+    s().crlf().print("three").crlf().print("four").crlf().print("five"),
+    s().move_to(1, 1).print("X"),
+    s().crlf().crlf().print("six"),
+    s().move_to(0, 0).print("Y").crlf().print("Z"),
+  ];
+
+  for step in steps {
+    vt.state.begin_frame();
+    vt.feed(step);
+    screen.capture(&vt.state);
+
+    let total = vt.state.scrollback.len() + vt.state.size.rows;
+    for index in 0..total {
+      let want = vt.state.absolute_line(index).unwrap().to_string();
+      // The screen only keeps the visible rows, and one more on each side.
+      if let Some(line) = screen.absolute_line(index) {
+        assert_eq!(line.to_string(), want, "line {index}");
+      }
+    }
+    for row in 0..vt.state.size.rows {
+      assert!(screen.visible_line(row).is_some(), "row {row} is missing");
+    }
   }
 }

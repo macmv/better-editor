@@ -2,14 +2,18 @@ use std::path::{Path, PathBuf};
 
 use be_input::{Action, Clipboard, Direction, Edit, Mode, Move};
 use be_shared::SharedHandle;
-use be_terminal::{Position, Terminal};
+use be_terminal::{Position, Screen, Terminal};
 use kurbo::{Point, Rect, Size};
 
 use super::terminal_paint::{CursorDraw, DrawOptions, TerminalPainter, character_size, grid_size};
 use crate::{Layout, MouseButton, MouseEvent, Render, RenderStore};
+use be_terminal::Lines;
 
 pub struct TerminalView {
   terminal:  SharedHandle<Terminal>,
+  // What was on screen when the frame started. It is copied from the terminal
+  // once per frame, and drawn from, so drawing never reads the terminal itself.
+  screen:    Screen,
   set_waker: bool,
   focused:   bool,
 
@@ -41,6 +45,7 @@ impl TerminalView {
   pub fn new_remote(clipboard: &SharedHandle<Clipboard>, terminal: SharedHandle<Terminal>) -> Self {
     TerminalView {
       terminal,
+      screen: Screen::new(),
       set_waker: false,
       focused: false,
       viewport_offset: 0.0,
@@ -190,6 +195,8 @@ impl TerminalView {
       layout.close_view();
     }
 
+    self.terminal.snapshot(&mut self.screen);
+
     self.character_size = character_size(layout.store);
     self.size = grid_size(layout.size(), self.character_size);
 
@@ -215,7 +222,7 @@ impl TerminalView {
     let size = render.size();
     render.fill(&Rect::new(0.0, 0.0, size.width, size.height), render.theme().background);
 
-    let state = self.terminal.state();
+    let state = &self.screen;
     let mut options =
       DrawOptions::screen(state, Rect::from_origin_size((0.0, 0.0), size), self.size.rows);
     options.pixel_offset = self.viewport_offset;
@@ -224,7 +231,7 @@ impl TerminalView {
     // Shift it down by the scroll amount, and hide it if it fell off the
     // bottom.
     let mut cursor_pos = state.cursor.pos;
-    cursor_pos.row += self.terminal.viewport_offset();
+    cursor_pos.row += state.viewport_offset();
     options.cursor = (state.cursor.visible && cursor_pos.row < self.size.rows)
       .then(|| CursorDraw { pos: cursor_pos, focused: self.focused });
 
@@ -248,7 +255,7 @@ impl TerminalView {
     let mut buf = String::new();
 
     for row in start.row..=end.row {
-      let Some(line) = self.terminal.visible_line(row) else { continue };
+      let Some(line) = self.screen.visible_line(row) else { continue };
       let slice = if row == start.row && row == end.row {
         line.slice_to_string(start.col..end.col)
       } else if row == start.row {
