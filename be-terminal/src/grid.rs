@@ -33,6 +33,20 @@ pub struct OwnedLine {
   stamp: u64,
 }
 
+// A copy has the same `id` and `stamp`, as it is the same line as far as a
+// renderer can tell.
+impl Clone for OwnedLine {
+  fn clone(&self) -> Self {
+    OwnedLine { cells: self.cells.clone(), id: self.id, stamp: self.stamp }
+  }
+
+  fn clone_from(&mut self, source: &Self) {
+    self.cells.clone_from(&source.cells);
+    self.id = source.id;
+    self.stamp = source.stamp;
+  }
+}
+
 #[repr(transparent)]
 pub struct Line {
   line: [Cell],
