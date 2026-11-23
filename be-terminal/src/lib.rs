@@ -3,12 +3,12 @@ use std::{
   io,
   ops::{Deref, DerefMut},
   path::{Path, PathBuf},
+  sync::Arc,
   time::{Duration, Instant},
 };
 
 use anstyle_parse::Parser;
 
-use crate::grid::Grid;
 pub use crate::{
   emulator::{Emulator, MouseMode},
   grid::{Line, OwnedLine},
@@ -16,6 +16,10 @@ pub use crate::{
   mouse::MouseModes,
   pty::{Pty, SpawnSpec},
   screen::{Lines, Screen},
+};
+use crate::{
+  grid::Grid,
+  session::{Core, Shared},
 };
 
 mod control;
@@ -25,6 +29,7 @@ pub mod keys;
 pub mod mouse;
 mod pty;
 mod screen;
+mod session;
 
 #[cfg(test)]
 mod tests;
@@ -93,12 +98,18 @@ pub trait PtyHost {
 }
 
 pub struct Terminal {
-  pty: Box<dyn PtyHost>,
-  emu: Emulator,
+  shared: Arc<Shared>,
+  // The emulator, and the way its screen gets published. See `session`.
+  core:   Core,
+  host:   Box<dyn PtyHost>,
 
   read_buf:       Box<[u8]>,
-  // Set when `update` stopped reading before the pty ran dry.
+  // Set when `update` stopped reading before the host ran dry.
   pending_output: bool,
+
+  // The colors last given to `set_default_colors`, so that they are only passed on when they
+  // change.
+  colors: Option<([u8; 3], [u8; 3])>,
 }
 
 #[derive(Clone, Copy)]
@@ -305,88 +316,107 @@ impl Terminal {
     Ok(Terminal::with_host(size, Box::new(Pty::new(size, path)?)))
   }
 
-  pub fn with_host(size: Size, pty: Box<dyn PtyHost>) -> Self {
+  pub fn with_host(size: Size, host: Box<dyn PtyHost>) -> Self {
+    let shared = Shared::new();
+    let core = Core::new(size, shared.clone());
+
     Terminal {
-      pty,
-      emu: Emulator::new(size),
+      shared,
+      core,
+      host,
       read_buf: vec![0; READ_SIZE].into_boxed_slice(),
       pending_output: false,
+      colors: None,
     }
+  }
+
+  #[cfg(test)]
+  fn emu(&self) -> &Emulator { &self.core.emu }
+
+  #[cfg(test)]
+  fn emu_mut(&mut self) -> &mut Emulator { &mut self.core.emu }
+
+  /// Applies what has been asked of the emulator (a new size, a scroll
+  /// position), and publishes the result.
+  fn sync(&mut self) {
+    if let Some(size) = self.core.apply_control() {
+      self.host.resize(size);
+    }
+    self.core.publish();
   }
 
   /// Copies what is on screen into `screen`. Call this once per frame, before
   /// drawing. Lines that haven't changed since the last snapshot keep their
   /// `stamp`, and lines that have are marked as changed.
   pub fn snapshot(&mut self, screen: &mut Screen) {
-    screen.capture(&self.emu.state);
-    // Lines written from now on get a new stamp, so that the copy can tell they
-    // changed.
-    self.emu.state.begin_frame();
+    self.sync();
+    self.shared.snapshot(screen);
   }
 
   /// Sets the rendered default colors reported to applications through OSC
   /// 10/11.
   pub fn set_default_colors(&mut self, foreground: [u8; 3], background: [u8; 3]) {
-    self.emu.state.default_foreground = foreground;
-    self.emu.state.default_background = background;
-  }
-  pub fn has_pending_writes(&self) -> bool { self.pty.has_pending_writes() }
+    // This is called every frame, so only pass it on if it changed.
+    if self.colors == Some((foreground, background)) {
+      return;
+    }
+    self.colors = Some((foreground, background));
 
-  pub fn current_dir(&self) -> PathBuf { self.pty.current_dir() }
+    self.shared.request_colors(foreground, background);
+    self.sync();
+  }
+
+  pub fn has_pending_writes(&self) -> bool { self.host.has_pending_writes() }
+
+  pub fn current_dir(&self) -> PathBuf { self.host.current_dir() }
 
   /// Sets a function to call when the terminal may have new output.
-  pub fn set_wake(&mut self, wake: Box<dyn Fn() + Send>) { self.pty.set_wake(wake); }
+  pub fn set_wake(&mut self, wake: Box<dyn Fn() + Send>) { self.host.set_wake(wake); }
 
   pub fn set_size(&mut self, size: Size) {
-    if size != self.emu.state.size {
-      self.emu.state.begin_frame();
-      self.emu.state.resize(size);
-      self.pty.resize(size);
-    }
+    self.shared.request_resize(size);
+    self.sync();
   }
 
-  fn write_keys(&mut self, bytes: Vec<u8>) { self.pty.write_bytes(&bytes); }
+  fn input_modes(&self) -> InputModes { self.shared.modes().input }
+  fn mouse_modes(&self) -> MouseModes { self.shared.modes().mouse }
+
+  fn write_keys(&mut self, bytes: Vec<u8>) { self.host.write_bytes(&bytes); }
 
   pub fn perform_input(&mut self, c: char) {
-    self.write_keys(keys::input_with(c, self.emu.input_modes()));
+    self.write_keys(keys::input_with(c, self.input_modes()));
   }
   pub fn perform_backspace(&mut self) {
-    self.write_keys(keys::encode(keys::Key::Backspace, 0, self.emu.input_modes()));
+    self.write_keys(keys::encode(keys::Key::Backspace, 0, self.input_modes()));
   }
   pub fn perform_delete(&mut self) { self.write_keys(keys::delete()); }
   pub fn perform_control(&mut self, b: u8) {
-    self.write_keys(keys::control_with(b, self.emu.input_modes()));
+    self.write_keys(keys::control_with(b, self.input_modes()));
   }
   /// Sends Ctrl+Enter. Plain terminals can't tell this apart from Enter, so it
   /// only gets a distinct encoding if the program asked for it with the kitty
   /// keyboard protocol.
-  pub fn perform_ctrl_enter(&mut self) {
-    self.write_keys(keys::ctrl_enter(self.emu.input_modes()));
-  }
+  pub fn perform_ctrl_enter(&mut self) { self.write_keys(keys::ctrl_enter(self.input_modes())); }
   pub fn perform_escape(&mut self) {
-    self.write_keys(keys::encode(keys::Key::Escape, 0, self.emu.input_modes()));
+    self.write_keys(keys::encode(keys::Key::Escape, 0, self.input_modes()));
   }
   pub fn perform_tab(&mut self) {
-    self.write_keys(keys::encode(keys::Key::Tab, 0, self.emu.input_modes()));
+    self.write_keys(keys::encode(keys::Key::Tab, 0, self.input_modes()));
   }
   pub fn perform_shift_tab(&mut self) {
-    self.write_keys(keys::encode(keys::Key::Tab, keys::mods::SHIFT, self.emu.input_modes()));
+    self.write_keys(keys::encode(keys::Key::Tab, keys::mods::SHIFT, self.input_modes()));
   }
-  pub fn perform_up(&mut self) { self.write_keys(keys::arrow(Arrow::Up, self.emu.input_modes())); }
-  pub fn perform_down(&mut self) {
-    self.write_keys(keys::arrow(Arrow::Down, self.emu.input_modes()));
-  }
-  pub fn perform_left(&mut self) {
-    self.write_keys(keys::arrow(Arrow::Left, self.emu.input_modes()));
-  }
+  pub fn perform_up(&mut self) { self.write_keys(keys::arrow(Arrow::Up, self.input_modes())); }
+  pub fn perform_down(&mut self) { self.write_keys(keys::arrow(Arrow::Down, self.input_modes())); }
+  pub fn perform_left(&mut self) { self.write_keys(keys::arrow(Arrow::Left, self.input_modes())); }
   pub fn perform_right(&mut self) {
-    self.write_keys(keys::arrow(Arrow::Right, self.emu.input_modes()));
+    self.write_keys(keys::arrow(Arrow::Right, self.input_modes()));
   }
   /// Report a mouse button press or release to the PTY.
   ///
   /// `button` is 0=left, 1=middle, 2=right. Only sent when mode 1000 is active.
   pub fn perform_mouse_button(&mut self, col: usize, row: usize, button: u8, pressed: bool) {
-    if let Some(bytes) = mouse::button(self.emu.mouse_modes(), col, row, button, pressed) {
+    if let Some(bytes) = mouse::button(self.mouse_modes(), col, row, button, pressed) {
       self.write_keys(bytes);
     }
   }
@@ -395,24 +425,25 @@ impl Terminal {
   ///
   /// Only sent when mode 1000 is active.
   pub fn perform_mouse_scroll(&mut self, col: usize, row: usize, dy: i32) {
-    if self.emu.state.flags.contains(TerminalFlags::REPORT_MOUSE) {
-      if let Some(bytes) = mouse::scroll(self.emu.mouse_modes(), col, row, dy) {
+    let modes = self.shared.modes();
+    if modes.mouse.reporting {
+      if let Some(bytes) = mouse::scroll(modes.mouse, col, row, dy) {
         self.write_keys(bytes);
       }
-    } else if !self.emu.state.alt_screen {
-      self.emu.state.viewport_offset =
-        self.emu.state.viewport_offset.saturating_add_signed(dy as isize);
-
-      self.emu.state.viewport_offset =
-        self.emu.state.viewport_offset.clamp(0, self.emu.state.scrollback.len());
+    } else if !modes.alt_screen {
+      self.shared.scroll(dy);
+      self.sync();
     }
   }
 
-  pub fn maximum_offset(&self) -> usize { self.emu.state.scrollback.len() }
-  pub fn viewport_offset(&self) -> usize { self.emu.state.viewport_offset }
+  pub fn perform_paste(&mut self, s: &str) { self.write_keys(keys::paste(s, self.input_modes())); }
+
+  pub fn maximum_offset(&self) -> usize { self.shared.scrollback_len() }
+  pub fn viewport_offset(&self) -> usize { self.shared.viewport_offset() }
 
   pub fn is_fractional_scrolling(&self) -> bool {
-    !self.emu.state.flags.contains(TerminalFlags::REPORT_MOUSE) && !self.emu.state.alt_screen
+    let modes = self.shared.modes();
+    !modes.mouse.reporting && !modes.alt_screen
   }
 
   /// Report mouse motion to the PTY.
@@ -420,7 +451,7 @@ impl Terminal {
   /// `held` is the button currently held (0=left, 1=middle, 2=right), or None.
   /// Sent when mode 1002 (held button) or 1003 (all motion) is active.
   pub fn perform_mouse_move(&mut self, col: usize, row: usize, held: Option<u8>) {
-    if let Some(bytes) = mouse::motion(self.emu.mouse_modes(), col, row, held) {
+    if let Some(bytes) = mouse::motion(self.mouse_modes(), col, row, held) {
       self.write_keys(bytes);
     }
   }
@@ -429,53 +460,37 @@ impl Terminal {
   ///
   /// Only sent when mode 1004 is active.
   pub fn perform_focus_event(&mut self, focus: bool) {
-    if let Some(bytes) = mouse::focus(self.emu.mouse_modes(), focus) {
-      self.pty.write_bytes(&bytes);
-    }
-  }
-
-  pub fn perform_paste(&mut self, s: &str) {
-    self.write_keys(keys::paste(s, self.emu.input_modes()));
-  }
-
-  fn send_replies(&mut self) {
-    if self.emu.state.has_replies() {
-      let replies = self.emu.take_replies();
-      self.pty.write_bytes(&replies);
+    if let Some(bytes) = mouse::focus(self.mouse_modes(), focus) {
+      self.write_keys(bytes);
     }
   }
 
   /// Whether the last `update` ran out of time before it read everything the
-  /// pty had. The caller should call `update` again soon, as there will be no
-  /// wakeup for output that was already there.
+  /// host had, or is holding output back. The caller should call `update`
+  /// again soon, as there will be no wakeup for that.
   pub fn has_pending_output(&self) -> bool { self.pending_output }
 
-  /// Reads and parses output from the pty, for at most `UPDATE_BUDGET`. Returns
-  /// true once the pty has closed.
+  /// Reads and parses output from the host, for at most `UPDATE_BUDGET`.
+  /// Returns true once the pty has closed.
   pub fn update(&mut self) -> bool {
-    self.emu.state.begin_frame();
     self.pending_output = false;
 
     let start = Instant::now();
     loop {
-      match self.pty.read(&mut self.read_buf) {
+      match self.host.read(&mut self.read_buf) {
         // Ok(0) -> pty closed on macos
         Ok(0) => {
-          self.emu.finish_hold();
+          self.core.close();
           return true;
         }
         // EIO error -> pty closed on linux
         Err(e) if e.raw_os_error() == Some(rustix::io::Errno::IO.raw_os_error()) => {
-          self.emu.finish_hold();
+          self.core.close();
           return true;
         }
 
         Ok(n) => {
-          let buf = std::mem::take(&mut self.read_buf);
-          self.emu.consume(&buf[..n]);
-          self.read_buf = buf;
-
-          self.send_replies();
+          self.host.write_bytes(&self.core.feed(&self.read_buf[..n]));
 
           if start.elapsed() >= UPDATE_BUDGET {
             self.pending_output = true;
@@ -491,15 +506,16 @@ impl Terminal {
       }
     }
 
-    self.emu.release_held();
-    self.send_replies();
+    // Releases held output that is due.
+    self.host.write_bytes(&self.core.tick());
 
     // Held output is released by a timeout, which nothing will wake us for.
-    if self.emu.is_holding() {
+    if self.core.deadline().is_some() {
       self.pending_output = true;
     }
 
-    self.pty.flush();
+    self.host.flush();
+    self.core.publish();
 
     false
   }

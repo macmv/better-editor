@@ -1,11 +1,12 @@
 //! A copy of the part of a terminal that is on screen.
 //!
-//! The ui copies what it needs into a `Screen` once per frame, and draws from
-//! that, so drawing never reads the emulator directly. The copy skips lines
-//! that are already up to date (see `OwnedLine::stamp`), so it costs about as
-//! much as what changed.
+//! The emulator belongs to whoever reads the pty, so the ui never touches it.
+//! The reader copies what changed into a `Screen` that is shared with the ui,
+//! and the ui copies from that into its own `Screen`, and draws from that.
+//! Both copies skip lines that are already up to date (see `OwnedLine::stamp`),
+//! so they cost about as much as what changed.
 
-use crate::{Cursor, OwnedLine, Size, TerminalState};
+use crate::{Cursor, Emulator, InputModes, MouseMode, MouseModes, OwnedLine, Size, TerminalState};
 
 /// Lines of scrollback followed by the screen, which is what is drawn.
 pub trait Lines {
@@ -28,6 +29,40 @@ impl Lines for TerminalState {
   fn viewport_offset(&self) -> usize { TerminalState::viewport_offset(self) }
 }
 
+/// The modes a program has set that the ui needs to know about, to encode input
+/// and to decide what scrolling means.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Modes {
+  pub input:      InputModes,
+  pub mouse:      MouseModes,
+  pub alt_screen: bool,
+}
+
+impl Modes {
+  pub fn of(emu: &Emulator) -> Modes {
+    Modes {
+      input:      emu.input_modes(),
+      mouse:      emu.mouse_modes(),
+      alt_screen: emu.alt_screen(),
+    }
+  }
+}
+
+impl Default for Modes {
+  fn default() -> Self {
+    Modes {
+      input:      InputModes::default(),
+      mouse:      MouseModes {
+        reporting: false,
+        motion:    MouseMode::None,
+        utf8:      false,
+        focus:     false,
+      },
+      alt_screen: false,
+    }
+  }
+}
+
 /// The lines of a terminal that can be seen, and the cursor.
 ///
 /// Lines keep their `id` and `stamp` when copied, so a renderer that caches by
@@ -41,7 +76,8 @@ pub struct Screen {
   viewport_offset: usize,
   size:            Size,
 
-  pub cursor: Cursor,
+  pub cursor:       Cursor,
+  pub(crate) modes: Modes,
 }
 
 impl Default for Screen {
@@ -58,6 +94,7 @@ impl Screen {
       viewport_offset: 0,
       size:            Size { rows: 0, cols: 0 },
       cursor:          Cursor::default(),
+      modes:           Modes::default(),
     }
   }
 
@@ -86,6 +123,19 @@ impl Screen {
     self.viewport_offset = state.viewport_offset;
     self.size = state.size;
     self.cursor = state.cursor;
+  }
+
+  /// Makes this a copy of `other`, which was made by `capture`. Lines that
+  /// haven't changed since the last copy are left alone.
+  pub(crate) fn capture_from(&mut self, other: &Screen) {
+    self.copy_lines(other.lines.iter());
+
+    self.first = other.first;
+    self.scrollback_len = other.scrollback_len;
+    self.viewport_offset = other.viewport_offset;
+    self.size = other.size;
+    self.cursor = other.cursor;
+    self.modes = other.modes;
   }
 
   fn copy_lines<'a>(&mut self, lines: impl Iterator<Item = &'a OwnedLine>) {

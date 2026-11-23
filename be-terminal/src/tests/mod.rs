@@ -537,7 +537,7 @@ fn terminal() -> (Terminal, Script) {
 }
 
 fn row(term: &Terminal, row: usize) -> String {
-  term.emu.state.grid.line(row).unwrap().to_string().trim_end().to_string()
+  term.emu().state.grid.line(row).unwrap().to_string().trim_end().to_string()
 }
 
 const BSU: &str = "\x1b[?2026h";
@@ -602,11 +602,11 @@ fn unfinished_synchronized_update_times_out() {
   term.update();
   assert_eq!(row(&term, 0), "");
 
-  term.emu.hold_deadline = Some(Instant::now() - Duration::from_millis(1));
+  term.emu_mut().hold_deadline = Some(Instant::now() - Duration::from_millis(1));
   term.update();
   assert_eq!(row(&term, 0), "stuck");
   assert!(!term.has_pending_output());
-  assert!(!term.emu.state.synchronized);
+  assert!(!term.emu().state.synchronized);
 }
 
 #[test]
