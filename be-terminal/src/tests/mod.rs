@@ -799,6 +799,138 @@ mod pty {
   }
 }
 
+// --- A terminal with a reader thread ---
+
+mod threaded {
+  use std::{
+    path::PathBuf,
+    time::{Duration, Instant},
+  };
+
+  use crate::{Lines, Pty, Screen, Size, SpawnSpec, Terminal};
+
+  fn sh(script: &str) -> Terminal {
+    let size = Size { rows: 4, cols: 40 };
+    let pty = Pty::spawn(SpawnSpec {
+      program: "/bin/sh".into(),
+      args: vec!["-c".into(), script.into()],
+      env: vec![],
+      clear_env: false,
+      cwd: PathBuf::from("/"),
+      size,
+    })
+    .unwrap();
+    Terminal::with_pty(size, pty).unwrap()
+  }
+
+  fn text(term: &mut Terminal) -> Vec<String> {
+    let mut screen = Screen::new();
+    term.snapshot(&mut screen);
+    (0..screen.size().rows)
+      .filter_map(|row| screen.visible_line(row))
+      .map(|l| l.to_string().trim_end().to_string())
+      .collect()
+  }
+
+  fn wait_for(term: &mut Terminal, what: &str, mut done: impl FnMut(&mut Terminal) -> bool) {
+    let start = Instant::now();
+    while !done(term) {
+      assert!(start.elapsed() < Duration::from_secs(10), "timed out waiting for {what}");
+      std::thread::sleep(Duration::from_millis(1));
+    }
+  }
+
+  /// The reported bug: a program that prints a lot must finish even if nothing
+  /// ever draws the terminal. This never takes a snapshot until the program
+  /// has exited, so the output has to be drained by the reader thread alone.
+  #[test]
+  fn output_is_read_without_the_ui() {
+    // Far more than a pty buffers.
+    let mut term = sh("head -c 8000000 /dev/zero | tr '\\0' x; echo finished");
+    wait_for(&mut term, "the program to exit", |t| t.update());
+
+    assert!(text(&mut term).iter().any(|l| l == "finished"));
+  }
+
+  #[test]
+  fn keys_are_echoed() {
+    let mut term = sh("stty -echo; read line; echo \"got $line\"");
+    term.perform_input('h');
+    term.perform_input('i');
+    term.perform_input('\r');
+
+    wait_for(&mut term, "the echo", |t| text(t).iter().any(|l| l == "got hi"));
+  }
+
+  #[test]
+  fn replies_are_sent_without_the_ui() {
+    // Asks for the cursor position, and only continues once it gets an answer.
+    let mut term = sh(
+      "stty raw -echo; printf '\\033[6n'; dd bs=1 count=6 2>/dev/null | od -c | head -1 > /dev/null; echo answered",
+    );
+    wait_for(&mut term, "the program to exit", |t| t.update());
+
+    assert!(text(&mut term).iter().any(|l| l == "answered"));
+  }
+
+  #[test]
+  fn resizing_reaches_the_screen_and_the_program() {
+    let mut term = sh("read line; stty size; sleep 5");
+    term.set_size(Size { rows: 10, cols: 50 });
+
+    let mut screen = Screen::new();
+    wait_for(&mut term, "the new size", |t| {
+      t.snapshot(&mut screen);
+      screen.size() == Size { rows: 10, cols: 50 }
+    });
+
+    term.perform_input('\r');
+    wait_for(&mut term, "the program to see the size", |t| text(t).iter().any(|l| l == "10 50"));
+  }
+
+  #[test]
+  fn scrolling_back_shows_scrollback() {
+    let mut term = sh("seq 1 100; sleep 5");
+    wait_for(&mut term, "the output", |t| text(t).iter().any(|l| l == "100"));
+
+    let mut screen = Screen::new();
+    term.snapshot(&mut screen);
+    assert_eq!(screen.viewport_offset(), 0);
+    let live = screen.visible_line(0).unwrap().to_string();
+
+    term.perform_mouse_scroll(0, 0, 5);
+    assert_eq!(term.viewport_offset(), 5);
+    wait_for(&mut term, "the scrolled screen", |t| {
+      t.snapshot(&mut screen);
+      screen.viewport_offset() == 5
+    });
+    assert_ne!(screen.visible_line(0).unwrap().to_string(), live);
+  }
+
+  #[test]
+  fn snapshots_stay_quick_during_a_flood() {
+    let mut term = sh("head -c 64000000 /dev/zero | tr '\\0' x; echo finished");
+    let mut screen = Screen::new();
+
+    let mut worst = Duration::ZERO;
+    let mut frames = 0;
+    while !term.update() {
+      let start = Instant::now();
+      term.snapshot(&mut screen);
+      worst = worst.max(start.elapsed());
+      frames += 1;
+      std::thread::sleep(Duration::from_millis(1));
+    }
+
+    println!("{frames} frames, worst snapshot {worst:?}");
+    assert!(frames > 0);
+    // Generous, as this runs on busy machines, but a frame is never left
+    // waiting for the whole flood.
+    assert!(worst < Duration::from_millis(50), "snapshot took {worst:?}");
+    assert!(screen.visible_line(0).is_some());
+  }
+}
+
 #[test]
 fn screen_capture_matches_the_state_across_scrolling() {
   let mut vt = Vt::new(4, 8);

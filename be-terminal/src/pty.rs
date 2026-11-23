@@ -54,6 +54,10 @@ impl AsRawFd for Pty {
 }
 
 impl Pty {
+  /// Another handle to the controller end, for a thread that reads and writes
+  /// it. It is nonblocking, like this one.
+  pub(crate) fn reader_file(&self) -> io::Result<File> { self.pty.try_clone() }
+
   /// Starts `$SHELL` (or `/bin/zsh`) in `path`.
   pub fn new(size: Size, path: &Path) -> io::Result<Self> {
     let shell = std::env::var_os("SHELL").unwrap_or_else(|| "/bin/zsh".into());
@@ -166,19 +170,7 @@ impl PtyHost for Pty {
     }
   }
 
-  fn resize(&mut self, size: Size) {
-    let res = rustix::termios::tcsetwinsize(
-      &self.pty,
-      rustix::termios::Winsize {
-        ws_row: size.rows as u16,
-        ws_col: size.cols as u16,
-        ..unsafe { std::mem::zeroed() }
-      },
-    );
-    if let Err(e) = res {
-      warn!("failed to resize pty: {e}");
-    }
-  }
+  fn resize(&mut self, size: Size) { set_winsize(&self.pty, size); }
 
   fn current_dir(&self) -> PathBuf {
     #[cfg(target_os = "linux")]
@@ -293,5 +285,20 @@ impl Drop for Waker {
     if let Some(thread) = self.thread.take() {
       let _ = thread.join();
     }
+  }
+}
+
+/// Tells the program on the other end of a pty how big its terminal is.
+pub(crate) fn set_winsize(pty: impl std::os::fd::AsFd, size: Size) {
+  let res = rustix::termios::tcsetwinsize(
+    pty,
+    rustix::termios::Winsize {
+      ws_row: size.rows as u16,
+      ws_col: size.cols as u16,
+      ..unsafe { std::mem::zeroed() }
+    },
+  );
+  if let Err(e) = res {
+    warn!("failed to resize pty: {e}");
   }
 }

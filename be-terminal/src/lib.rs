@@ -19,7 +19,7 @@ pub use crate::{
 };
 use crate::{
   grid::Grid,
-  session::{Core, Shared},
+  session::{Core, ReaderThread, Shared, Writer},
 };
 
 mod control;
@@ -98,18 +98,35 @@ pub trait PtyHost {
 }
 
 pub struct Terminal {
-  shared: Arc<Shared>,
-  // The emulator, and the way its screen gets published. See `session`.
-  core:   Core,
-  host:   Box<dyn PtyHost>,
+  shared:  Arc<Shared>,
+  backend: Backend,
 
-  read_buf:       Box<[u8]>,
-  // Set when `update` stopped reading before the host ran dry.
-  pending_output: bool,
-
-  // The colors last given to `set_default_colors`, so that they are only passed on when they
-  // change.
+  // The colors last given to `set_default_colors`, so that the reader is only
+  // told when they change.
   colors: Option<([u8; 3], [u8; 3])>,
+}
+
+/// What reads the pty. Either way, the output goes through a `Core`, which
+/// parses it and publishes the screen. See `session`.
+enum Backend {
+  /// A thread reads the pty as soon as there is output, whether or not
+  /// anything is being drawn.
+  Threaded {
+    // Stops the thread when dropped, so it is first.
+    reader: ReaderThread,
+    writer: Arc<Writer>,
+    // Still here for finding the shell's directory.
+    pty:    Pty,
+  },
+  /// The host can't leave the thread it was made on (a remote terminal is
+  /// read from the connection, which is driven by the ui's thread), so `update`
+  /// reads it.
+  Pumped {
+    host:           Box<dyn PtyHost>,
+    core:           Core,
+    read_buf:       Box<[u8]>,
+    pending_output: bool,
+  },
 }
 
 #[derive(Clone, Copy)]
@@ -312,51 +329,84 @@ pub struct Size {
 impl Terminal {
   /// Starts a shell on this machine, in `path`. Fails if the shell cannot be
   /// started, for example because `path` does not exist here.
+  ///
+  /// A thread reads the shell's output, so it is never held up by the ui.
   pub fn new_local(size: Size, path: &Path) -> io::Result<Self> {
-    Ok(Terminal::with_host(size, Box::new(Pty::new(size, path)?)))
+    Terminal::with_pty(size, Pty::new(size, path)?)
   }
 
+  /// A terminal on a process on this machine, read by its own thread. See
+  /// `new_local`.
+  pub fn with_pty(size: Size, pty: Pty) -> io::Result<Self> {
+    let shared = Shared::new();
+    let core = Core::new(size, shared.clone());
+    let (reader, writer) = ReaderThread::spawn(pty.reader_file()?, core)?;
+
+    Ok(Terminal { shared, backend: Backend::Threaded { reader, writer, pty }, colors: None })
+  }
+
+  /// A terminal on any host. Output is only read when `update` is called.
   pub fn with_host(size: Size, host: Box<dyn PtyHost>) -> Self {
     let shared = Shared::new();
     let core = Core::new(size, shared.clone());
 
     Terminal {
       shared,
-      core,
-      host,
-      read_buf: vec![0; READ_SIZE].into_boxed_slice(),
-      pending_output: false,
+      backend: Backend::Pumped {
+        host,
+        core,
+        read_buf: vec![0; READ_SIZE].into_boxed_slice(),
+        pending_output: false,
+      },
       colors: None,
     }
   }
 
   #[cfg(test)]
-  fn emu(&self) -> &Emulator { &self.core.emu }
+  fn emu(&self) -> &Emulator {
+    match &self.backend {
+      Backend::Pumped { core, .. } => &core.emu,
+      Backend::Threaded { .. } => panic!("the emulator belongs to the reader thread"),
+    }
+  }
 
   #[cfg(test)]
-  fn emu_mut(&mut self) -> &mut Emulator { &mut self.core.emu }
-
-  /// Applies what has been asked of the emulator (a new size, a scroll
-  /// position), and publishes the result.
-  fn sync(&mut self) {
-    if let Some(size) = self.core.apply_control() {
-      self.host.resize(size);
+  fn emu_mut(&mut self) -> &mut Emulator {
+    match &mut self.backend {
+      Backend::Pumped { core, .. } => &mut core.emu,
+      Backend::Threaded { .. } => panic!("the emulator belongs to the reader thread"),
     }
-    self.core.publish();
+  }
+
+  /// Gets the reader to look at what has been asked of it (a new size, a
+  /// scroll position). A reader thread is woken up, and a pumped host is done
+  /// on the spot.
+  fn sync(&mut self) {
+    match &mut self.backend {
+      Backend::Threaded { reader, .. } => reader.poke(),
+      Backend::Pumped { host, core, .. } => {
+        if let Some(size) = core.apply_control() {
+          host.resize(size);
+        }
+        core.publish();
+      }
+    }
   }
 
   /// Copies what is on screen into `screen`. Call this once per frame, before
   /// drawing. Lines that haven't changed since the last snapshot keep their
   /// `stamp`, and lines that have are marked as changed.
   pub fn snapshot(&mut self, screen: &mut Screen) {
-    self.sync();
+    if let Backend::Pumped { .. } = &self.backend {
+      self.sync();
+    }
     self.shared.snapshot(screen);
   }
 
   /// Sets the rendered default colors reported to applications through OSC
   /// 10/11.
   pub fn set_default_colors(&mut self, foreground: [u8; 3], background: [u8; 3]) {
-    // This is called every frame, so only pass it on if it changed.
+    // This is called every frame, so only bother the reader if it changed.
     if self.colors == Some((foreground, background)) {
       return;
     }
@@ -366,12 +416,29 @@ impl Terminal {
     self.sync();
   }
 
-  pub fn has_pending_writes(&self) -> bool { self.host.has_pending_writes() }
+  pub fn has_pending_writes(&self) -> bool {
+    match &self.backend {
+      Backend::Pumped { host, .. } => host.has_pending_writes(),
+      // The reader thread sends these as soon as the pty can take them.
+      Backend::Threaded { .. } => false,
+    }
+  }
 
-  pub fn current_dir(&self) -> PathBuf { self.host.current_dir() }
+  pub fn current_dir(&self) -> PathBuf {
+    match &self.backend {
+      Backend::Pumped { host, .. } => host.current_dir(),
+      Backend::Threaded { pty, .. } => pty.current_dir(),
+    }
+  }
 
-  /// Sets a function to call when the terminal may have new output.
-  pub fn set_wake(&mut self, wake: Box<dyn Fn() + Send>) { self.host.set_wake(wake); }
+  /// Sets a function to call when the terminal may have new output. It may be
+  /// called from any thread, and is called at most once between snapshots.
+  pub fn set_wake(&mut self, wake: Box<dyn Fn() + Send>) {
+    match &mut self.backend {
+      Backend::Pumped { host, .. } => host.set_wake(wake),
+      Backend::Threaded { .. } => self.shared.set_wake(wake),
+    }
+  }
 
   pub fn set_size(&mut self, size: Size) {
     self.shared.request_resize(size);
@@ -381,7 +448,13 @@ impl Terminal {
   fn input_modes(&self) -> InputModes { self.shared.modes().input }
   fn mouse_modes(&self) -> MouseModes { self.shared.modes().mouse }
 
-  fn write_keys(&mut self, bytes: Vec<u8>) { self.host.write_bytes(&bytes); }
+  fn write_keys(&mut self, bytes: Vec<u8>) {
+    match &mut self.backend {
+      Backend::Pumped { host, .. } => host.write_bytes(&bytes),
+      // Straight to the pty, so that a key doesn't wait for anything.
+      Backend::Threaded { writer, .. } => writer.write(&bytes),
+    }
+  }
 
   pub fn perform_input(&mut self, c: char) {
     self.write_keys(keys::input_with(c, self.input_modes()));
@@ -468,32 +541,46 @@ impl Terminal {
   /// Whether the last `update` ran out of time before it read everything the
   /// host had, or is holding output back. The caller should call `update`
   /// again soon, as there will be no wakeup for that.
-  pub fn has_pending_output(&self) -> bool { self.pending_output }
+  ///
+  /// Always false for a terminal with its own reader thread.
+  pub fn has_pending_output(&self) -> bool {
+    match &self.backend {
+      Backend::Pumped { pending_output, .. } => *pending_output,
+      Backend::Threaded { .. } => false,
+    }
+  }
 
-  /// Reads and parses output from the host, for at most `UPDATE_BUDGET`.
-  /// Returns true once the pty has closed.
+  /// For a terminal made with `with_host`, reads and parses output from the
+  /// host, for at most `UPDATE_BUDGET`. Returns true once the pty has closed.
+  ///
+  /// A terminal with its own reader thread has nothing to do here, but still
+  /// reports whether the pty has closed.
   pub fn update(&mut self) -> bool {
-    self.pending_output = false;
+    let Backend::Pumped { host, core, read_buf, pending_output } = &mut self.backend else {
+      return self.shared.is_closed();
+    };
+
+    *pending_output = false;
 
     let start = Instant::now();
     loop {
-      match self.host.read(&mut self.read_buf) {
+      match host.read(read_buf) {
         // Ok(0) -> pty closed on macos
         Ok(0) => {
-          self.core.close();
+          core.close();
           return true;
         }
         // EIO error -> pty closed on linux
         Err(e) if e.raw_os_error() == Some(rustix::io::Errno::IO.raw_os_error()) => {
-          self.core.close();
+          core.close();
           return true;
         }
 
         Ok(n) => {
-          self.host.write_bytes(&self.core.feed(&self.read_buf[..n]));
+          host.write_bytes(&core.feed(&read_buf[..n]));
 
           if start.elapsed() >= UPDATE_BUDGET {
-            self.pending_output = true;
+            *pending_output = true;
             break;
           }
         }
@@ -507,15 +594,15 @@ impl Terminal {
     }
 
     // Releases held output that is due.
-    self.host.write_bytes(&self.core.tick());
+    host.write_bytes(&core.tick());
 
     // Held output is released by a timeout, which nothing will wake us for.
-    if self.core.deadline().is_some() {
-      self.pending_output = true;
+    if core.deadline().is_some() {
+      *pending_output = true;
     }
 
-    self.host.flush();
-    self.core.publish();
+    host.flush();
+    core.publish();
 
     false
   }
