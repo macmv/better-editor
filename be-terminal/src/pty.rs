@@ -4,10 +4,7 @@ use std::{
   io::{self, Read, Write},
   os::{
     fd::{AsRawFd, RawFd},
-    unix::{
-      ffi::OsStrExt,
-      process::{CommandExt, ExitStatusExt},
-    },
+    unix::process::{CommandExt, ExitStatusExt},
   },
   path::{Path, PathBuf},
   process::Command,
