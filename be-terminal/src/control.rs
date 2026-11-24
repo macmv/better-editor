@@ -314,8 +314,9 @@ impl Perform for TerminalState {
         self.cursor.col = 0;
       }
       (b'm', []) => self.set_graphics_mode(params),
-      // XTMODIFYOTHERKEYS (`CSI > 4 ; Ps m`): apps enable this opportunistically,
-      // and we don't support it, so ignore it without logging.
+      // XTMODIFYOTHERKEYS (`CSI > 4 ; Ps m`): apps enable this
+      // opportunistically, and we don't support it, so ignore it without
+      // logging.
       (b'm', [b'>']) => {}
       (b'm', [b'?']) => unhandled!("report graphics mode"),
       (b'n', []) => {
